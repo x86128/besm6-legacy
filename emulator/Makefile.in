@@ -32,9 +32,9 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = besmtool$(EXEEXT)
-subdir = besmtool
-DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
+bin_PROGRAMS = besm6$(EXEEXT)
+subdir = emulator
+DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in debug.c
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/gettext.m4 \
 	$(top_srcdir)/m4/iconv.m4 $(top_srcdir)/m4/lib-ld.m4 \
@@ -49,11 +49,14 @@ CONFIG_CLEAN_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
-am_besmtool_OBJECTS = besmtool.$(OBJEXT) write.$(OBJEXT) \
-	dump.$(OBJEXT) list.$(OBJEXT) erase.$(OBJEXT) disk.$(OBJEXT) \
-	encoding.$(OBJEXT)
-besmtool_OBJECTS = $(am_besmtool_OBJECTS)
-besmtool_LDADD = $(LDADD)
+am_besm6_OBJECTS = main.$(OBJEXT) cu.$(OBJEXT) optab.$(OBJEXT) \
+	arith.$(OBJEXT) debug.$(OBJEXT) input.$(OBJEXT) \
+	extra.$(OBJEXT) disk.$(OBJEXT) errtxt.$(OBJEXT) \
+	vsinput.$(OBJEXT) dpout.$(OBJEXT) encoding.$(OBJEXT) \
+	getopt.$(OBJEXT)
+besm6_OBJECTS = $(am_besm6_OBJECTS)
+besm6_LDADD = $(LDADD)
+besm6_DEPENDENCIES =
 DEFAULT_INCLUDES = -I. -I$(top_builddir)@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -61,8 +64,10 @@ COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-SOURCES = $(besmtool_SOURCES)
-DIST_SOURCES = $(besmtool_SOURCES)
+YACCCOMPILE = $(YACC) $(YFLAGS) $(AM_YFLAGS)
+YLWRAP = $(top_srcdir)/ylwrap
+SOURCES = $(besm6_SOURCES)
+DIST_SOURCES = $(besm6_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -175,15 +180,15 @@ sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-besmtool_SOURCES = besmtool.c write.c dump.c list.c erase.c \
-	../emulator/disk.c ../emulator/encoding.c
+besm6_SOURCES = main.c cu.c optab.c arith.c debug.y input.c extra.c \
+	disk.c errtxt.c vsinput.c dpout.c encoding.c getopt.c
 
-AM_CFLAGS = -Wall -g -O2
-AM_CPPFLAGS = -I../emulator
+AM_CFLAGS = -Wall -g -O3 -ffast-math -fomit-frame-pointer
+LDADD = @LIBINTL@
 all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .o .obj
+.SUFFIXES: .c .o .obj .y
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -193,9 +198,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu  besmtool/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu  emulator/Makefile'; \
 	cd $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu  besmtool/Makefile
+	  $(AUTOMAKE) --gnu  emulator/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -236,9 +241,9 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
-besmtool$(EXEEXT): $(besmtool_OBJECTS) $(besmtool_DEPENDENCIES) 
-	@rm -f besmtool$(EXEEXT)
-	$(LINK) $(besmtool_OBJECTS) $(besmtool_LDADD) $(LIBS)
+besm6$(EXEEXT): $(besm6_OBJECTS) $(besm6_DEPENDENCIES) 
+	@rm -f besm6$(EXEEXT)
+	$(LINK) $(besm6_OBJECTS) $(besm6_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -246,13 +251,19 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/besmtool.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/arith.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cu.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/debug.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/disk.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dump.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dpout.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/encoding.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/erase.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/list.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/write.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/errtxt.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/extra.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/getopt.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/input.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/optab.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/vsinput.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -268,33 +279,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
 
-disk.o: ../emulator/disk.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT disk.o -MD -MP -MF $(DEPDIR)/disk.Tpo -c -o disk.o `test -f '../emulator/disk.c' || echo '$(srcdir)/'`../emulator/disk.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/disk.Tpo $(DEPDIR)/disk.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../emulator/disk.c' object='disk.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o disk.o `test -f '../emulator/disk.c' || echo '$(srcdir)/'`../emulator/disk.c
-
-disk.obj: ../emulator/disk.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT disk.obj -MD -MP -MF $(DEPDIR)/disk.Tpo -c -o disk.obj `if test -f '../emulator/disk.c'; then $(CYGPATH_W) '../emulator/disk.c'; else $(CYGPATH_W) '$(srcdir)/../emulator/disk.c'; fi`
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/disk.Tpo $(DEPDIR)/disk.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../emulator/disk.c' object='disk.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o disk.obj `if test -f '../emulator/disk.c'; then $(CYGPATH_W) '../emulator/disk.c'; else $(CYGPATH_W) '$(srcdir)/../emulator/disk.c'; fi`
-
-encoding.o: ../emulator/encoding.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT encoding.o -MD -MP -MF $(DEPDIR)/encoding.Tpo -c -o encoding.o `test -f '../emulator/encoding.c' || echo '$(srcdir)/'`../emulator/encoding.c
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/encoding.Tpo $(DEPDIR)/encoding.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../emulator/encoding.c' object='encoding.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o encoding.o `test -f '../emulator/encoding.c' || echo '$(srcdir)/'`../emulator/encoding.c
-
-encoding.obj: ../emulator/encoding.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT encoding.obj -MD -MP -MF $(DEPDIR)/encoding.Tpo -c -o encoding.obj `if test -f '../emulator/encoding.c'; then $(CYGPATH_W) '../emulator/encoding.c'; else $(CYGPATH_W) '$(srcdir)/../emulator/encoding.c'; fi`
-@am__fastdepCC_TRUE@	mv -f $(DEPDIR)/encoding.Tpo $(DEPDIR)/encoding.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../emulator/encoding.c' object='encoding.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o encoding.obj `if test -f '../emulator/encoding.c'; then $(CYGPATH_W) '../emulator/encoding.c'; else $(CYGPATH_W) '$(srcdir)/../emulator/encoding.c'; fi`
+.y.c:
+	$(am__skipyacc) $(SHELL) $(YLWRAP) $< y.tab.c $@ y.tab.h $*.h y.output $*.output -- $(YACCCOMPILE)
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
@@ -372,7 +358,7 @@ distdir: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(PROGRAMS)
+all-am: Makefile $(PROGRAMS) all-local
 installdirs:
 	for dir in "$(DESTDIR)$(bindir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
@@ -401,6 +387,7 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
+	-rm -f debug.c
 clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-local mostlyclean-am
@@ -409,7 +396,7 @@ distclean: distclean-am
 	-rm -rf ./$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
-	distclean-tags
+	distclean-local distclean-tags
 
 dvi: dvi-am
 
@@ -421,7 +408,7 @@ info: info-am
 
 info-am:
 
-install-data-am:
+install-data-am: install-data-local
 
 install-dvi: install-dvi-am
 
@@ -460,11 +447,12 @@ uninstall-am: uninstall-binPROGRAMS
 
 .MAKE: install-am install-strip
 
-.PHONY: CTAGS GTAGS all all-am check check-am clean clean-binPROGRAMS \
-	clean-generic clean-local ctags distclean distclean-compile \
-	distclean-generic distclean-tags distdir dvi dvi-am html \
-	html-am info info-am install install-am install-binPROGRAMS \
-	install-data install-data-am install-dvi install-dvi-am \
+.PHONY: CTAGS GTAGS all all-am all-local check check-am clean \
+	clean-binPROGRAMS clean-generic clean-local ctags distclean \
+	distclean-compile distclean-generic distclean-local \
+	distclean-tags distdir dvi dvi-am html html-am info info-am \
+	install install-am install-binPROGRAMS install-data \
+	install-data-am install-data-local install-dvi install-dvi-am \
 	install-exec install-exec-am install-html install-html-am \
 	install-info install-info-am install-man install-pdf \
 	install-pdf-am install-ps install-ps-am install-strip \
@@ -474,8 +462,39 @@ uninstall-am: uninstall-binPROGRAMS
 	uninstall-am uninstall-binPROGRAMS
 
 
+all-local: ../disks/2099
+
+install-data-local: ${datadir}/besm6/2048 ${datadir}/besm6/2049 \
+	${datadir}/besm6/2053 ${datadir}/besm6/2099
+
+${datadir}/besm6/2048: ../disks/2048
+	${install_sh_DATA} $< $@
+
+${datadir}/besm6/2049: ../disks/2049
+	${install_sh_DATA} $< $@
+
+${datadir}/besm6/2053: ../disks/2053
+	${install_sh_DATA} $< $@
+
+${datadir}/besm6/2099: ../disks/2099
+	${install_sh_DATA} $< $@
+
 clean-local:
-	-rm -rf *~
+	-rm -rf *~ debug.c ../disks/ibuf/[0-9][0-9][0-9]
+
+distclean-local:
+	-rm -rf ../disks/2099 autom4te.cache
+
+../disks/2099: make2099.b6 disp99.b6 e64.b6 ekdisp.b6 sostav.b6 spe66.b6 macros.b6
+	${MAKE} besm6
+	echo -n DISK > ../disks/2099
+	./besm6 -q --bootstrap --path=../disks --input-encoding=utf8 macros.b6
+	./besm6 -q --bootstrap --path=../disks --input-encoding=utf8 disp99.b6
+	./besm6 -q --bootstrap --path=../disks --input-encoding=utf8 e64.b6
+	./besm6 -q --bootstrap --path=../disks --input-encoding=utf8 ekdisp.b6
+	./besm6 -q --bootstrap --path=../disks --input-encoding=utf8 sostav.b6
+	./besm6 -q --bootstrap --path=../disks --input-encoding=utf8 spe66.b6
+	./besm6 -q --bootstrap --path=../disks --input-encoding=utf8 make2099.b6
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:
