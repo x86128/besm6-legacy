@@ -34,7 +34,7 @@
 #include <sys/stat.h>
 
 t_value memory [MEMSIZE];
-uint32 PC, M [17], RAU, PPK;
+uint32 PC, M [17], RAU, PPK, addrmod;
 t_value RK, ACC, RMR;
 uint32 delay;
 jmp_buf cpu_halt;
@@ -182,6 +182,7 @@ t_stat cpu_reset (DEVICE *dptr)
 	PPK = 0;
 	for (i=0; i<NREGS; ++i)
 		M[i] = 0;
+	addrmod = 0;
 	sim_brk_types = sim_brk_dflt = SWMASK ('E');
 	return SCPE_OK;
 }
@@ -193,7 +194,7 @@ t_value load (int addr)
 {
 	t_value val;
 
-	addr &= MEMSIZE-1;
+	addr &= 077777;
 	if (addr == 0)
 		return 0;
 
@@ -206,7 +207,7 @@ t_value load (int addr)
  */
 void store (int addr, t_value val)
 {
-	addr &= MEMSIZE-1;
+	addr &= 077777;
 	if (addr == 0)
 		return;
 
@@ -250,7 +251,7 @@ utf8_putc (unsigned ch, FILE *fout)
  */
 void cpu_one_inst ()
 {
-	int ir, opcode, ma;
+	int reg, opcode, addr, ma;
 
 	if (PPK)
 		RK = memory [PC];		/* get instruction */
@@ -270,24 +271,41 @@ void cpu_one_inst ()
 		PPK = 1;
 	}
 
-	ir = RK >> 20;
+	reg = RK >> 20;
 	if (RK & 02000000) {
 		opcode = (RK >> 15) & 037;
-		ma = RK & 077777;
+		addr = RK & 077777;
 	} else {
 		opcode = (RK >> 12) & 077;
-		ma = RK & 07777;
+		addr = RK & 07777;
 		if (RK & 01000000)
-			ma |= 070000;
+			addr |= 070000;
 	}
+
+	if (addrmod) {
+                addr = (addr + M[16]) & 077777;
+		addrmod = 0;
+        }
+
 	delay = 0;
 	switch (opcode) {
 	default:
 		longjmp (cpu_halt, STOP_BADCMD);
 
 	case 000: /* зп - запись */
-		/*Типа: store (ACC, ma);*/
+		store (addr + M[reg], ACC);
+		if (! addr && reg==15)
+			M[15] = (M[15] + 1) & 077777;
 		/* Режим АУ не изменяется. */
+		/*delay = 24;*/
+		break;
+
+	case 001: /* зпм - запись магазинная */
+		store (addr + M[reg], ACC);
+		M[15] = (M[15] - 1) & 077777;
+		ACC = load (M[15]);
+		/* Режим АУ - логический. */
+		RAU = RAU & ~0b011000 | 0b000100;
 		/*delay = 24;*/
 		break;
 
