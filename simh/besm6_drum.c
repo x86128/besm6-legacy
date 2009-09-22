@@ -64,6 +64,9 @@ t_stat drum_reset (DEVICE *dptr)
  */
 t_value compute_checksum (t_value x, t_value y)
 {
+	/*TODO*/
+	return 0;
+#if 0
 	t_value sum;
 
 	sum = (x & ~MANTISSA) + (y & ~MANTISSA);
@@ -73,6 +76,7 @@ t_value compute_checksum (t_value x, t_value y)
 	if (y & BIT37)
 		y += 1;
 	return (sum & ~MANTISSA) | (y & MANTISSA);
+#endif
 }
 
 /*
@@ -150,13 +154,5 @@ void drum (t_value *sum)
 		/* Device not attached. */
 		longjmp (cpu_halt, SCPE_UNATT);
 	}
-	if (ext_op & EXT_WRITE) {
-		drum_write ((ext_op & EXT_UNIT) << 12 | ext_disk_addr,
-			ext_ram_start, ext_ram_finish,
-			(ext_op & EXT_DIS_CHECK) ? 0 : sum);
-	} else {
-		drum_read ((ext_op & EXT_UNIT) << 12 | ext_disk_addr,
-		    ext_ram_start, ext_ram_finish,
-		    (ext_op & EXT_DIS_CHECK) ? 0 : sum);
-	}
+	/*TODO*/
 }

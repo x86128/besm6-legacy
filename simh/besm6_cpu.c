@@ -34,7 +34,7 @@
 #include <sys/stat.h>
 
 t_value memory [MEMSIZE];
-uint32 PC, M [17], RAU, PPK, addrmod;
+uint32 PC, M [30], RAU, PPK, addrmod;
 t_value RK, ACC, RMR;
 uint32 delay;
 jmp_buf cpu_halt;
@@ -56,11 +56,11 @@ UNIT cpu_unit = { UDATA (NULL, UNIT_FIX, MEMSIZE) };
 
 REG cpu_reg[] = {
 	{ "CчAC", &PC,    8, 15, 0, 1 },	/* счётчик адреса команды */
-	{ "ППK",  &PPK,   8, 1,  0, 1 },	/* признак правой команды */
+	{ "ППK",  &PPK,   2, 1,  0, 1 },	/* признак правой команды */
 	{ "PK",   &RK,    8, 24, 0, 1 },	/* регистр выполняемой команды */
 	{ "CM",   &ACC,   8, 48, 0, 1 },	/* сумматор */
 	{ "PMP",  &RMR,   8, 48, 0, 1 },	/* регистр младших разрядов */
-	{ "PAУ",  &RAU,   8, 6,  0, 1 },	/* режим АУ */
+	{ "PAУ",  &RAU,   2, 6,  0, 1 },	/* режим АУ */
 	{ "M1",   &M[1],  8, 15, 0, 1 },	/* регистры-модификаторы */
 	{ "M2",   &M[2],  8, 15, 0, 1 },
 	{ "M3",   &M[3],  8, 15, 0, 1 },
@@ -77,6 +77,12 @@ REG cpu_reg[] = {
 	{ "M14",  &M[14], 8, 15, 0, 1 },
 	{ "M15",  &M[15], 8, 15, 0, 1 },	/* указатель магазина */
 	{ "M16",  &M[16], 8, 15, 0, 1 },
+	{ "M17",  &M[17], 8, 15, 0, 1 },
+	{ "M23",  &M[23], 8, 15, 0, 1 },
+	{ "M26",  &M[26], 8, 15, 0, 1 },
+	{ "M27",  &M[27], 8, 15, 0, 1 },
+	{ "M28",  &M[28], 8, 15, 0, 1 },
+	{ "M29",  &M[29], 8, 15, 0, 1 },
 	{ 0 }
 };
 
@@ -194,7 +200,7 @@ t_value load (int addr)
 {
 	t_value val;
 
-	addr &= 077777;
+	addr &= BITS15;
 	if (addr == 0)
 		return 0;
 
@@ -207,7 +213,7 @@ t_value load (int addr)
  */
 void store (int addr, t_value val)
 {
-	addr &= 077777;
+	addr &= BITS15;
 	if (addr == 0)
 		return;
 
@@ -257,7 +263,7 @@ void cpu_one_inst ()
 		RK = memory [PC];		/* get instruction */
 	else
 		RK = memory [PC] >> 24;
-	RK &= 077777777;
+	RK &= BITS24;
 
 	if (sim_deb && cpu_dev.dctrl) {
 		fprintf (sim_deb, "*** %05o.%o: ", PC, PPK);
@@ -274,7 +280,7 @@ void cpu_one_inst ()
 	reg = RK >> 20;
 	if (RK & 02000000) {
 		opcode = (RK >> 15) & 037;
-		addr = RK & 077777;
+		addr = RK & BITS15;
 	} else {
 		opcode = (RK >> 12) & 077;
 		addr = RK & 07777;
@@ -282,8 +288,8 @@ void cpu_one_inst ()
 			addr |= 070000;
 	}
 
-	if (addrmod) {
-                addr = (addr + M[16]) & 077777;
+	if (addrmod) {	/* TODO: addrmod - это бит 5 в регистре М[23] */
+                addr = (addr + M[16]) & BITS15;
 		addrmod = 0;
         }
 
@@ -295,18 +301,18 @@ void cpu_one_inst ()
 	case 000: /* зп - запись */
 		store (addr + M[reg], ACC);
 		if (! addr && reg==15)
-			M[15] = (M[15] + 1) & 077777;
+			M[15] = (M[15] + 1) & BITS15;
 		/* Режим АУ не изменяется. */
-		/*delay = 24;*/
+		delay = MAX (3, 3);
 		break;
 
 	case 001: /* зпм - запись магазинная */
 		store (addr + M[reg], ACC);
-		M[15] = (M[15] - 1) & 077777;
+		M[15] = (M[15] - 1) & BITS15;
 		ACC = load (M[15]);
 		/* Режим АУ - логический. */
-		RAU = RAU & ~0b011000 | 0b000100;
-		/*delay = 24;*/
+		RAU = SET_LOGICAL (RAU);
+		delay = MAX (6, 6);
 		break;
 
 	/*TODO*/
@@ -321,7 +327,7 @@ t_stat sim_instr (void)
 	t_stat r;
 
 	/* Restore register state */
-	PC = PC & 077777;				/* mask PC */
+	PC = PC & BITS15;				/* mask PC */
 	sim_cancel_step ();				/* defang SCP step */
 
 	/* To stop execution, jump here. */
