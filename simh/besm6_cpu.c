@@ -36,7 +36,8 @@
 t_value memory [MEMSIZE];
 uint32 PC, M [17], RAU, PPK;
 t_value RK, ACC, RMR;
-double delay;
+uint32 delay;
+jmp_buf cpu_halt;
 
 t_stat cpu_examine (t_value *vptr, t_addr addr, UNIT *uptr, int32 sw);
 t_stat cpu_deposit (t_value val, t_addr addr, UNIT *uptr, int32 sw);
@@ -244,9 +245,10 @@ utf8_putc (unsigned ch, FILE *fout)
 
 /*
  * Execute one instruction, placed on address PC:PPK.
- * Increment delay. When stopped, return a nonzero stop code.
+ * Increment delay. When stopped, perform a longjmp to cpu_halt,
+ * sending a stop code.
  */
-t_stat cpu_one_inst ()
+void cpu_one_inst ()
 {
 	int ir, opcode, ma;
 
@@ -278,19 +280,19 @@ t_stat cpu_one_inst ()
 		if (RK & 01000000)
 			ma |= 070000;
 	}
+	delay = 0;
 	switch (opcode) {
 	default:
-		return STOP_BADCMD;
+		longjmp (cpu_halt, STOP_BADCMD);
 
 	case 000: /* зп - запись */
 		/*Типа: store (ACC, ma);*/
 		/* Режим АУ не изменяется. */
-		/*delay += 24;*/
+		/*delay = 24;*/
 		break;
 
 	/*TODO*/
 	}
-	return 0;
 }
 
 /*
@@ -299,12 +301,15 @@ t_stat cpu_one_inst ()
 t_stat sim_instr (void)
 {
 	t_stat r;
-	int ticks;
 
 	/* Restore register state */
 	PC = PC & 077777;				/* mask PC */
 	sim_cancel_step ();				/* defang SCP step */
-	delay = 0;
+
+	/* To stop execution, jump here. */
+	r = setjmp (cpu_halt);
+	if (r)
+		return r;
 
 	/* Main instruction fetch/decode loop */
 	for (;;) {
@@ -323,15 +328,10 @@ t_stat sim_instr (void)
 			return STOP_IBKPT;		/* stop simulation */
 		}
 
-		r = cpu_one_inst ();
-		if (r)					/* one instr; error? */
-			return r;
-
-		ticks = 1;
-		if (delay > 0)				/* delay to next instr */
-			ticks += delay - DBL_EPSILON;
-		delay -= ticks;				/* count down delay */
-		sim_interval -= ticks;
+		cpu_one_inst ();			/* one instr */
+		if (delay < 1)
+			delay = 1;
+		sim_interval -= delay;			/* count down delay */
 
 		if (sim_step && (--sim_step <= 0))	/* do step count */
 			return SCPE_STOP;
