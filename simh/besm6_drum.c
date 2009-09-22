@@ -80,14 +80,14 @@ t_value compute_checksum (t_value x, t_value y)
  * Если параметр sum ненулевой, посчитываем и кладём туда контрольную
  * сумму массива. Также запмсываем сумму в слово last+1 на барабане.
  */
-t_stat drum_write (int addr, int first, int last, t_value *sum)
+void drum_write (int addr, int first, int last, t_value *sum)
 {
 	int nwords, i;
 
 	nwords = last - first + 1;
 	if (nwords <= 0 || nwords+addr > DRUM_SIZE) {
 		/* Неверная длина записи на МБ */
-		return STOP_BADWLEN;
+		longjmp (cpu_halt, STOP_BADWLEN);
 	}
 	if (sim_deb && drum_dev.dctrl)
 		fprintf (sim_deb, "*** запись МБ %05o память %04o-%04o\n",
@@ -95,7 +95,7 @@ t_stat drum_write (int addr, int first, int last, t_value *sum)
 	fseek (drum_unit.fileref, addr*8, SEEK_SET);
 	fxwrite (&memory[first], 8, nwords, drum_unit.fileref);
 	if (ferror (drum_unit.fileref))
-		return SCPE_IOERR;
+		longjmp (cpu_halt, SCPE_IOERR);
 	if (sum) {
 		/* Подсчитываем и записываем контрольную сумму. */
 		*sum = 0;
@@ -103,13 +103,12 @@ t_stat drum_write (int addr, int first, int last, t_value *sum)
 			*sum = compute_checksum (*sum, memory[i]);
 		fxwrite (sum, 8, 1, drum_unit.fileref);
 	}
-	return 0;
 }
 
 /*
  * Чтение с барабана.
  */
-t_stat drum_read (int addr, int first, int last, t_value *sum)
+void drum_read (int addr, int first, int last, t_value *sum)
 {
 	int nwords, i;
 	t_value old_sum;
@@ -117,7 +116,7 @@ t_stat drum_read (int addr, int first, int last, t_value *sum)
 	nwords = last - first + 1;
 	if (nwords <= 0 || nwords+addr > DRUM_SIZE) {
 		/* Неверная длина чтения МБ */
-		return STOP_BADRLEN;
+		longjmp (cpu_halt, STOP_BADRLEN);
 	}
 	if (sim_deb && drum_dev.dctrl)
 		fprintf (sim_deb, "*** чтение МБ %05o память %04o-%04o\n",
@@ -125,10 +124,10 @@ t_stat drum_read (int addr, int first, int last, t_value *sum)
 	fseek (drum_unit.fileref, addr*8, SEEK_SET);
 	i = fxread (&memory[first], 8, nwords, drum_unit.fileref);
 	if (ferror (drum_unit.fileref))
-		return SCPE_IOERR;
+		longjmp (cpu_halt, SCPE_IOERR);
 	if (i != nwords) {
 		/* Чтение неинициализированного барабана */
-		return STOP_DRUMINVDATA;
+		longjmp (cpu_halt, STOP_DRUMINVDATA);
 	}
 	if (sum) {
 		/* Считываем и проверяем контрольную сумму. */
@@ -137,27 +136,26 @@ t_stat drum_read (int addr, int first, int last, t_value *sum)
 		for (i=first; i<=last; ++i)
 			*sum = compute_checksum (*sum, memory[i]);
 		if (old_sum != *sum)
-			return STOP_READERR;
+			longjmp (cpu_halt, STOP_READERR);
 	}
-	return 0;
 }
 
 /*
  * Выполнение обращения к барабану.
  * Все параметры находятся в регистрах УЧ, А_МЗУ, α_МОЗУ, ω_МОЗУ.
  */
-t_stat drum (t_value *sum)
+void drum (t_value *sum)
 {
 	if (drum_dev.flags & DEV_DIS) {
 		/* Device not attached. */
-		return SCPE_UNATT;
+		longjmp (cpu_halt, SCPE_UNATT);
 	}
 	if (ext_op & EXT_WRITE) {
-		return drum_write ((ext_op & EXT_UNIT) << 12 | ext_disk_addr,
+		drum_write ((ext_op & EXT_UNIT) << 12 | ext_disk_addr,
 			ext_ram_start, ext_ram_finish,
 			(ext_op & EXT_DIS_CHECK) ? 0 : sum);
 	} else {
-		return drum_read ((ext_op & EXT_UNIT) << 12 | ext_disk_addr,
+		drum_read ((ext_op & EXT_UNIT) << 12 | ext_disk_addr,
 		    ext_ram_start, ext_ram_finish,
 		    (ext_op & EXT_DIS_CHECK) ? 0 : sum);
 	}
