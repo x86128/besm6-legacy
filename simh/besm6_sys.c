@@ -24,8 +24,8 @@
  * Старший (53-й) бит мантиссы не хранится и всегда равен 1.
  *
  * Представление чисел в БЭСМ-6:
- *	44   43—--37 36————–1
- *      знак порядок мантисса
+ *      48——–42 41   40————————————————–1
+ *      порядок знак мантисса в доп. коде
  */
 t_value ieee_to_besm6 (double d)
 {
@@ -38,18 +38,19 @@ t_value ieee_to_besm6 (double d)
 		d = -d;
 	d = frexp (d, &exponent);
 	/* 0.5 <= d < 1.0 */
-	d = ldexp (d, 36);
+	d = ldexp (d, 40);
 	word = d;
 	if (d - word >= 0.5)
 		word += 1;		/* Округление. */
 	if (exponent < -64)
-		exponent = -64;		/* Близкое к нулю число */
+		return 0LL;		/* Близкое к нулю число */
 	if (exponent > 63) {
-		word = 0xfffffffffLL;
-		exponent = 63;		/* Максимальное число */
+		return sign ?
+		0xFEFFFFFFFFFFLL :	/* Максимальное число */
+		0xFF0000000000LL;	/* Минимальное число */
 	}
-	word |= ((t_value) (exponent + 64)) << 36;
-	word |= (t_value) sign << 43;	/* Знак. */
+	if (sign) word = 0x20000000000LL-word;	/* Знак. */
+	word |= ((t_value) (exponent + 64)) << 41;
 	return word;
 }
 
