@@ -333,7 +333,7 @@ utf8_putc (unsigned ch, FILE *fout)
  */
 void cpu_one_inst ()
 {
-	int reg, opcode, addr, ma;
+	int reg, opcode, addr, n;
 
 	t_value word = mmu_fetch(PC);
 	if (PPK)
@@ -382,7 +382,7 @@ void cpu_one_inst ()
 		if (! addr && reg==15)
 			M[15] = (M[15] + 1) & BITS15;
 		/* Режим АУ не изменяется. */
-		delay = MAX (3, 3);
+		delay = MEAN_TIME (3, 3);
 		break;
 
 	case 001: /* зпм - запись магазинная */
@@ -396,7 +396,56 @@ void cpu_one_inst ()
 		ACC = load (M[15]);
 		/* Режим АУ - логический. */
 		RAU = SET_LOGICAL (RAU);
-		delay = MAX (6, 6);
+		delay = MEAN_TIME (6, 6);
+		break;
+
+	case 002: /* рег - обращение к спец. регистрам */
+		/* TODO: прерывание, если не режим супервизора */
+		n = (addr + M[reg]) & 0377;
+		switch (n) {
+		case 0 ... 7:
+			/* TODO: запись в БРЗ */
+			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		case 020 ... 027:
+			/* Запись в регистры приписки */
+			RP [n & 7] = ACC;
+			break;
+		case 030 ... 033:
+			/* TODO: запись в регистры защиты */
+			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		case 036:
+			/* TODO: запись в главный регистр маски */
+			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		case 037:
+			/* TODO: гашение главного регистра прерываний */
+			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		case 0100 ... 0137:
+			/* TODO: управление блокировкой режима останова БРО
+			 * и признаками формирования контрольных разрядов
+			 * ПКП и ПКЛ */
+			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		case 0140 ... 0177:
+			/* TODO: управление блокировкой схемы
+			 * автоматического запуска */
+			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		case 0200 ... 0207:
+			/* TODO: чтение БРЗ */
+			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		case 0237:
+			/* TODO: чтение главного регистра прерываний */
+			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		}
+		/* Режим АУ - логический. */
+		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 3);
 		break;
 
 	/*TODO*/
