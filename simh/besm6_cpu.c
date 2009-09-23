@@ -34,7 +34,7 @@
 #include <sys/stat.h>
 
 t_value memory [MEMSIZE];
-uint32 PC, M [30], RAU, PPK, addrmod;
+uint32 PC, M [NREGS], RAU, PPK, addrmod;
 t_value RK, ACC, RMR;
 uint32 delay;
 jmp_buf cpu_halt;
