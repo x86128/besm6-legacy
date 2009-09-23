@@ -6,7 +6,7 @@
  * This file implements three essential functions:
  *
  * sim_load()   - loading and dumping memory and CPU state
- *		  in a way, specific for M20 architecture
+ *		  in a way, specific for BESM-6 architecture
  * fprint_sym() - print a machune instruction using
  *  		  opcode mnemonic or in a digital format
  * parse_sym()	- scan a string and build an instruction
@@ -109,7 +109,7 @@ again:
 	/* Слово. */
 	*type = '=';
 	*val = *p - '0';
-	for (i=0; i<14; ++i) {
+	for (i=0; i<16; ++i) {
 		p = skip_spaces (p + 1);
 		if (*p < '0' || *p > '7') {
 			/* слишком короткое слово */
@@ -143,7 +143,10 @@ t_stat besm6_load (FILE *input)
 			addr = word;
 			break;
 		case '=':		/* word */
-			memory [addr] = word;
+			if (addr < 010)
+				pult[addr] = word;
+			else
+				memory [addr] = word;
 			/* ram_dirty [addr] = 1; */
 			++addr;
 			break;

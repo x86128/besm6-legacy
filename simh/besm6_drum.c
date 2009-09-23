@@ -88,6 +88,7 @@ void drum_write (int addr, int first, int last, t_value *sum)
 {
 	int nwords, i;
 
+#if 0
 	nwords = last - first + 1;
 	if (nwords <= 0 || nwords+addr > DRUM_SIZE) {
 		/* Неверная длина записи на МБ */
@@ -107,6 +108,7 @@ void drum_write (int addr, int first, int last, t_value *sum)
 			*sum = compute_checksum (*sum, memory[i]);
 		fxwrite (sum, 8, 1, drum_unit.fileref);
 	}
+#endif
 }
 
 /*
@@ -117,6 +119,7 @@ void drum_read (int addr, int first, int last, t_value *sum)
 	int nwords, i;
 	t_value old_sum;
 
+#if 0
 	nwords = last - first + 1;
 	if (nwords <= 0 || nwords+addr > DRUM_SIZE) {
 		/* Неверная длина чтения МБ */
@@ -142,6 +145,7 @@ void drum_read (int addr, int first, int last, t_value *sum)
 		if (old_sum != *sum)
 			longjmp (cpu_halt, STOP_READERR);
 	}
+#endif
 }
 
 /*

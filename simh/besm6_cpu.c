@@ -35,6 +35,8 @@
 
 t_value memory [MEMSIZE];
 uint32 PC, M [NREGS], RAU, PPK, addrmod;
+uint32 supmode, convol_mode;
+int m15corr;
 t_value RK, ACC, RMR;
 uint32 delay;
 jmp_buf cpu_halt;
@@ -118,6 +120,7 @@ int32 sim_emax = 1;	/* максимальное количество слов в
 DEVICE *sim_devices[] = {
 	&cpu_dev,
 	&drum_dev,
+	&mmu_dev,
 	0
 };
 
@@ -127,6 +130,12 @@ const char *sim_stop_messages[] = {
 	"Точка останова",				/* Breakpoint */
 	"Выход за пределы памяти",			/* Run out end of memory */
 	"Неверный код команды",				/* Invalid instruction */
+	"Контроль команды",
+        "Команда в чужом листе",
+        "Число в чужом листе",
+        "КЧ МОЗУ",
+        "КЧ БРЗ",
+
 /*TODO*/
 	"Переполнение при сложении",			/* Addition overflow */
 	"Переполнение при сложении порядков",		/* Exponent overflow */
@@ -189,6 +198,8 @@ t_stat cpu_reset (DEVICE *dptr)
 	for (i=0; i<NREGS; ++i)
 		M[i] = 0;
 	addrmod = 0;
+	supmode = 1;
+	M[17] = 02003;
 	sim_brk_types = sim_brk_dflt = SWMASK ('E');
 	return SCPE_OK;
 }
@@ -204,8 +215,7 @@ t_value load (int addr)
 	if (addr == 0)
 		return 0;
 
-	val = memory [addr];
-	return val;
+	return mmu_load(addr);
 }
 
 /*
@@ -217,7 +227,7 @@ void store (int addr, t_value val)
 	if (addr == 0)
 		return;
 
-	memory [addr] = val;
+	mmu_store(addr, val);
 }
 
 double besm6_to_ieee (t_value word)
@@ -259,10 +269,12 @@ void cpu_one_inst ()
 {
 	int reg, opcode, addr, ma;
 
+	t_value word = mmu_fetch(PC);
 	if (PPK)
-		RK = memory [PC];		/* get instruction */
+		RK = word;		/* get right instruction */
 	else
-		RK = memory [PC] >> 24;
+		RK = word >> 24;	/* get left instruction */
+
 	RK &= BITS24;
 
 	if (sim_deb && cpu_dev.dctrl) {
@@ -294,6 +306,7 @@ void cpu_one_inst ()
         }
 
 	delay = 0;
+	m15corr = 0;
 	switch (opcode) {
 	default:
 		longjmp (cpu_halt, STOP_BADCMD);
@@ -309,6 +322,11 @@ void cpu_one_inst ()
 	case 001: /* зпм - запись магазинная */
 		store (addr + M[reg], ACC);
 		M[15] = (M[15] - 1) & BITS15;
+		/* Если прерывание по защите случится при чтении магазина,
+		 * нужно откатить магазин к состоянию на начало
+		 * выполнения команды перед уходом на обработку прерывания.
+		 */
+		m15corr = 1;
 		ACC = load (M[15]);
 		/* Режим АУ - логический. */
 		RAU = SET_LOGICAL (RAU);
@@ -332,8 +350,10 @@ t_stat sim_instr (void)
 
 	/* To stop execution, jump here. */
 	r = setjmp (cpu_halt);
-	if (r)
+	if (r) {
+		M[15] += m15corr;
 		return r;
+	}
 
 	/* Main instruction fetch/decode loop */
 	for (;;) {
