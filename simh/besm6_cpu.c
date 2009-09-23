@@ -86,7 +86,7 @@ t_value memory [MEMSIZE];
 uint32 PC, M [NREGS], RAU, PPK, addrmod;
 uint32 supmode, convol_mode;
 int m15corr;
-t_value RK, ACC, RMR, RP [8];
+t_value RK, ACC, RMR;
 uint32 delay;
 jmp_buf cpu_halt;
 
@@ -135,14 +135,6 @@ REG cpu_reg[] = {
 	{ "M27",  &M[27], 8, 15, 0, 1 }, /* адрес возврата из прерывания */
 	{ "M28",  &M[28], 8, 15, 0, 1 }, /* адрес останова по выполнению */
 	{ "M29",  &M[29], 8, 15, 0, 1 }, /* адрес останова по чтению/записи */
-	{ "PП0",  &RP[0], 8, 48, 0, 1 }, /* регистры приписки страниц */
-	{ "PП1",  &RP[1], 8, 48, 0, 1 },
-	{ "PП2",  &RP[2], 8, 48, 0, 1 },
-	{ "PП3",  &RP[3], 8, 48, 0, 1 },
-	{ "PП4",  &RP[4], 8, 48, 0, 1 },
-	{ "PП5",  &RP[5], 8, 48, 0, 1 },
-	{ "PП6",  &RP[6], 8, 48, 0, 1 },
-	{ "PП7",  &RP[7], 8, 48, 0, 1 },
 	{ 0 }
 };
 
@@ -270,32 +262,6 @@ t_stat cpu_reset (DEVICE *dptr)
 	return SCPE_OK;
 }
 
-/*
- * Считывание слова из памяти.
- */
-t_value load (int addr)
-{
-	t_value val;
-
-	addr &= BITS15;
-	if (addr == 0)
-		return 0;
-
-	return mmu_load(addr);
-}
-
-/*
- * Запись слова в памяти.
- */
-void store (int addr, t_value val)
-{
-	addr &= BITS15;
-	if (addr == 0)
-		return;
-
-	mmu_store(addr, val);
-}
-
 double besm6_to_ieee (t_value word)
 {
 	/*TODO*/
@@ -378,7 +344,7 @@ void cpu_one_inst ()
 		longjmp (cpu_halt, STOP_BADCMD);
 
 	case 000: /* зп - запись */
-		store (addr + M[reg], ACC);
+		mmu_store (addr + M[reg], ACC);
 		if (! addr && reg==15)
 			M[15] = (M[15] + 1) & BITS15;
 		/* Режим АУ не изменяется. */
@@ -386,34 +352,34 @@ void cpu_one_inst ()
 		break;
 
 	case 001: /* зпм - запись магазинная */
-		store (addr + M[reg], ACC);
+		mmu_store (addr + M[reg], ACC);
 		M[15] = (M[15] - 1) & BITS15;
 		/* Если прерывание по защите случится при чтении магазина,
 		 * нужно откатить магазин к состоянию на начало
 		 * выполнения команды перед уходом на обработку прерывания.
 		 */
 		m15corr = 1;
-		ACC = load (M[15]);
+		ACC = mmu_load (M[15]);
 		/* Режим АУ - логический. */
 		RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (6, 6);
 		break;
 
 	case 002: /* рег - обращение к спец. регистрам */
-		/* TODO: прерывание, если не режим супервизора */
+		if (!supmode)
+			longjmp(cpu_halt, STOP_BADCMD);
 		n = (addr + M[reg]) & 0377;
 		switch (n) {
 		case 0 ... 7:
-			/* TODO: запись в БРЗ */
-			longjmp (cpu_halt, STOP_BADCMD);
+			mmu_setcache(n, ACC);
 			break;
 		case 020 ... 027:
 			/* Запись в регистры приписки */
-			RP [n & 7] = ACC;
+			mmu_settlb(n & 7, ACC);
 			break;
 		case 030 ... 033:
-			/* TODO: запись в регистры защиты */
-			longjmp (cpu_halt, STOP_BADCMD);
+			/* Запись в регистры защиты */
+			mmu_setprotection(n & 3, ACC);
 			break;
 		case 036:
 			/* TODO: запись в главный регистр маски */
@@ -425,9 +391,11 @@ void cpu_one_inst ()
 			break;
 		case 0100 ... 0137:
 			/* TODO: управление блокировкой режима останова БРО
-			 * и признаками формирования контрольных разрядов
-			 * ПКП и ПКЛ */
-			longjmp (cpu_halt, STOP_BADCMD);
+			 * (бит 1)
+			 * Биты 2 и 3 - признаки формирования контрольных  
+			 * разрядов (ПКП и ПКЛ).
+			 */
+			convol_mode = (n >> 1) & 3;
 			break;
 		case 0140 ... 0177:
 			/* TODO: управление блокировкой схемы
@@ -435,16 +403,17 @@ void cpu_one_inst ()
 			longjmp (cpu_halt, STOP_BADCMD);
 			break;
 		case 0200 ... 0207:
-			/* TODO: чтение БРЗ */
-			longjmp (cpu_halt, STOP_BADCMD);
+			/* Чтение БРЗ */
+			ACC = mmu_getcache(n & 7);
 			break;
 		case 0237:
 			/* TODO: чтение главного регистра прерываний */
 			longjmp (cpu_halt, STOP_BADCMD);
 			break;
 		}
-		/* Режим АУ - логический. */
-		RAU = SET_LOGICAL (RAU);
+		/* Режим АУ - логический, если операция была "чтение" */
+		if (n & 0200)
+			RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (3, 3);
 		break;
 
