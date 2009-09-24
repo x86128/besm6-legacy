@@ -27,29 +27,13 @@
  * 13) A lot of comments in Russian (UTF-8).
  */
 #include "besm6_defs.h"
+#include "besm6_optab.h"
+#include "legacy.h"
 #include <math.h>
 #include <float.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-
-/*
- * Разряды режима АУ.
- */
-#define RAU_NORM_DISABLE	001	/* блокировка нормализации */
-#define RAU_ROUND_DISABLE	002	/* блокировка округления */
-#define RAU_LOG			004	/* признак логической группы */
-#define RAU_MULT		010	/* признак группы умножения */
-#define RAU_ADD			020	/* признак группы слодения */
-#define RAU_OVF_DISABLE		040	/* блокировка переполнения */
-
-#define RAU_MODE		(RAU_LOG | RAU_MULT | RAU_ADD)
-#define SET_LOGICAL(x)		(((x) & ~RAU_MODE) | RAU_LOG)
-#define SET_MULTIPLICATIVE(x)	(((x) & ~RAU_MODE) | RAU_MULT)
-#define SET_ADDITIVE(x)		(((x) & ~RAU_MODE) | RAU_ADD)
-#define IS_LOGICAL(x)		(((x) & RAU_MODE) == RAU_LOG)
-#define IS_MULTIPLICATIVE(x)	(((x) & (RAU_ADD | RAU_MULT) == RAU_MULT)
-#define IS_ADDITIVE(x)		((x) & RAU_ADD)
 
 /*
  * Специальные индекс-регистры.
@@ -82,10 +66,16 @@
 					   прерывание */
 #define M23_INTR_DISABLE	002000	/* БлПр - блокировка внешнего прерывания */
 
+#define STACKREG	15
+#define MODREG		16
+#define PSREG		17
+#define PSSREG		23
+#define TRAPRETREG	26
+
 t_value memory [MEMSIZE];
 uint32 PC, M [NREGS], RAU, PPK, addrmod;
 uint32 supmode, convol_mode;
-int m15corr;
+int corr_stack;
 t_value RK, ACC, RMR;
 uint32 delay;
 jmp_buf cpu_halt;
@@ -257,7 +247,6 @@ t_stat cpu_reset (DEVICE *dptr)
 		M23_INTR_DISABLE;
 
 	supmode = 1;
-	M[17] = 02003;
 	sim_brk_types = sim_brk_dflt = SWMASK ('E');
 	return SCPE_OK;
 }
@@ -292,6 +281,33 @@ utf8_putc (unsigned ch, FILE *fout)
 	putc ((ch & 0x3f) | 0x80, fout);
 }
 
+uinstr_t unpack() {
+	uinstr_t ui;
+	ui.i_reg = RK >> 20;
+	if (RK & 02000000) {
+		ui.i_opcode = (RK >> 15) & 037;
+		ui.i_opcode += 0100;
+		ui.i_addr = RK & BITS15;
+	} else {
+		ui.i_opcode = (RK >> 12) & 077;
+		ui.i_addr = RK & 07777;
+		if (RK & 01000000)
+			ui.i_addr |= 070000;
+	}
+}
+
+alureg_t toalu(t_value val) {
+        alureg_t ret;
+        ret.l = val >> 24;
+        ret.r = val & BITS24;
+}
+
+t_value fromalu(alureg_t reg) {
+        return (t_value) reg.l << 24 | reg.r;
+}
+
+#define JMP(addr) (PC=(addr),PPK=0)
+	
 /*
  * Execute one instruction, placed on address PC:PPK.
  * Increment delay. When stopped, perform a longjmp to cpu_halt,
@@ -299,7 +315,9 @@ utf8_putc (unsigned ch, FILE *fout)
  */
 void cpu_one_inst ()
 {
-	int reg, opcode, addr, n;
+	int reg, opcode, addr, effaddr, n, i, r, nextpc;
+	uinstr_t ui;
+	optab_t op;
 
 	t_value word = mmu_fetch(PC);
 	if (PPK)
@@ -309,11 +327,16 @@ void cpu_one_inst ()
 
 	RK &= BITS24;
 
+	ui = unpack();
+	op = optab[ui.i_opcode];
+	reg = ui.i_reg;
+
 	if (sim_deb && cpu_dev.dctrl) {
 		fprintf (sim_deb, "*** %05o.%o: ", PC, PPK);
 		fprint_sym (sim_deb, PC, &RK, 0, SWMASK ('M'));
 		fprintf (sim_deb, "\n");
 	}
+	nextpc = PC + 1;
 	if (PPK) {
 		PC += 1;			/* increment PC */
 		PPK = 0;
@@ -321,51 +344,239 @@ void cpu_one_inst ()
 		PPK = 1;
 	}
 
-	reg = RK >> 20;
-	if (RK & 02000000) {
-		opcode = (RK >> 15) & 037;
-		addr = RK & BITS15;
-	} else {
-		opcode = (RK >> 12) & 077;
-		addr = RK & 07777;
-		if (RK & 01000000)
-			addr |= 070000;
-	}
-
-	if (addrmod) {	/* TODO: addrmod - это бит 5 в регистре М[23] */
-                addr = (addr + M[16]) & BITS15;
-		addrmod = 0;
-        }
+	if (addrmod) {
+                addrmod = 0;
+                addr = ADDR(ui.i_addr + M[16]);
+        } else
+                addr = ui.i_addr;
+        effaddr = ADDR(addr + M[reg]);
 
 	delay = 0;
-	m15corr = 0;
-	switch (opcode) {
-	default:
-		longjmp (cpu_halt, STOP_BADCMD);
+	corr_stack = 0;
+	
+	acc = toalu(ACC);
+	accex = toalu(RMR);
 
-	case 000: /* зп - запись */
-		mmu_store (addr + M[reg], ACC);
-		if (! addr && reg==15)
-			M[15] = (M[15] + 1) & BITS15;
-		/* Режим АУ не изменяется. */
-		delay = MEAN_TIME (3, 3);
+	switch (op.o_inline) {
+	case I_ATX:
+		mmu_store(effaddr, ACC);
+		if (!addr && (reg == STACKREG))
+			M[STACKREG] = ADDR(M[STACKREG] + 1);
 		break;
-
-	case 001: /* зпм - запись магазинная */
-		mmu_store (addr + M[reg], ACC);
-		M[15] = (M[15] - 1) & BITS15;
-		/* Если прерывание по защите случится при чтении магазина,
-		 * нужно откатить магазин к состоянию на начало
-		 * выполнения команды перед уходом на обработку прерывания.
-		 */
-		m15corr = 1;
-		ACC = mmu_load (M[15]);
-		/* Режим АУ - логический. */
-		RAU = SET_LOGICAL (RAU);
-		delay = MEAN_TIME (6, 6);
+	case I_STX:
+		mmu_store(effaddr, ACC);
+		STK_POP;
 		break;
+	case I_XTS:
+		STK_PUSH;
+		corr_stack = -1;
+		GET_OP;
+		acc = enreg;
+		break;
+	case I_XTA:
+		CHK_STACK;
+		GET_OP;
+		acc = enreg;
+		break;
+	case I_VTM:
+		M[reg] = addr;
+		M[0] = 0;
+		if (supmode && reg == 0) {
+			M[PSREG] &= ~02003;
+			M[PSREG] |= addr & 02003;
+		}
+		break;
+	case I_UTM:
+		M[reg] = effaddr;
+		M[0] = 0;
+		if (supmode && reg == 0) {
+			M[PSREG] &= ~02003;
+			M[PSREG] |= addr & 02003;
+		}
+		break;
+	case I_VLM:
+		if (!M[reg])
+			break;
+		M[reg] = ADDR(M[reg] + 1);
+		JMP(addr);
+		break;
+	case I_UJ:
+		JMP(effaddr);
+		break;
+	case I_STOP:
+		longjmp(cpu_halt, STOP_STOP);
+		break;
+	case I_ITS:
+		STK_PUSH;
+		/*      fall    thru    */
+	case I_ITA:
+		acc.l = 0;
+		acc.r = M[effaddr & (supmode ? 0x1f : 0xf)];
+		break;
+	case I_XTR:
+		CHK_STACK;
+		GET_OP;
+set_mode:
+		RAU = enreg.o & 077;
+		break;
+	case I_NTR:
+		GET_NAI_OP;
+		goto set_mode;
+	case I_RTE:
+		GET_NAI_OP;
+		acc.o = RAU;
+		acc.l = (long) (acc.o & enreg.o) << 17;
+		acc.r = 0;
+		break;
+	case I_ASUB:
+		CHK_STACK;
+		GET_OP;
+		if (NEGATIVE(acc))
+			NEGATE(acc);
+		if (!NEGATIVE(enreg))
+			NEGATE(enreg);
+		goto common_add;
+	case I_RSUB:
+		CHK_STACK;
+		GET_OP;
+		NEGATE(acc);
+		goto common_add;
+	case I_SUB:
+		CHK_STACK;
+		GET_OP;
+		NEGATE(enreg);
+		goto common_add;
+	case I_ADD:
+		CHK_STACK;
+		GET_OP;
+common_add:
+		add();
+		break;
+	case I_YTA:
+		if (IS_LOGICAL(RAU)) {
+			acc = accex;
+			break;
+		}
+		UNPCK(accex);
+		UNPCK(acc);
+		acc.mr = accex.mr;
+		acc.ml = accex.ml & 0xffff;
+		acc.o += (effaddr & 0x7f) - 64;
+		op.o_flags |= F_AR;
+		enreg = accex;
+		accex = zeroword;
+		PACK(enreg);
+		break;
+	case I_UZA:
+		accex = acc;
+		if (IS_ADDITIVE(RAU)) {
+			if (acc.l & 0x10000)
+					break;
+		} else if (IS_MULTIPLICATIVE(RAU)) {
+			if (!(acc.l & 0x800000))
+					break;
+		} else if (IS_LOGICAL(RAU)) {
+			if (acc.l | acc.r)
+					break;
+		} else
+			break;
+		JMP(effaddr);
+		break;
+	case I_UIA:
+		accex = acc;
+		if (IS_ADDITIVE(RAU)) {
+			if (!(acc.l & 0x10000))
+					break;
+		} else if (IS_MULTIPLICATIVE(RAU)) {
+			if (acc.l & 0x800000)
+					break;
+		} else if (IS_LOGICAL(RAU)) {
+			if (!(acc.l | acc.r))
+					break;
+		} else
+			/* fall thru, i.e. branch */;
+		JMP(effaddr);
+		break;
+	case I_UTC:
+		M[MODREG] = effaddr;
+		addrmod = 1;
+		break;
+	case I_WTC:
+		CHK_STACK;
+		GET_OP;
+		M[MODREG] = ADDR(enreg.r);
+		addrmod = 1;
+		break;
+	case I_VZM:
+		if (ui.i_opcode & 1) {
+			if (M[reg]) {
+				JMP(addr);
+			}
+		} else {
+			if (!M[reg]) {
+				JMP(addr);
+			}
+		}
+		break;
+	case I_VJM:
+		M[reg] = nextpc;
+		M[0] = 0;
+		JMP(addr);
+		break;
+	case I_ATI:
+		if (supmode) {
+			M[effaddr & 0x1f] = ADDR(acc.r);
+		} else
+			M[effaddr & 0xf] = ADDR(acc.r);
+		M[0] = 0;
+		break;
+	case I_STI: {
+		uint8   rg = effaddr & (supmode ? 0x1f : 0xf);
+		uint16  ad = ADDR(acc.r);
 
-	case 002: /* рег - обращение к спец. регистрам */
+		M[rg] = ad;
+		M[0] = 0;
+		if (rg != STACKREG)
+			M[STACKREG] = ADDR(M[STACKREG] - 1);
+		LOAD(acc, M[STACKREG]);
+		break;
+	}
+	case I_MTJ:
+		if (supmode) {
+mtj:
+			M[addr & 0x1f] = M[reg];
+		} else
+			M[addr & 0xf] = M[reg];
+		M[0] = 0;
+		break;
+	case I_MPJ: {
+		uint8 rg = addr & 0xf;
+		if (rg & 020 && supmode)
+			goto mtj;
+		M[rg] = ADDR(M[rg] + M[reg]);
+		M[0] = 0;
+		break;
+	}
+	case I_IRET:
+		if (!supmode) {
+			longjmp(cpu_halt, STOP_BADCMD);
+		}
+		M[PSREG] = M[PSSREG] & 02003;
+		JMP(M[(reg & 3) | 030]);
+		PPK = !!(M[PSSREG] & 0400);
+		supmode = M[PSSREG] & 014 ? 1 : 0;
+		break;
+	case I_TRAP:
+		M[TRAPRETREG] = nextpc;
+		M[PSSREG] = M[PSREG] & 02003;
+		M[016] = effaddr;
+		if (supmode)
+			M[PSSREG] |= 014;
+		supmode = 1;
+		M[PSREG] = 02007;
+		JMP(0500 + ui.i_opcode); // E20? E21?
+		break;
+	case I_MOD:
 		if (!supmode)
 			longjmp(cpu_halt, STOP_BADCMD);
 		n = (addr + M[reg]) & 0377;
@@ -416,10 +627,235 @@ void cpu_one_inst ()
 			RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (3, 3);
 		break;
+	default:
+		if (op.o_flags & F_STACK) {
+			CHK_STACK;
+		}
+		if (op.o_flags & F_OP) {
+			GET_OP;
+		} else if (op.o_flags & F_NAI)
+			GET_NAI_OP;
 
-	/*TODO*/
+		if (!supmode && op.o_flags & F_PRIV)
+			longjmp(cpu_halt, STOP_BADCMD);
+		else
+			(*op.o_impl)();
+		break;
 	}
+
+	if ((i = op.o_flags & F_GRP))
+		RAU = SET_MODE(RAU, 1<<(i+2));
+
+	if (op.o_flags & F_AR) {
+		uint    rr = 0;
+		switch ((acc.ml >> 16) & 3) {
+		case 2:
+		case 1:
+			rnd_rq |= acc.mr & 1;
+			accex.mr = (accex.mr >> 1) | (accex.ml << 23);
+			accex.ml = (accex.ml >> 1) | (acc.mr << 15);
+			acc.mr = (acc.mr >> 1) | (acc.ml << 23);
+			acc.ml >>= 1;
+			++acc.o;
+			goto chk_rnd;
+		}
+
+		if (dis_norm)
+			goto chk_rnd;
+		if (!(i = (acc.ml >> 15) & 3)) {
+			if ((r = acc.ml & 0xffff)) {
+				int cnt;
+				for (cnt = 0; (r & 0x8000) == 0;
+							++cnt, r <<= 1);
+				acc.ml = (r & 0xffff) |
+						(acc.mr >> (24 - cnt));
+				acc.mr = (acc.mr << cnt) |
+						(rr = accex.ml >> (16 - cnt));
+				accex.ml = (accex.ml << cnt) |
+						(accex.mr >> (24 - cnt));
+				accex.mr <<= cnt;
+				acc.o -= cnt;
+				goto chk_zero;
+			}
+			if ((r = acc.mr >> 16)) {
+				int     cnt, fcnt;
+				for (cnt = 0; (r & 0x80) == 0;
+							++cnt, r <<= 1);
+				acc.ml = acc.mr >> (8 - cnt);
+				acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
+						(accex.ml << cnt) |
+						(accex.mr >> (24 - cnt));
+				accex.mr <<= fcnt;
+				acc.o -= fcnt;
+				rr = acc.r & ((1l << fcnt) - 1);
+				goto chk_zero;
+			}
+			if ((r = acc.mr & 0xffff)) {
+				int cnt;
+				for (cnt = 0; (r & 0x8000) == 0;
+							++cnt, r <<= 1);
+				acc.ml = (r & 0xffff) |
+						(accex.ml >> (16 - cnt));
+				acc.mr = (accex.ml << (8 + cnt)) |
+						(accex.mr >> (16 - cnt));
+				accex.ml = accex.mr << cnt;
+				accex.mr = 0;
+				acc.o -= 24 + cnt;
+				rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
+				goto chk_zero;
+			}
+			if ((r = accex.ml & 0xffff)) {
+				int cnt;
+				rr = accex.ml | accex.mr;
+				for (cnt = 0; (r & 0x8000) == 0;
+							++cnt, r <<= 1);
+				acc.ml = (r & 0xffff) |
+						(accex.mr >> (24 - cnt));
+				acc.mr = (accex.mr << cnt);
+				accex.ml = accex.mr = 0;
+				acc.o -= 40 + cnt;
+				goto chk_zero;
+			}
+			if ((r = accex.mr >> 16)) {
+				int cnt;
+				rr = accex.ml | accex.mr;
+				for (cnt = 0; (r & 0x80) == 0;
+							++cnt, r <<= 1);
+				acc.ml = accex.mr >> (8 - cnt);
+				acc.mr = accex.mr << (16 + cnt);
+				accex.ml = accex.mr = 0;
+				acc.o -= 56 + cnt;
+				goto chk_zero;
+			}
+			if ((r = accex.mr & 0xffff)) {
+				int cnt;
+				rr = accex.ml | accex.mr;
+				for (cnt = 0; (r & 0x8000) == 0;
+							++cnt, r <<= 1);
+				acc.ml = (r & 0xffff);
+				acc.mr = accex.ml = accex.mr = 0;
+				acc.o -= 64 + cnt;
+				goto chk_zero;
+			}
+			goto zero;
+		} else if (i == 3) {
+			if ((r = ~acc.ml & 0xffff)) {
+				int cnt;
+				for (cnt = 0; (r & 0x8000) == 0;
+							++cnt, r = (r << 1) | 1);
+				acc.ml = 0x10000 | (~r & 0xffff) |
+						(acc.mr >> (24 - cnt));
+				acc.mr = (acc.mr << cnt) |
+						(rr = accex.ml >> (16 - cnt));
+				accex.ml = ((accex.ml << cnt) |
+						(accex.mr >> (24 - cnt)))
+						& 0xffff;
+				accex.mr <<= cnt;
+				acc.o -= cnt;
+				goto chk_zero;
+			}
+			if ((r = (~acc.mr >> 16) & 0xff)) {
+				int     cnt, fcnt;
+				for (cnt = 0; (r & 0x80) == 0;
+							++cnt, r = (r << 1) | 1);
+				acc.ml = 0x10000 | (acc.mr >> (8 - cnt));
+				acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
+						(accex.ml << cnt) |
+						(accex.mr >> (24 - cnt));
+				accex.ml = ((accex.ml << fcnt) |
+						(accex.mr >> (8 - cnt)))
+						& 0xffff;
+				accex.mr <<= fcnt;
+				acc.o -= fcnt;
+				rr = acc.r & ((1l << fcnt) - 1);
+				goto chk_zero;
+			}
+			if ((r = ~acc.mr & 0xffff)) {
+				int cnt;
+				for (cnt = 0; (r & 0x8000) == 0;
+							++cnt, r = (r << 1) | 1);
+				acc.ml = 0x10000 | (~r & 0xffff) |
+						(accex.ml >> (16 - cnt));
+				acc.mr = (accex.ml << (8 + cnt)) |
+						(accex.mr >> (16 - cnt));
+				accex.ml = (accex.mr << cnt) & 0xffff;
+				accex.mr = 0;
+				acc.o -= 24 + cnt;
+				rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
+				goto chk_zero;
+			}
+			if ((r = ~accex.ml & 0xffff)) {
+				int cnt;
+				rr = accex.ml | accex.mr;
+				for (cnt = 0; (r & 0x8000) == 0;
+							++cnt, r = (r << 1) | 1);
+				acc.ml = 0x10000 | (~r & 0xffff) |
+						(accex.mr >> (24 - cnt));
+				acc.mr = (accex.mr << cnt);
+				accex.ml = accex.mr = 0;
+				acc.o -= 40 + cnt;
+				goto chk_zero;
+			}
+			if ((r = (~accex.mr >> 16) & 0xff)) {
+				int cnt;
+				rr = accex.ml | accex.mr;
+				for (cnt = 0; (r & 0x80) == 0;
+							++cnt, r = (r << 1) | 1);
+				acc.ml = 0x10000 | (accex.mr >> (8 - cnt));
+				acc.mr = accex.mr << (16 + cnt);
+				accex.ml = accex.mr = 0;
+				acc.o -= 56 + cnt;
+				goto chk_zero;
+			}
+			if ((r = ~accex.mr & 0xffff)) {
+				int cnt;
+				rr = accex.ml | accex.mr;
+				for (cnt = 0; (r & 0x8000) == 0;
+							++cnt, r = (r << 1) | 1);
+				acc.ml = 0x10000 | (~r & 0xffff);
+				acc.mr = accex.ml = accex.mr = 0;
+				acc.o -= 64 + cnt;
+				goto chk_zero;
+			} else {
+				rr = 1;
+				acc.ml = 0x10000;
+				acc.mr = accex.ml = accex.mr = 0;
+				acc.o -= 80;
+				goto chk_zero;
+			}
+		}
+chk_zero:
+		rnd_rq = rnd_rq && !rr;
+chk_rnd:
+		if (acc.o & 0x8000)
+			goto zero;
+		if (acc.o & 0x80) {
+			acc.o = 0;
+			if (!dis_exc)
+				longjmp(cpu_halt, STOP_OVFL);
+		}
+		if (!dis_round && rnd_rq)
+			acc.mr |= 1;
+
+		if (!acc.ml && !acc.mr && !dis_norm) {
+zero:
+			acc.l = acc.r = accex.l = accex.r = 0;
+			goto done;
+		}
+		acc.l = ((uint) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
+		acc.r = acc.mr & 0xffffff;
+
+		accex.l = ((uint) (accex.o & 0x7f) << 17) | (accex.ml & 0x1ffff);
+		accex.r = accex.mr & 0xffffff;
+done:
+		if (op.o_inline == I_YTA)
+			accex = enreg;
+		rnd_rq = 0;
+	}
+	ACC = fromalu(acc);
+	RMR = fromalu(accex);
 }
+
 
 /*
  * Main instruction fetch/decode loop
@@ -435,7 +871,7 @@ t_stat sim_instr (void)
 	/* To stop execution, jump here. */
 	r = setjmp (cpu_halt);
 	if (r) {
-		M[15] += m15corr;
+		M[15] += corr_stack;
 		return r;
 	}
 
