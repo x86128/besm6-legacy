@@ -110,7 +110,7 @@ t_stat mmu_reset (DEVICE *dptr)
 	return SCPE_OK;
 }
 
-#define loses_to_all(i) ((tourn & win_mask[i] == 0) && (tourn & lose_mask[i]) == lose_mask[i])
+#define loses_to_all(i) ((tourn & win_mask[i]) == 0 && (tourn & lose_mask[i]) == lose_mask[i])
 
 /*
  * N wins over M if the bit is set
