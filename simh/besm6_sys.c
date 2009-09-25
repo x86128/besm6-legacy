@@ -198,15 +198,17 @@ t_stat sim_load (FILE *fi, char *cptr, char *fnam, int dump_flag)
 	return besm6_load (fi);
 }
 
-const char *besm6_opname [64] = {
-	"зп",	"сл",	"вч",	"вчм",	"дел",	"умн",	"слпа",	"слц",
-	"вп",	"цме",	"цм",	"слк",	"сдма",	"нтж",	"пв",	"17",
-	"счп",	"слбо",	"вчбо",	"вчмбо","делбо","умнбо","слп",	"вчц",
-	"впбк",	"цбре",	"цбр",	"вчк",	"сдм",	"нтжс",	"пе",	"37",
-	"40",	"слбн",	"вчбн",	"вчмбн","кор",	"умнбн","вчпа",	"счмр",
-	"ма",	"цмо",	"раа",	"слко",	"сда",	"и",	"пб",	"57",
-	"60",	"слбно","вчбно","вчмбно","корбо","умнбно","вчп","сдц",
-	"мб",	"цбро",	"ра",	"вчко",	"сд",	"или",	"по",	"стоп",
+const char *besm6_opname [] = {
+	"зп",	"зпм",	"рег",	"счм",	"сл",	"вч",	"вчоб",	"вчаб",
+	"сч",	"и",	"нтж",	"слц",	"знак",	"или",	"дел",	"умн",
+	"сбр",	"рзб",	"чед",	"нед",  "слп",  "вчп",  "сд",	"рж",
+	"счрж",	"счмр",	"увв",	"УВВ",	"слпа",	"вчпа",	"сда",	"ржа",
+	"уи",	"уим",	"счи",	"счим", "уии",	"сли",  "УИИ",	"СЛИ",
+	"э50",	"э51",	"э52",	"э53",	"э54",	"э55",	"э56",	"э57",
+	"э60",	"э61",  "э62",  "э63",  "э64",  "э65",  "э66",  "э67",
+	"э70",	"э71",	"э72",	"э73",	"э74",	"э75",	"э76",	"э77",
+	"э20",  "э21",  "мода", "мод",  "уиа",  "слиа", "по",   "пе",
+	"пб",   "пв",   "выпр", "стоп", "пио",  "пино", "ПИО", "цикл"
 };
 
 int besm6_instr_to_opcode (char *instr)
@@ -220,58 +222,29 @@ int besm6_instr_to_opcode (char *instr)
 }
 
 /*
- * Печать 12-битной адресной части машинной инструкции.
- */
-void besm6_fprint_addr (FILE *of, int a, int flag)
-{
-	if (flag)
-		putc ('@', of);
-
-	if (flag && a >= 07700) {
-		fprintf (of, "-%o", (a ^ 07777) + 1);
-	} else if (a) {
-		if (flag)
-			putc ('+', of);
-		fprintf (of, "%o", a);
-	}
-}
-
-/*
  * Печать машинной инструкции.
  */
-void besm6_fprint_cmd (FILE *of, t_value cmd)
+void besm6_fprint_cmd (FILE *of, uinstr_t ui)
 {
 	const char *m;
-	int flags, op, a1, a2, a3;
 
-	flags = cmd >> 42 & 7;
-	op = cmd >> 36 & 077;
-	a1 = cmd >> 24 & 07777;
-	a2 = cmd >> 12 & 07777;
-	a3 = cmd & 07777;
-	m = besm6_opname [op];
-
-	if (! flags && ! a1 && ! a2 && ! a3) {
-		/* Команда без аргументов. */
-		fprintf (of, "%s", m);
-		return;
-	}
+	m = besm6_opname [ui.i_opcode];
 	fprintf (of, "%s ", m);
-	besm6_fprint_addr (of, a1, flags & 4);
-	if (! (flags & 3) && ! a2 && ! a3) {
-		/* Нет аргументов 2 и 3. */
-		return;
-	}
-
+	if (ui.i_addr)
+		fprintf (of, "%o", ui.i_addr);
+	if (ui.i_reg)
+		fprintf (of, "(%o)", ui.i_reg);
 	fprintf (of, ", ");
-	besm6_fprint_addr (of, a2, flags & 2);
-	if (! (flags & 1) && ! a3) {
-		/* Нет аргумента 3. */
-		return;
-	}
+}
 
-	fprintf (of, ", ");
-	besm6_fprint_addr (of, a3, flags & 1);
+void besm6_fprint_insn (FILE *of, uint insn)
+{
+	if (insn & 002000000)
+		fprintf (of, "%02o %02o %05o ",
+			insn >> 20, (insn >> 15) & 037, insn & BITS15);
+	else
+		fprintf (of, "%02o %03o %04o ",
+			insn >> 20, (insn >> 12) & 0177, insn & 07777);
 }
 
 /*
@@ -295,13 +268,19 @@ t_stat fprint_sym (FILE *of, t_addr addr, t_value *val,
 		return SCPE_ARG;
 
 	cmd = val[0];
+
 	if (sw & SWMASK ('M')) {			/* symbolic decode? */
-		besm6_fprint_cmd (of, cmd);
-		return SCPE_OK;
-	}
-	fprintf (of, "%o %02o %04o %04o %04o",
-		(int) (cmd >> 42) & 7,
-		(int) (cmd >> 36) & 077,
+		uinstr_t uil = unpack(cmd >> 24);
+		uinstr_t uir = unpack(cmd & BITS24);
+
+		besm6_fprint_cmd (of, uil);
+		besm6_fprint_cmd (of, uir);
+	} else if (sw & SWMASK ('I')) {
+		besm6_fprint_insn (of, cmd >> 24);
+		besm6_fprint_insn (of, cmd & BITS24);
+	} else
+	fprintf (of, "%04o %04o %04o %04o",
+		(int) (cmd >> 36) & 07777,
 		(int) (cmd >> 24) & 07777,
 		(int) (cmd >> 12) & 07777,
 		(int) cmd & 07777);

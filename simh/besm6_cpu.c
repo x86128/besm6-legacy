@@ -281,25 +281,27 @@ utf8_putc (unsigned ch, FILE *fout)
 	putc ((ch & 0x3f) | 0x80, fout);
 }
 
-uinstr_t unpack() {
+uinstr_t unpack(t_value rk) {
 	uinstr_t ui;
-	ui.i_reg = RK >> 20;
-	if (RK & 02000000) {
-		ui.i_opcode = (RK >> 15) & 037;
-		ui.i_opcode += 0100;
-		ui.i_addr = RK & BITS15;
+	ui.i_reg = rk >> 20;
+	if (rk & 02000000) {
+		ui.i_opcode = (rk >> 15) & 037;
+		ui.i_opcode += 060;
+		ui.i_addr = rk & BITS15;
 	} else {
-		ui.i_opcode = (RK >> 12) & 077;
-		ui.i_addr = RK & 07777;
-		if (RK & 01000000)
+		ui.i_opcode = (rk >> 12) & 077;
+		ui.i_addr = rk & 07777;
+		if (rk & 01000000)
 			ui.i_addr |= 070000;
 	}
+	return ui;
 }
 
 alureg_t toalu(t_value val) {
         alureg_t ret;
         ret.l = val >> 24;
         ret.r = val & BITS24;
+	return ret;
 }
 
 t_value fromalu(alureg_t reg) {
@@ -307,6 +309,7 @@ t_value fromalu(alureg_t reg) {
 }
 
 #define JMP(addr) (PC=(addr),PPK=0)
+#define effaddr ADDR(addr + M[reg])
 	
 /*
  * Execute one instruction, placed on address PC:PPK.
@@ -315,7 +318,7 @@ t_value fromalu(alureg_t reg) {
  */
 void cpu_one_inst ()
 {
-	int reg, opcode, addr, effaddr, n, i, r, nextpc;
+	int reg, opcode, addr, n, i, r, nextpc;
 	uinstr_t ui;
 	optab_t op;
 
@@ -327,7 +330,7 @@ void cpu_one_inst ()
 
 	RK &= BITS24;
 
-	ui = unpack();
+	ui = unpack(RK);
 	op = optab[ui.i_opcode];
 	reg = ui.i_reg;
 
@@ -349,7 +352,6 @@ void cpu_one_inst ()
                 addr = ADDR(ui.i_addr + M[16]);
         } else
                 addr = ui.i_addr;
-        effaddr = ADDR(addr + M[reg]);
 
 	delay = 0;
 	corr_stack = 0;
@@ -644,7 +646,7 @@ mtj:
 	}
 
 	if ((i = op.o_flags & F_GRP))
-		RAU = SET_MODE(RAU, 1<<(i+2));
+		RAU = SET_MODE(RAU, 1<<(i+1));
 
 	if (op.o_flags & F_AR) {
 		uint    rr = 0;
