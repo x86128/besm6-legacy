@@ -102,8 +102,8 @@ t_stat cpu_reset (DEVICE *dptr);
 UNIT cpu_unit = { UDATA (NULL, UNIT_FIX, MEMSIZE) };
 
 REG cpu_reg[] = {
-	{ "CчAC", &PC,    8, 15, 0, 1 }, /* счётчик адреса команды */
-	{ "ППK",  &PPK,   2, 1,  0, 1 }, /* признак правой команды */
+	{ "СчАС", &PC,    8, 15, 0, 1 }, /* счётчик адреса команды */
+	{ "ППК",  &PPK,   2, 1,  0, 1 }, /* признак правой команды */
 /* TODO: добавить ПКП, ПКЛ, БРО */
 	{ "РК",   &RK,    8, 24, 0, 1 }, /* регистр выполняемой команды */
 	{ "СМ",   &ACC,   8, 48, 0, 1 }, /* сумматор */
@@ -684,7 +684,7 @@ mtj:
 		RAU = SET_MODE(RAU, 1<<(i+1));
 
 	if (op.o_flags & F_AR) {
-		uint    rr = 0;
+		uint32 rr = 0;
 		switch ((acc.ml >> 16) & 3) {
 		case 2:
 		case 1:
@@ -879,10 +879,10 @@ zero:
 			acc.l = acc.r = accex.l = accex.r = 0;
 			goto done;
 		}
-		acc.l = ((uint) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
+		acc.l = ((uint32) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
 		acc.r = acc.mr & 0xffffff;
 
-		accex.l = ((uint) (accex.o & 0x7f) << 17) | (accex.ml & 0x1ffff);
+		accex.l = ((uint32) (accex.o & 0x7f) << 17) | (accex.ml & 0x1ffff);
 		accex.r = accex.mr & 0xffffff;
 done:
 		if (op.o_inline == I_YTA)

@@ -141,7 +141,7 @@ aex()
 int
 arx()
 {
-	uint            i;
+	uint32 i;
 
 	acc.r = (i = acc.r + enreg.r) & 0xffffff;
 	acc.l = (i = acc.l + enreg.l + (i >> 24)) & 0xffffff;
@@ -275,7 +275,7 @@ mul()
 	uint8           neg = 0;
 	alureg_t        a, b;
 	uint16          a1, a2, a3, b1, b2, b3;
-	register uint   l;
+	register uint32 l;
 
 	a = acc;
 	b = enreg;
@@ -306,22 +306,22 @@ mul()
 	b2 = b.mr >> 12;
 	b1 = b.ml;
 
-	accex.mr = (uint) a3 * b3;
+	accex.mr = (uint32) a3 * b3;
 
-	l = (uint) a2 * b3 + (uint) a3 * b2;
+	l = (uint32) a2 * b3 + (uint32) a3 * b2;
 	accex.mr += (l << 12) & 0xfff000;
 	accex.ml = l >> 12;
 
-	l = (uint) a1 * b3 + (uint) a2 * b2 + (uint) a3 * b1;
+	l = (uint32) a1 * b3 + (uint32) a2 * b2 + (uint32) a3 * b1;
 	accex.ml += l & 0xffff;
 	acc.mr = l >> 16;
 
-	l = (uint) a1 * b2 + (uint) a2 * b1;
+	l = (uint32) a1 * b2 + (uint32) a2 * b1;
 	accex.ml += (l & 0xf) << 12;
 	acc.mr += (l >> 4) & 0xffffff;
 	acc.ml = l >> 28;
 
-	l = (uint) a1 * b1;
+	l = (uint32) a1 * b1;
 	acc.mr += (l & 0xffff) << 8;
 	acc.ml += l >> 16;
 
@@ -405,7 +405,7 @@ int
 acx()
 {
 	int     c = 0;
-	uint    i;
+	uint32  i;
 
 	for (i = acc.l; i; i &= i - 1, c++);
 	for (i = acc.r; i; i &= i - 1, c++);
@@ -417,8 +417,8 @@ acx()
 int
 anx()
 {
-	uint    c;
-	uint    i;
+	uint32  c;
+	uint32  i;
 	uint8   b;
 
 	if (acc.l) {
