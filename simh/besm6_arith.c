@@ -44,8 +44,7 @@ typedef union {
 alureg_t acc, accex, enreg, zeroword;
 int rnd_rq;
 
-int
-add()
+int add()
 {
 	alureg_t        a1, a2;
 	int             diff, neg;
@@ -59,7 +58,7 @@ add()
 		a1 = enreg;
 		a2 = acc;
 	}
-	neg = NEGATIVE(a1);
+	neg = NEGATIVE (a1);
 	if (!diff)
 		/*
 		accex.o = accex.ml = accex.mr = 0;
@@ -120,8 +119,7 @@ add()
 	return E_SUCCESS;
 }
 
-int
-aax()
+int aax()
 {
 	acc.l &= enreg.l;
 	acc.r &= enreg.r;
@@ -129,8 +127,7 @@ aax()
 	return E_SUCCESS;
 }
 
-int
-aex()
+int aex()
 {
 	accex = acc;
 	acc.l ^= enreg.l;
@@ -138,8 +135,7 @@ aex()
 	return E_SUCCESS;
 }
 
-int
-arx()
+int arx()
 {
 	uint32 i;
 
@@ -155,16 +151,14 @@ arx()
 	return E_SUCCESS;
 }
 
-int
-avx()
+int avx()
 {
-	if (NEGATIVE(enreg))
-		NEGATE(acc);
+	if (NEGATIVE (enreg))
+		NEGATE (acc);
 	return E_SUCCESS;
 }
 
-int
-aox()
+int aox()
 {
 	acc.l |= enreg.l;
 	acc.r |= enreg.r;
@@ -175,26 +169,25 @@ aox()
 /*
  * non-restoring division
  */
-double
-nrdiv (double n, double d)
+double nrdiv (double n, double d)
 {
 	int ne, de, re;
 	double nn, dd, res, q, eps;
 
-	nn = frexp(n, &ne);
-	dd = frexp(d, &de);
+	nn = frexp (n, &ne);
+	dd = frexp (d, &de);
 
 	res = 0, q = 0.5;
-	eps = ldexp(q, -40);		/* run for 40 bits of precision */
+	eps = ldexp (q, -40);		/* run for 40 bits of precision */
 
-	if (fabs(nn) >= fabs(dd))
+	if (fabs (nn) >= fabs (dd))
 		nn/=2, ne++;
 
 	while (q > eps) {
 		if (nn == 0.0)
 			break;
 
-		if (fabs(nn) < 0.25)
+		if (fabs (nn) < 0.25)
 			nn *= 2;	/* magic shortcut */
 		else if ((nn > 0) ^ (dd > 0)) {
 			res -= q;
@@ -205,26 +198,25 @@ nrdiv (double n, double d)
 		}
 		q /= 2;
 	}
-	res = frexp(res, &re);
+	res = frexp (res, &re);
 
-	return ldexp(res, re+ne-de);
+	return ldexp (res, re+ne-de);
 }
 
-int
-b6div()
+int b6div ()
 {
 	int             neg, o;
 	unsigned long   i, c, bias = 0;
 	math_t          dividend, divisor, quotient;
 
 	accex.o = accex.ml = accex.mr = 0;
-	neg = NEGATIVE(acc) != NEGATIVE(enreg);
-	if (NEGATIVE(acc))
-		NEGATE(acc);
-	if (NEGATIVE(enreg))
-		NEGATE(enreg);
+	neg = NEGATIVE (acc) != NEGATIVE (enreg);
+	if (NEGATIVE (acc))
+		NEGATE (acc);
+	if (NEGATIVE (enreg))
+		NEGATE (enreg);
 	if ((enreg.ml & 0x8000) == 0)
-		longjmp(cpu_halt, STOP_DIVZERO);
+		longjmp (cpu_halt, STOP_DIVZERO);
 
 	if ((acc.ml == 0) && (acc.mr == 0)) {
 qzero:
@@ -246,12 +238,12 @@ qzero:
 		acc.mr = (acc.mr << c) & 0xffffff;
 	}
 
-	BESM_TO_IEEE(acc, dividend);
+	BESM_TO_IEEE (acc, dividend);
 	dividend.u.left32 -= bias << 20;
-	BESM_TO_IEEE(enreg, divisor);
+	BESM_TO_IEEE (enreg, divisor);
 
 	/* quotient.d = dividend.d / divisor.d; */
-	quotient.d = nrdiv(dividend.d, divisor.d);
+	quotient.d = nrdiv (dividend.d, divisor.d);
 
 	o = quotient.u.left32 >> 20;
 	o = o - 1022 + 64;
@@ -262,15 +254,14 @@ qzero:
 	acc.mr = ((quotient.u.left32 & 0x1f) << 19) |
 			(quotient.u.right32 >> 13);
 	if (neg)
-		NEGATE(acc);
-	if ((o > 0x7f) && !dis_exc)
-		longjmp(cpu_halt, STOP_OVFL);
+		NEGATE (acc);
+	if ((o > 0x7f) && ! (RAU & RAU_OVF_DISABLE))
+		longjmp (cpu_halt, STOP_OVFL);
 
 	return E_SUCCESS;
 }
 
-int
-mul()
+int mul()
 {
 	uint8           neg = 0;
 	alureg_t        a, b;
@@ -288,13 +279,13 @@ mul()
 		return E_SUCCESS;
 	}
 
-	if (NEGATIVE(a)) {
+	if (NEGATIVE (a)) {
 		neg = 1;
-		NEGATE(a);
+		NEGATE (a);
 	}
-	if (NEGATIVE(b)) {
+	if (NEGATIVE (b)) {
 		neg ^= 1;
-		NEGATE(b);
+		NEGATE (b);
 	}
 	acc.o = a.o + b.o - 64;
 
@@ -348,8 +339,7 @@ mul()
 	return E_SUCCESS;
 }
 
-int
-apx()
+int apx()
 {
 	for (accex.l = accex.r = 0; enreg.r; enreg.r >>= 1, acc.r >>= 1)
 		if (enreg.r & 1) {
@@ -370,8 +360,7 @@ apx()
 	return E_SUCCESS;
 }
 
-int
-aux()
+int aux()
 {
 	int     i;
 
@@ -401,8 +390,7 @@ aux()
 	return E_SUCCESS;
 }
 
-int
-acx()
+int acx()
 {
 	int     c = 0;
 	uint32  i;
@@ -414,8 +402,7 @@ acx()
 	return arx();
 }
 
-int
-anx()
+int anx()
 {
 	uint32  c;
 	uint32  i;
@@ -460,22 +447,19 @@ anx()
 	return E_SUCCESS;
 }
 
-int
-epx()
+int epx()
 {
 	acc.o += enreg.o - 64;
 	return E_SUCCESS;
 }
 
-int
-emx()
+int emx()
 {
 	acc.o += 64 - enreg.o;
 	return E_SUCCESS;
 }
 
-int
-asx()
+int asx()
 {
 	int     i, j;
 
@@ -535,10 +519,9 @@ asx()
 	return E_SUCCESS;
 }
 
-int
-yta()
+int yta()
 {
-	if (IS_LOGICAL(RAU)) {
+	if (IS_LOGICAL (RAU)) {
 		acc = accex;
 		return E_SUCCESS;
 	}
@@ -548,8 +531,8 @@ yta()
 		((acc.l + (enreg.o << 17) - (64 << 17)) & 0x1fe0000);
 	if (acc.l & 0x1000000) {
 		acc.l &= 0xffffff;
-		if (!dis_exc)
-			longjmp(cpu_halt, STOP_OVFL);
+		if (! (RAU & RAU_OVF_DISABLE))
+			longjmp (cpu_halt, STOP_OVFL);
 	}
 	return E_SUCCESS;
 }
@@ -557,14 +540,13 @@ yta()
 /*
  * Fetch BESM "real" value and return it as native double.
  */
-double
-fetch_real (int addr)
+double fetch_real (int addr)
 {
 	alureg_t word;
 	math_t exponent;
 	int64_t mantissa;
 
-	LOAD(word, addr);
+	LOAD (word, addr);
 	mantissa = ((int64_t) word.l << 24 | word.r) << (64 - 48 + 7);
 
 	exponent.u.left32 = ((word.l >> 17) - 64 + 1023 - 64 + 1) << 20;
