@@ -75,6 +75,12 @@
 t_value memory [MEMSIZE];
 uint32 PC, M [NREGS], RAU, PPK, addrmod;
 uint32 supmode, convol_mode;
+t_value GRP, MGRP;
+/* нехранящие биты ГРП должны сбрасываться путем обнуления тех регистров,
+ * сборкой которых они являются
+ */
+#define GRP_WIRED_BITS 01400743700000000LL
+
 int corr_stack;
 t_value RK, ACC, RMR;
 uint32 delay;
@@ -125,6 +131,8 @@ REG cpu_reg[] = {
 	{ "M27",  &M[27], 8, 15, 0, 1 }, /* адрес возврата из прерывания */
 	{ "M28",  &M[28], 8, 15, 0, 1 }, /* адрес останова по выполнению */
 	{ "M29",  &M[29], 8, 15, 0, 1 }, /* адрес останова по чтению/записи */
+	{ "GRP",  &GRP,   8, 48, 0, 1 }, /* главный регистр прерываний */
+	{ "MGRP", &MGRP,  8, 48, 0, 1 }, /* маска ГРП */
 	{ 0 }
 };
 
@@ -246,7 +254,8 @@ t_stat cpu_reset (DEVICE *dptr)
 	M[23] = M23_MMAP_DISABLE | M23_PROT_DISABLE | M23_EXTRACODE |
 		M23_INTR_DISABLE;
 
-	supmode = 1;
+	GRP = MGRP = 0;
+	supmode = M23_EXTRACODE;
 	sim_brk_types = sim_brk_dflt = SWMASK ('E');
 	return SCPE_OK;
 }
@@ -327,7 +336,7 @@ t_value fromalu(alureg_t reg) {
  */
 void cpu_one_inst ()
 {
-	int reg, opcode, addr, n, i, r, nextpc;
+	int reg, opcode, addr, n, i, r, nextpc, nextaddrmod = 0;
 	uinstr_t ui;
 	optab_t op;
 
@@ -357,7 +366,6 @@ void cpu_one_inst ()
 	}
 
 	if (addrmod) {
-                addrmod = 0;
                 addr = ADDR(ui.i_addr + M[16]);
         } else
                 addr = ui.i_addr;
@@ -510,13 +518,13 @@ common_add:
 		break;
 	case I_UTC:
 		M[MODREG] = effaddr;
-		addrmod = 1;
+		nextaddrmod = 1;
 		break;
 	case I_WTC:
 		CHK_STACK;
 		GET_OP;
 		M[MODREG] = ADDR(enreg.r);
-		addrmod = 1;
+		nextaddrmod = 1;
 		break;
 	case I_VZM:
 		if (ui.i_opcode & 1) {
@@ -575,16 +583,15 @@ mtj:
 		M[PSREG] = M[PSSREG] & 02003;
 		JMP(M[(reg & 3) | 030]);
 		PPK = !!(M[PSSREG] & 0400);
-		supmode = M[PSSREG] & 014 ? 1 : 0;
+		supmode = M[PSSREG] & (M23_EXTRACODE|M23_INTERRUPT);
+		addrmod = M[PSSREG] & M23_NEXT_RK ? 1 : 0;
 		break;
 	case I_TRAP:
 		M[TRAPRETREG] = nextpc;
-		M[PSSREG] = M[PSREG] & 02003;
+		M[PSSREG] = (M[PSREG] & 02003) | supmode;
 		M[016] = effaddr;
-		if (supmode)
-			M[PSSREG] |= 014;
-		supmode = 1;
-		M[PSREG] = 02007;
+		supmode = M23_EXTRACODE;
+		M[PSREG] = 02007; // 2003 ?
 		JMP(0500 + ui.i_opcode); // E20? E21?
 		break;
 	case I_MOD:
@@ -865,8 +872,71 @@ done:
 	}
 	ACC = fromalu(acc);
 	RMR = fromalu(accex);
+	/*
+	 * Команда выполнилась успешно: можно сбросить признаки
+	 * модификации адреса, если они не были только что установлены.
+	 */
+	addrmod = nextaddrmod;
+	if (addrmod == 0) {
+		M[16] = 0;
+	}
 }
 
+/* ОпПр1, ТО ч.9, стр. 119 */
+void OpInt1() {
+	M[PSSREG] = (M[PSREG] & 02003) | supmode;
+	if (PPK)
+		M[PSSREG] |= M23_RIGHT_INSTR;
+	M[27] = PC;
+	M[PSREG] |= 02003;
+	if (addrmod) {
+		M[PSSREG] |= M23_MOD_RK;
+		addrmod = 0;
+	}
+
+	PC = 0500;
+	PPK = 0;
+	supmode = M23_INTERRUPT;
+}
+
+/* ОпПр1, ТО ч.9, стр. 119 */
+void OpInt2() {
+	M[PSSREG] = (M[PSREG] & 02003) | supmode;
+	M[27] = PC;
+	M[PSREG] |= 02003;
+	if (addrmod) {
+		M[PSSREG] |= M23_MOD_RK;
+		addrmod = 0;
+	}
+	PC = 0501;
+	PPK = 0;
+	supmode = M23_INTERRUPT;
+}
+
+void IllegalInsn() {
+	OpInt1();
+	// M23_NEXT_RK is not important for this interrupt
+	GRP |= 1 << 12;
+}
+
+void InsnCheck() {
+	OpInt1();
+	// M23_NEXT_RK must be 0 for this interrupt; it is already
+	GRP |= 1 << 14;
+}
+
+void InsnProt() {
+	OpInt1();
+	// M23_NEXT_RK must be 1 for this interrupt
+	M[PSSREG] |= M23_NEXT_RK;
+	GRP |= 1 << 13;
+}
+
+void OperProt() {
+	OpInt1();
+	// M23_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
+	GRP |= 1 << 19;
+}
 
 /*
  * Main instruction fetch/decode loop
@@ -874,16 +944,35 @@ done:
 t_stat sim_instr (void)
 {
 	t_stat r;
+	int iintr = 0;
 
 	/* Restore register state */
 	PC = PC & BITS15;				/* mask PC */
 	sim_cancel_step ();				/* defang SCP step */
 
-	/* To stop execution, jump here. */
+	/* An internal interrupt or user intervention */
 	r = setjmp (cpu_halt);
 	if (r) {
 		M[15] += corr_stack;
-		return r;
+		switch (r) {
+		case STOP_STOP:				/* STOP insn */
+		case STOP_IBKPT:			/* breakpoint req */
+		case STOP_RUNOUT:			/* must not happen */
+			return r;
+		case STOP_BADCMD:
+			IllegalInsn();
+			break;
+		case STOP_INSN_CHECK:
+			InsnCheck();
+			break;
+		case STOP_INSN_PROT:
+			InsnProt();
+			break;			
+		case STOP_OPERAND_PROT:
+			OperProt();
+			break;
+		}
+		iintr = 1;
 	}
 
 	/* Main instruction fetch/decode loop */
@@ -903,6 +992,11 @@ t_stat sim_instr (void)
 			return STOP_IBKPT;		/* stop simulation */
 		}
 
+		if (!iintr && !PPK && !M[17] & M17_INTR_DISABLE &&
+			(GRP & MGRP)) {
+			/* external interrupt */
+			OpInt2();	
+		}
 		cpu_one_inst ();			/* one instr */
 		if (delay < 1)
 			delay = 1;

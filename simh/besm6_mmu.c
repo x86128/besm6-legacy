@@ -294,10 +294,13 @@ t_value mmu_fetch (int addr)
 }
 
 void mmu_settlb(int idx, t_value val) {
-	TLB.val[idx*4] = val & 037 | (val>>20)&1<<5 | (val>>24)&1<<6;
-	TLB.val[idx*4+1] = (val>>5) & 037 | (val>>21)&1<<5 | (val>>25)&1<<6;
-	TLB.val[idx*4+2] = (val>>10) & 037 | (val>>22)&1<<5 | (val>>26)&1<<6;
-	TLB.val[idx*4+3] = (val>>15) & 037 | (val>>23)&1<<5 | (val>>27)&1<<6;
+	/* Младшие 5 разрядов 4-х регистров приписки упакованы
+	 * по 5 в 1-20 рр, 6-е разряды - в 29-32 рр, 7-е разряды - в 33-36 рр
+	 */
+	TLB.val[idx*4] = val & 037 | (val>>28)&1<<5 | (val>>32)&1<<6;
+	TLB.val[idx*4+1] = (val>>5) & 037 | (val>>29)&1<<5 | (val>>33)&1<<6;
+	TLB.val[idx*4+2] = (val>>10) & 037 | (val>>30)&1<<5 | (val>>34)&1<<6;
+	TLB.val[idx*4+3] = (val>>15) & 037 | (val>>31)&1<<5 | (val>>35)&1<<6;
 }
 
 void mmu_setprotection(int idx, t_value val) {
