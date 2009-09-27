@@ -18,59 +18,55 @@ UNIT mmu_unit = {
 };
 
 t_value BRZ[8];
-int BAZ[8];
-unsigned tourn;
+uint32 BAZ[8], tourn, protection;
 
 /*
- * 64-битные регистры - для отображения регистров приписки
- * группами по 4 ради компактности (порядок зависит от архитектуры хост-машины).
- * Вся работа должна вестись через TLB.val.
+ * 64-битные регистры RP0-RP7 - для отображения регистров приписки,
+ * группами по 4 ради компактности, 12 бит на страницу.
+ * TLB0-TLB31 - постраничные регистры приписки, копии RPi.
+ * Обращение к памяти должно вестись через TLBi.
  */
-union {
-	uint16 val[32];
-	t_uint64 RP[8];
-} TLB;
-
-unsigned protection;
+t_value RP[8];
+uint32 TLB[32];
 
 unsigned iintr_data;	/* protected page number or parity check location */
 
 t_value pult[8];
 
 REG mmu_reg[] = {
-	{ "BRZ0",   &BRZ[0],         8, 50, 0, 1 },
-	{ "BRZ1",   &BRZ[1],         8, 50, 0, 1 },
-	{ "BRZ2",   &BRZ[2],         8, 50, 0, 1 },
-	{ "BRZ3",   &BRZ[3],         8, 50, 0, 1 },
-	{ "BRZ4",   &BRZ[4],         8, 50, 0, 1 },
-	{ "BRZ5",   &BRZ[5],         8, 50, 0, 1 },
-	{ "BRZ6",   &BRZ[6],         8, 50, 0, 1 },
-	{ "BRZ7",   &BRZ[7],         8, 50, 0, 1 },
-	{ "BAZ0",   &BAZ[0],         8, 16, 0, 1 },
-	{ "BAZ1",   &BAZ[1],         8, 16, 0, 1 },
-	{ "BAZ2",   &BAZ[2],         8, 16, 0, 1 },
-	{ "BAZ3",   &BAZ[3],         8, 16, 0, 1 },
-	{ "BAZ4",   &BAZ[4],         8, 16, 0, 1 },
-	{ "BAZ5",   &BAZ[5],         8, 16, 0, 1 },
-	{ "BAZ6",   &BAZ[6],         8, 16, 0, 1 },
-	{ "BAZ7",   &BAZ[7],         8, 16, 0, 1 },
-	{ "Tourn",  &tourn,	     8, 28, 0, 1 },
-	{ "RP0",    &TLB.RP[0],	     8, 64, 0, 1 },
-	{ "RP1",    &TLB.RP[1],	     8, 64, 0, 1 },
-	{ "RP2",    &TLB.RP[2],	     8, 64, 0, 1 },
-	{ "RP3",    &TLB.RP[3],	     8, 64, 0, 1 },
-	{ "RP4",    &TLB.RP[4],	     8, 64, 0, 1 },
-	{ "RP5",    &TLB.RP[5],	     8, 64, 0, 1 },
-	{ "RP6",    &TLB.RP[6],	     8, 64, 0, 1 },
-	{ "RP7",    &TLB.RP[7],	     8, 64, 0, 1 },
-	{ "Prot",   &protection,     8, 32, 0, 1},
-	{ "FP1",   &pult[1],         8, 50, 0, 1 },
-	{ "FP2",   &pult[2],         8, 50, 0, 1 },
-	{ "FP3",   &pult[3],         8, 50, 0, 1 },
-	{ "FP4",   &pult[4],         8, 50, 0, 1 },
-	{ "FP5",   &pult[5],         8, 50, 0, 1 },
-	{ "FP6",   &pult[6],         8, 50, 0, 1 },
-	{ "FP7",   &pult[7],         8, 50, 0, 1 },
+	{ "БРЗ0",  &BRZ[0],	8, 50, 0, 1 },	/* Буферные регистры записи */
+	{ "БРЗ1",  &BRZ[1],	8, 50, 0, 1 },
+	{ "БРЗ2",  &BRZ[2],	8, 50, 0, 1 },
+	{ "БРЗ3",  &BRZ[3],	8, 50, 0, 1 },
+	{ "БРЗ4",  &BRZ[4],	8, 50, 0, 1 },
+	{ "БРЗ5",  &BRZ[5],	8, 50, 0, 1 },
+	{ "БРЗ6",  &BRZ[6],	8, 50, 0, 1 },
+	{ "БРЗ7",  &BRZ[7],	8, 50, 0, 1 },
+	{ "БАЗ0",  &BAZ[0],	8, 16, 0, 1 },	/* Буферные адреса записи */
+	{ "БАЗ1",  &BAZ[1],	8, 16, 0, 1 },
+	{ "БАЗ2",  &BAZ[2],	8, 16, 0, 1 },
+	{ "БАЗ3",  &BAZ[3],	8, 16, 0, 1 },
+	{ "БАЗ4",  &BAZ[4],	8, 16, 0, 1 },
+	{ "БАЗ5",  &BAZ[5],	8, 16, 0, 1 },
+	{ "БАЗ6",  &BAZ[6],	8, 16, 0, 1 },
+	{ "БАЗ7",  &BAZ[7],	8, 16, 0, 1 },
+	{ "ТАБСТ", &tourn,	8, 28, 0, 1 },	/* Таблица старшинства БРЗ */
+	{ "РП0",   &RP[0],	8, 48, 0, 1 },	/* Регистры приписки, по 12 бит */
+	{ "РП1",   &RP[1],	8, 48, 0, 1 },
+	{ "РП2",   &RP[2],	8, 48, 0, 1 },
+	{ "РП3",   &RP[3],	8, 48, 0, 1 },
+	{ "РП4",   &RP[4],	8, 48, 0, 1 },
+	{ "РП5",   &RP[5],	8, 48, 0, 1 },
+	{ "РП6",   &RP[6],	8, 48, 0, 1 },
+	{ "РП7",   &RP[7],	8, 48, 0, 1 },
+	{ "РЗ",    &protection,	8, 32, 0, 1 },	/* Регистр защиты */
+	{ "ТР1",   &pult[1],	8, 50, 0, 1 },	/* Тумблерные регистры */
+	{ "ТР2",   &pult[2],	8, 50, 0, 1 },
+	{ "ТР3",   &pult[3],	8, 50, 0, 1 },
+	{ "ТР4",   &pult[4],	8, 50, 0, 1 },
+	{ "ТР5",   &pult[5],	8, 50, 0, 1 },
+	{ "ТР6",   &pult[6],	8, 50, 0, 1 },
+	{ "ТР7",   &pult[7],	8, 50, 0, 1 },
 	{ 0 }
 };
 
@@ -79,7 +75,6 @@ MTAB mmu_mod[] = {
 };
 
 t_stat mmu_reset (DEVICE *dptr);
-
 
 DEVICE mmu_dev = {
 	"MMU", &mmu_unit, mmu_reg, mmu_mod,
@@ -96,12 +91,9 @@ t_stat mmu_reset (DEVICE *dptr)
 {
 	int i;
 	for (i = 0; i < 8; ++i) {
-		BRZ[i] = BAZ[i] = 0;
+		BRZ[i] = BAZ[i] = RP[i] = 0;
 	}
 	tourn = 0;
-	for (i = 0; i < 32; ++i) {
-		TLB.val[i] = 0;
-	}
 	protection = 0;
 	/*
 	 * Front panel switches survive the reset
@@ -149,14 +141,15 @@ static unsigned lose_mask[8] = {
 
 #define set_wins(i) tourn = tourn & ~lose_mask[i] | win_mask[i]
 
-void mmu_protection_check(int addr) {
+void mmu_protection_check (int addr)
+{
 	/* Защита блокируется в режиме супервизора для адресов 1-7 */
 	int tmp_prot_disabled = prot_disabled || (supmode && addr < 010);
 
 	/* Защита не заблокирована, а лист закрыт */
 	if (!tmp_prot_disabled && (protection & (1 << (addr >> 10)))) {
 		iintr_data = addr >> 10;
-		longjmp(cpu_halt, STOP_OPERAND_PROT);
+		longjmp (cpu_halt, STOP_OPERAND_PROT);
 	}
 }
 
@@ -172,12 +165,12 @@ void mmu_store (int addr, t_value val)
 	if (addr == 0)
 		return;
 
-	mmu_protection_check(addr);
+	mmu_protection_check (addr);
 
 	/* Различаем адреса с припиской и без */
 	addr |= sup_mmap << 15;
 	for (i = 0; i < 8; ++i) {
-		if (loses_to_all(i)) oldest = i;
+		if (loses_to_all (i)) oldest = i;
 		if (addr == BAZ[i]) {
 			matching = i;
 		}
@@ -191,7 +184,7 @@ void mmu_store (int addr, t_value val)
 		/* Вычисляем физический адрес выталкиваемого БРЗ */
 		int waddr = BAZ[oldest];
 		waddr = waddr > 0100000 ? waddr - 0100000 :
-		waddr & 01777 | TLB.val[waddr >> 10] << 10;
+		waddr & 01777 | TLB[waddr >> 10] << 10;
 		if (waddr >= 010) {
 			/* В ноль и тумблерные регистры не пишем */
 			memory[waddr] = BRZ[oldest];
@@ -199,8 +192,8 @@ void mmu_store (int addr, t_value val)
 		matching = oldest;
 		BAZ[oldest] = addr;
 	}
-	BRZ[matching] = SET_CONVOL(val, convol_mode);
-	set_wins(matching);
+	BRZ[matching] = SET_CONVOL (val, convol_mode);
+	set_wins (matching);
 }
 
 /*
@@ -215,7 +208,7 @@ t_value mmu_load (int addr)
 	if (addr == 0)
 		return 0;
 
-	mmu_protection_check(addr);
+	mmu_protection_check (addr);
 
 	/* Различаем адреса с припиской и без */
 	addr |= sup_mmap << 15;
@@ -228,7 +221,7 @@ t_value mmu_load (int addr)
 	if (matching == -1) {
 		/* Вычисляем физический адрес слова */
 		addr = addr > 0100000 ? addr - 0100000 :
-		addr & 01777 | TLB.val[addr >> 10] << 10;
+		addr & 01777 | TLB[addr >> 10] << 10;
 		if (addr >= 010) {
 			/* Из памяти */
 			val = memory[addr];
@@ -237,15 +230,15 @@ t_value mmu_load (int addr)
 			val = pult[addr];
 		}
 
-		if (!IS_NUMBER(val)) {
+		if (!IS_NUMBER (val)) {
 			iintr_data = addr & 7;
-			longjmp(cpu_halt, STOP_RAM_CHECK);
+			longjmp (cpu_halt, STOP_RAM_CHECK);
 		}
 	} else {
 		val = BRZ[matching];
-		if (!IS_NUMBER(val)) {
+		if (!IS_NUMBER (val)) {
 			iintr_data = matching;
-			longjmp(cpu_halt, STOP_CACHE_CHECK);
+			longjmp (cpu_halt, STOP_CACHE_CHECK);
 		}
 	}
 	return val & WORD;
@@ -264,7 +257,7 @@ t_value mmu_fetch (int addr)
 		 */
 		if (supmode)
 			return 0;
-		longjmp(cpu_halt, STOP_INSN_CHECK);
+		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 
 	/* В режиме супервизора защиты нет */
@@ -274,14 +267,14 @@ t_value mmu_fetch (int addr)
 		else
 			val = memory [addr];
 	} else {
-		int page = TLB.val[addr >> 10];
+		int page = TLB[addr >> 10];
 		/*
 		 * Для команд в режиме пользователя признак защиты -
 		 * 0 в регистре приписки.
 		 */
 		if (page == 0) {
 			iintr_data = addr >> 10;
-			longjmp(cpu_halt, STOP_INSN_PROT);
+			longjmp (cpu_halt, STOP_INSN_PROT);
 		}
 
 		/* Вычисляем физический адрес слова */
@@ -290,33 +283,76 @@ t_value mmu_fetch (int addr)
 		val = memory[addr];
 	}
 
-	if (!IS_INSN(val))
-		longjmp(cpu_halt, STOP_INSN_CHECK);
+	if (!IS_INSN (val))
+		longjmp (cpu_halt, STOP_INSN_CHECK);
 
 	return val & WORD;
 }
 
-void mmu_settlb(int idx, t_value val) {
+void mmu_setrp (int idx, t_value val)
+{
+	uint32 p0, p1, p2, p3;
+
 	/* Младшие 5 разрядов 4-х регистров приписки упакованы
 	 * по 5 в 1-20 рр, 6-е разряды - в 29-32 рр, 7-е разряды - в 33-36 рр
 	 */
-	TLB.val[idx*4] = val & 037 | (val>>28)&1<<5 | (val>>32)&1<<6;
-	TLB.val[idx*4+1] = (val>>5) & 037 | (val>>29)&1<<5 | (val>>33)&1<<6;
-	TLB.val[idx*4+2] = (val>>10) & 037 | (val>>30)&1<<5 | (val>>34)&1<<6;
-	TLB.val[idx*4+3] = (val>>15) & 037 | (val>>31)&1<<5 | (val>>35)&1<<6;
+	p0 = val & 037 | (val>>28)&1<<5 | (val>>32)&1<<6;
+	p1 = (val>>5) & 037 | (val>>29)&1<<5 | (val>>33)&1<<6;
+	p2 = (val>>10) & 037 | (val>>30)&1<<5 | (val>>34)&1<<6;
+	p3 = (val>>15) & 037 | (val>>31)&1<<5 | (val>>35)&1<<6;
+	RP[idx] = p0 | p1 << 12 | p2 << 24 | (t_value) p3 << 36;
+	TLB[idx*4] = p0;
+	TLB[idx*4+1] = p1;
+	TLB[idx*4+2] = p2;
+	TLB[idx*4+3] = p3;
 }
 
-void mmu_setprotection(int idx, t_value val) {
+void mmu_settlb ()
+{
+	int i;
+
+	/* Перепись РПi в TLBj. */
+	for (i=0; i<8; ++i) {
+		TLB[i*4] = RP[i] & 0177;
+		TLB[i*4+1] = RP[i] >> 12 & 0177;
+		TLB[i*4+2] = RP[i] >> 24 & 0177;
+		TLB[i*4+3] = RP[i] >> 36 & 0177;
+	}
+}
+
+void mmu_setprotection (int idx, t_value val)
+{
 	/* Разряды сумматора, записываемые в регистр защиты - 21-28 */
 	int mask = 0xff << (idx * 8);
 	val = ((val >> 20) & 0xff) << (idx * 8);
 	protection = protection & ~mask | val;
 }
 
-void mmu_setcache(int idx, t_value val) {
-	BRZ[idx] =  SET_CONVOL(val, convol_mode);
+void mmu_setcache (int idx, t_value val)
+{
+	BRZ[idx] = SET_CONVOL (val, convol_mode);
 }
 
-t_value mmu_getcache(int idx) {
+t_value mmu_getcache (int idx)
+{
 	return BRZ[idx];
+}
+
+void mmu_print_brz ()
+{
+	int i, k;
+
+	for (i=0; i<8; ++i) {
+		printf ("БРЗ [%d] = '", i);
+		if (sim_log)
+			fprintf (sim_log, "БРЗ [%d] = '", i);
+		for (k=47; k>=0; --k) {
+			printf ("%c", (BRZ[i] >> k & 1) ? '*' : ' ');
+			if (sim_log)
+				fprintf (sim_log, "%c", (BRZ[i] >> k & 1) ? '*' : ' ');
+		}
+		printf ("'\r\n");
+		if (sim_log)
+			fprintf (sim_log, "'\n");
+	}
 }

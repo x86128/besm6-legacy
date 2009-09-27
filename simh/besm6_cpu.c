@@ -149,6 +149,87 @@ DEVICE cpu_dev = {
 };
 
 /*
+ * REG: псевдоустройство, содержащее латинские синонимы всех регистров.
+ */
+REG reg_reg[] = {
+	{ "PC",    &PC,		8, 15, 0, 1 }, /* счётчик адреса команды */
+	{ "PPK",   &PPK,	2, 1,  0, 1 }, /* признак правой команды */
+/* TODO: добавить ПКП, ПКЛ, БРО */
+	{ "RK",    &RK,		8, 24, 0, 1 }, /* регистр выполняемой команды */
+	{ "SM",    &ACC,	8, 48, 0, 1 }, /* сумматор */
+	{ "RMR",   &RMR,	8, 48, 0, 1 }, /* регистр младших разрядов */
+	{ "RAU",   &RAU,	2, 6,  0, 1 }, /* режимы АУ */
+	{ "M1",    &M[1],	8, 15, 0, 1 }, /* регистры-модификаторы */
+	{ "M2",    &M[2],	8, 15, 0, 1 },
+	{ "M3",    &M[3],	8, 15, 0, 1 },
+	{ "M4",    &M[4],	8, 15, 0, 1 },
+	{ "M5",    &M[5],	8, 15, 0, 1 },
+	{ "M6",    &M[6],	8, 15, 0, 1 },
+	{ "M7",    &M[7],	8, 15, 0, 1 },
+	{ "M8",    &M[8],	8, 15, 0, 1 },
+	{ "M9",    &M[9],	8, 15, 0, 1 },
+	{ "M10",   &M[10],	8, 15, 0, 1 },
+	{ "M11",   &M[11],	8, 15, 0, 1 },
+	{ "M12",   &M[12],	8, 15, 0, 1 },
+	{ "M13",   &M[13],	8, 15, 0, 1 },
+	{ "M14",   &M[14],	8, 15, 0, 1 },
+	{ "M15",   &M[15],	8, 15, 0, 1 }, /* указатель магазина */
+	{ "M16",   &M[16],	8, 15, 0, 1 }, /* модификатор адреса */
+	{ "M17",   &M[17],	8, 15, 0, 1 }, /* режимы УУ */
+	{ "M23",   &M[23],	8, 15, 0, 1 }, /* упрятывание режимов УУ */
+	{ "M26",   &M[26],	8, 15, 0, 1 }, /* адрес возврата из экстракода */
+	{ "M27",   &M[27],	8, 15, 0, 1 }, /* адрес возврата из прерывания */
+	{ "M28",   &M[28],	8, 15, 0, 1 }, /* адрес останова по выполнению */
+	{ "M29",   &M[29],	8, 15, 0, 1 }, /* адрес останова по чтению/записи */
+	{ "GRP",   &GRP,	8, 48, 0, 1 }, /* главный регистр прерываний */
+	{ "MGRP",  &MGRP,	8, 48, 0, 1 }, /* маска ГРП */
+
+	{ "BRZ0",  &BRZ[0],	8, 50, 0, 1 },
+	{ "BRZ1",  &BRZ[1],	8, 50, 0, 1 },
+	{ "BRZ2",  &BRZ[2],	8, 50, 0, 1 },
+	{ "BRZ3",  &BRZ[3],	8, 50, 0, 1 },
+	{ "BRZ4",  &BRZ[4],	8, 50, 0, 1 },
+	{ "BRZ5",  &BRZ[5],	8, 50, 0, 1 },
+	{ "BRZ6",  &BRZ[6],	8, 50, 0, 1 },
+	{ "BRZ7",  &BRZ[7],	8, 50, 0, 1 },
+	{ "BAZ0",  &BAZ[0],	8, 16, 0, 1 },
+	{ "BAZ1",  &BAZ[1],	8, 16, 0, 1 },
+	{ "BAZ2",  &BAZ[2],	8, 16, 0, 1 },
+	{ "BAZ3",  &BAZ[3],	8, 16, 0, 1 },
+	{ "BAZ4",  &BAZ[4],	8, 16, 0, 1 },
+	{ "BAZ5",  &BAZ[5],	8, 16, 0, 1 },
+	{ "BAZ6",  &BAZ[6],	8, 16, 0, 1 },
+	{ "BAZ7",  &BAZ[7],	8, 16, 0, 1 },
+	{ "Tourn", &tourn,	8, 28, 0, 1 },
+	{ "RP0",   &RP[0],	8, 48, 0, 1 },
+	{ "RP1",   &RP[1],	8, 48, 0, 1 },
+	{ "RP2",   &RP[2],	8, 48, 0, 1 },
+	{ "RP3",   &RP[3],	8, 48, 0, 1 },
+	{ "RP4",   &RP[4],	8, 48, 0, 1 },
+	{ "RP5",   &RP[5],	8, 48, 0, 1 },
+	{ "RP6",   &RP[6],	8, 48, 0, 1 },
+	{ "RP7",   &RP[7],	8, 48, 0, 1 },
+	{ "Prot",  &protection,	8, 32, 0, 1 },
+	{ "FP1",   &pult[1],	8, 50, 0, 1 },
+	{ "FP2",   &pult[2],	8, 50, 0, 1 },
+	{ "FP3",   &pult[3],	8, 50, 0, 1 },
+	{ "FP4",   &pult[4],	8, 50, 0, 1 },
+	{ "FP5",   &pult[5],	8, 50, 0, 1 },
+	{ "FP6",   &pult[6],	8, 50, 0, 1 },
+	{ "FP7",   &pult[7],	8, 50, 0, 1 },
+	{ 0 }
+};
+
+UNIT reg_unit = {
+	UDATA (NULL, UNIT_FIX, 8)
+};
+
+DEVICE reg_dev = {
+	"REG", &reg_unit, reg_reg, NULL,
+	1, 8, 1, 1, 8, 50,
+};
+
+/*
  * SCP data structures and interface routines
  *
  * sim_name		simulator name string
@@ -167,6 +248,7 @@ int32 sim_emax = 1;	/* максимальное количество слов в
 
 DEVICE *sim_devices[] = {
 	&cpu_dev,
+	&reg_dev,
 	&drum_dev,
 	&mmu_dev,
 	0
@@ -351,7 +433,7 @@ void cpu_one_inst ()
 	uinstr_t ui;
 	optab_t op;
 
-	t_value word = mmu_fetch(PC);
+	t_value word = mmu_fetch (PC);
 	if (PPK)
 		RK = word;		/* get right instruction */
 	else
@@ -359,7 +441,7 @@ void cpu_one_inst ()
 
 	RK &= BITS24;
 
-	ui = unpack(RK);
+	ui = unpack (RK);
 	op = optab[ui.i_opcode];
 	reg = ui.i_reg;
 
@@ -377,24 +459,24 @@ void cpu_one_inst ()
 	}
 
 	if (addrmod) {
-                addr = ADDR(ui.i_addr + M[16]);
+                addr = ADDR (ui.i_addr + M[16]);
         } else
                 addr = ui.i_addr;
 
 	delay = 0;
 	corr_stack = 0;
 
-	acc = toalu(ACC);
-	accex = toalu(RMR);
+	acc = toalu (ACC);
+	accex = toalu (RMR);
 
 	switch (op.o_inline) {
 	case I_ATX:
-		mmu_store(effaddr, ACC);
+		mmu_store (effaddr, ACC);
 		if (!addr && (reg == STACKREG))
-			M[STACKREG] = ADDR(M[STACKREG] + 1);
+			M[STACKREG] = ADDR (M[STACKREG] + 1);
 		break;
 	case I_STX:
-		mmu_store(effaddr, ACC);
+		mmu_store (effaddr, ACC);
 		STK_POP;
 		break;
 	case I_XTS:
@@ -427,14 +509,15 @@ void cpu_one_inst ()
 	case I_VLM:
 		if (!M[reg])
 			break;
-		M[reg] = ADDR(M[reg] + 1);
-		JMP(addr);
+		M[reg] = ADDR (M[reg] + 1);
+		JMP (addr);
 		break;
 	case I_UJ:
-		JMP(effaddr);
+		JMP (effaddr);
 		break;
 	case I_STOP:
-		longjmp(cpu_halt, STOP_STOP);
+		mmu_print_brz ();
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case I_ITS:
 		STK_PUSH;
@@ -461,20 +544,20 @@ set_mode:
 	case I_ASUB:
 		CHK_STACK;
 		GET_OP;
-		if (NEGATIVE(acc))
-			NEGATE(acc);
-		if (!NEGATIVE(enreg))
-			NEGATE(enreg);
+		if (NEGATIVE (acc))
+			NEGATE (acc);
+		if (!NEGATIVE (enreg))
+			NEGATE (enreg);
 		goto common_add;
 	case I_RSUB:
 		CHK_STACK;
 		GET_OP;
-		NEGATE(acc);
+		NEGATE (acc);
 		goto common_add;
 	case I_SUB:
 		CHK_STACK;
 		GET_OP;
-		NEGATE(enreg);
+		NEGATE (enreg);
 		goto common_add;
 	case I_ADD:
 		CHK_STACK;
@@ -483,49 +566,49 @@ common_add:
 		add();
 		break;
 	case I_YTA:
-		if (IS_LOGICAL(RAU)) {
+		if (IS_LOGICAL (RAU)) {
 			acc = accex;
 			break;
 		}
-		UNPCK(accex);
-		UNPCK(acc);
+		UNPCK (accex);
+		UNPCK (acc);
 		acc.mr = accex.mr;
 		acc.ml = accex.ml & 0xffff;
 		acc.o += (effaddr & 0x7f) - 64;
 		op.o_flags |= F_AR;
 		enreg = accex;
 		accex = zeroword;
-		PACK(enreg);
+		PACK (enreg);
 		break;
 	case I_UZA:
 		accex = acc;
-		if (IS_ADDITIVE(RAU)) {
+		if (IS_ADDITIVE (RAU)) {
 			if (acc.l & 0x10000)
-					break;
-		} else if (IS_MULTIPLICATIVE(RAU)) {
-			if (!(acc.l & 0x800000))
-					break;
-		} else if (IS_LOGICAL(RAU)) {
+				break;
+		} else if (IS_MULTIPLICATIVE (RAU)) {
+			if (! (acc.l & 0x800000))
+				break;
+		} else if (IS_LOGICAL (RAU)) {
 			if (acc.l | acc.r)
-					break;
+				break;
 		} else
 			break;
-		JMP(effaddr);
+		JMP (effaddr);
 		break;
 	case I_UIA:
 		accex = acc;
-		if (IS_ADDITIVE(RAU)) {
-			if (!(acc.l & 0x10000))
-					break;
-		} else if (IS_MULTIPLICATIVE(RAU)) {
+		if (IS_ADDITIVE (RAU)) {
+			if (! (acc.l & 0x10000))
+				break;
+		} else if (IS_MULTIPLICATIVE (RAU)) {
 			if (acc.l & 0x800000)
-					break;
-		} else if (IS_LOGICAL(RAU)) {
-			if (!(acc.l | acc.r))
-					break;
+				break;
+		} else if (IS_LOGICAL (RAU)) {
+			if (! (acc.l | acc.r))
+				break;
 		} else
 			/* fall thru, i.e. branch */;
-		JMP(effaddr);
+		JMP (effaddr);
 		break;
 	case I_UTC:
 		M[MODREG] = effaddr;
@@ -534,41 +617,41 @@ common_add:
 	case I_WTC:
 		CHK_STACK;
 		GET_OP;
-		M[MODREG] = ADDR(enreg.r);
+		M[MODREG] = ADDR (enreg.r);
 		nextaddrmod = 1;
 		break;
 	case I_VZM:
 		if (ui.i_opcode & 1) {
 			if (M[reg]) {
-				JMP(addr);
+				JMP (addr);
 			}
 		} else {
 			if (!M[reg]) {
-				JMP(addr);
+				JMP (addr);
 			}
 		}
 		break;
 	case I_VJM:
 		M[reg] = nextpc;
 		M[0] = 0;
-		JMP(addr);
+		JMP (addr);
 		break;
 	case I_ATI:
 		if (supmode) {
-			M[effaddr & 0x1f] = ADDR(acc.r);
+			M[effaddr & 0x1f] = ADDR (acc.r);
 		} else
-			M[effaddr & 0xf] = ADDR(acc.r);
+			M[effaddr & 0xf] = ADDR (acc.r);
 		M[0] = 0;
 		break;
 	case I_STI: {
 		uint8   rg = effaddr & (supmode ? 0x1f : 0xf);
-		uint16  ad = ADDR(acc.r);
+		uint16  ad = ADDR (acc.r);
 
 		M[rg] = ad;
 		M[0] = 0;
 		if (rg != STACKREG)
-			M[STACKREG] = ADDR(M[STACKREG] - 1);
-		LOAD(acc, M[STACKREG]);
+			M[STACKREG] = ADDR (M[STACKREG] - 1);
+		LOAD (acc, M[STACKREG]);
 		break;
 	}
 	case I_MTJ:
@@ -583,16 +666,16 @@ mtj:
 		uint8 rg = addr & 0xf;
 		if (rg & 020 && supmode)
 			goto mtj;
-		M[rg] = ADDR(M[rg] + M[reg]);
+		M[rg] = ADDR (M[rg] + M[reg]);
 		M[0] = 0;
 		break;
 	}
 	case I_IRET:
 		if (!supmode) {
-			longjmp(cpu_halt, STOP_BADCMD);
+			longjmp (cpu_halt, STOP_BADCMD);
 		}
 		M[PSREG] = M[PSSREG] & 02003;
-		JMP(M[(reg & 3) | 030]);
+		JMP (M[(reg & 3) | 030]);
 		PPK = !!(M[PSSREG] & 0400);
 		supmode = M[PSSREG] & (M23_EXTRACODE|M23_INTERRUPT);
 		addrmod = M[PSSREG] & M23_NEXT_RK ? 1 : 0;
@@ -603,23 +686,23 @@ mtj:
 		M[016] = effaddr;
 		supmode = M23_EXTRACODE;
 		M[PSREG] = 02007; // 2003 ?
-		JMP(0500 + ui.i_opcode); // E20? E21?
+		JMP (0500 + ui.i_opcode); // E20? E21?
 		break;
 	case I_MOD:
 		if (!supmode)
-			longjmp(cpu_halt, STOP_BADCMD);
+			longjmp (cpu_halt, STOP_BADCMD);
 		n = (addr + M[reg]) & 0377;
 		switch (n) {
 		case 0 ... 7:
-			mmu_setcache(n, ACC);
+			mmu_setcache (n, ACC);
 			break;
 		case 020 ... 027:
 			/* Запись в регистры приписки */
-			mmu_settlb(n & 7, ACC);
+			mmu_setrp (n & 7, ACC);
 			break;
 		case 030 ... 033:
 			/* Запись в регистры защиты */
-			mmu_setprotection(n & 3, ACC);
+			mmu_setprotection (n & 3, ACC);
 			break;
 		case 036:
 			/* TODO: запись в главный регистр маски */
@@ -644,7 +727,7 @@ mtj:
 			break;
 		case 0200 ... 0207:
 			/* Чтение БРЗ */
-			ACC = mmu_getcache(n & 7);
+			ACC = mmu_getcache (n & 7);
 			break;
 		case 0237:
 			/* TODO: чтение главного регистра прерываний */
@@ -674,14 +757,14 @@ mtj:
 			GET_NAI_OP;
 
 		if (!supmode && op.o_flags & F_PRIV)
-			longjmp(cpu_halt, STOP_BADCMD);
+			longjmp (cpu_halt, STOP_BADCMD);
 		else
 			(*op.o_impl)();
 		break;
 	}
 
 	if ((i = op.o_flags & F_GRP))
-		RAU = SET_MODE(RAU, 1<<(i+1));
+		RAU = SET_MODE (RAU, 1<<(i+1));
 
 	if (op.o_flags & F_AR) {
 		uint32 rr = 0;
@@ -697,7 +780,7 @@ mtj:
 			goto chk_rnd;
 		}
 
-		if (dis_norm)
+		if (RAU & RAU_NORM_DISABLE)
 			goto chk_rnd;
 		if (!(i = (acc.ml >> 15) & 3)) {
 			if ((r = acc.ml & 0xffff)) {
@@ -868,13 +951,13 @@ chk_rnd:
 			goto zero;
 		if (acc.o & 0x80) {
 			acc.o = 0;
-			if (!dis_exc)
-				longjmp(cpu_halt, STOP_OVFL);
+			if (! (RAU & RAU_OVF_DISABLE))
+				longjmp (cpu_halt, STOP_OVFL);
 		}
-		if (!dis_round && rnd_rq)
+		if (! (RAU & RAU_ROUND_DISABLE) && rnd_rq)
 			acc.mr |= 1;
 
-		if (!acc.ml && !acc.mr && !dis_norm) {
+		if (!acc.ml && !acc.mr && ! (RAU & RAU_NORM_DISABLE)) {
 zero:
 			acc.l = acc.r = accex.l = accex.r = 0;
 			goto done;
@@ -889,8 +972,8 @@ done:
 			accex = enreg;
 		rnd_rq = 0;
 	}
-	ACC = fromalu(acc);
-	RMR = fromalu(accex);
+	ACC = fromalu (acc);
+	RMR = fromalu (accex);
 	/*
 	 * Команда выполнилась успешно: можно сбросить признаки
 	 * модификации адреса, если они не были только что установлены.
@@ -974,6 +1057,7 @@ t_stat sim_instr (void)
 	/* Restore register state */
 	PC = PC & BITS15;				/* mask PC */
 	sim_cancel_step ();				/* defang SCP step */
+	mmu_settlb ();					/* copy RP to TLB */
 
 	/* An internal interrupt or user intervention */
 	r = setjmp (cpu_halt);
