@@ -105,34 +105,34 @@ REG cpu_reg[] = {
 	{ "CчAC", &PC,    8, 15, 0, 1 }, /* счётчик адреса команды */
 	{ "ППK",  &PPK,   2, 1,  0, 1 }, /* признак правой команды */
 /* TODO: добавить ПКП, ПКЛ, БРО */
-	{ "PK",   &RK,    8, 24, 0, 1 }, /* регистр выполняемой команды */
-	{ "CM",   &ACC,   8, 48, 0, 1 }, /* сумматор */
-	{ "PMP",  &RMR,   8, 48, 0, 1 }, /* регистр младших разрядов */
-	{ "PAУ",  &RAU,   2, 6,  0, 1 }, /* режимы АУ */
-	{ "M1",   &M[1],  8, 15, 0, 1 }, /* регистры-модификаторы */
-	{ "M2",   &M[2],  8, 15, 0, 1 },
-	{ "M3",   &M[3],  8, 15, 0, 1 },
-	{ "M4",   &M[4],  8, 15, 0, 1 },
-	{ "M5",   &M[5],  8, 15, 0, 1 },
-	{ "M6",   &M[6],  8, 15, 0, 1 },
-	{ "M7",   &M[7],  8, 15, 0, 1 },
-	{ "M8",   &M[8],  8, 15, 0, 1 },
-	{ "M9",   &M[9],  8, 15, 0, 1 },
-	{ "M10",  &M[10], 8, 15, 0, 1 },
-	{ "M11",  &M[11], 8, 15, 0, 1 },
-	{ "M12",  &M[12], 8, 15, 0, 1 },
-	{ "M13",  &M[13], 8, 15, 0, 1 },
-	{ "M14",  &M[14], 8, 15, 0, 1 },
-	{ "M15",  &M[15], 8, 15, 0, 1 }, /* указатель магазина */
-	{ "M16",  &M[16], 8, 15, 0, 1 }, /* модификатор адреса */
-	{ "M17",  &M[17], 8, 15, 0, 1 }, /* режимы УУ */
-	{ "M23",  &M[23], 8, 15, 0, 1 }, /* упрятывание режимов УУ */
-	{ "M26",  &M[26], 8, 15, 0, 1 }, /* адрес возврата из экстракода */
-	{ "M27",  &M[27], 8, 15, 0, 1 }, /* адрес возврата из прерывания */
-	{ "M28",  &M[28], 8, 15, 0, 1 }, /* адрес останова по выполнению */
-	{ "M29",  &M[29], 8, 15, 0, 1 }, /* адрес останова по чтению/записи */
-	{ "GRP",  &GRP,   8, 48, 0, 1 }, /* главный регистр прерываний */
-	{ "MGRP", &MGRP,  8, 48, 0, 1 }, /* маска ГРП */
+	{ "РК",   &RK,    8, 24, 0, 1 }, /* регистр выполняемой команды */
+	{ "СМ",   &ACC,   8, 48, 0, 1 }, /* сумматор */
+	{ "РМР",  &RMR,   8, 48, 0, 1 }, /* регистр младших разрядов */
+	{ "РАУ",  &RAU,   2, 6,  0, 1 }, /* режимы АУ */
+	{ "М1",   &M[1],  8, 15, 0, 1 }, /* регистры-модификаторы */
+	{ "М2",   &M[2],  8, 15, 0, 1 },
+	{ "М3",   &M[3],  8, 15, 0, 1 },
+	{ "М4",   &M[4],  8, 15, 0, 1 },
+	{ "М5",   &M[5],  8, 15, 0, 1 },
+	{ "М6",   &M[6],  8, 15, 0, 1 },
+	{ "М7",   &M[7],  8, 15, 0, 1 },
+	{ "М8",   &M[8],  8, 15, 0, 1 },
+	{ "М9",   &M[9],  8, 15, 0, 1 },
+	{ "М10",  &M[10], 8, 15, 0, 1 },
+	{ "М11",  &M[11], 8, 15, 0, 1 },
+	{ "М12",  &M[12], 8, 15, 0, 1 },
+	{ "М13",  &M[13], 8, 15, 0, 1 },
+	{ "М14",  &M[14], 8, 15, 0, 1 },
+	{ "М15",  &M[15], 8, 15, 0, 1 }, /* указатель магазина */
+	{ "М16",  &M[16], 8, 15, 0, 1 }, /* модификатор адреса */
+	{ "М17",  &M[17], 8, 15, 0, 1 }, /* режимы УУ */
+	{ "М23",  &M[23], 8, 15, 0, 1 }, /* упрятывание режимов УУ */
+	{ "М26",  &M[26], 8, 15, 0, 1 }, /* адрес возврата из экстракода */
+	{ "М27",  &M[27], 8, 15, 0, 1 }, /* адрес возврата из прерывания */
+	{ "М28",  &M[28], 8, 15, 0, 1 }, /* адрес останова по выполнению */
+	{ "М29",  &M[29], 8, 15, 0, 1 }, /* адрес останова по чтению/записи */
+	{ "ГРП",  &GRP,   8, 48, 0, 1 }, /* главный регистр прерываний */
+	{ "МГРП", &MGRP,  8, 48, 0, 1 }, /* маска ГРП */
 	{ 0 }
 };
 
@@ -217,8 +217,12 @@ t_stat cpu_examine (t_value *vptr, t_addr addr, UNIT *uptr, int32 sw)
 {
 	if (addr >= MEMSIZE)
 		return SCPE_NXM;
-	if (vptr)
-		*vptr = memory [addr];
+	if (vptr) {
+		if (addr < 010)
+			*vptr = pult [addr];
+		else
+			*vptr = memory [addr];
+	}
 	return SCPE_OK;
 }
 
@@ -229,7 +233,10 @@ t_stat cpu_deposit (t_value val, t_addr addr, UNIT *uptr, int32 sw)
 {
 	if (addr >= MEMSIZE)
 		return SCPE_NXM;
-	memory [addr] = val;
+	if (addr < 010)
+		pult [addr] = val;
+	else
+		memory [addr] = val;
 	return SCPE_OK;
 }
 
@@ -271,8 +278,8 @@ double besm6_to_ieee (t_value word)
 
 	int exponent = word >> 41;
 
-	/* Порядок смещен вверх на 64, и мантиссу нужно скорректировать */ 
-        return ldexp(mantissa, exponent - 64 - 63);
+	/* Порядок смещен вверх на 64, и мантиссу нужно скорректировать */
+        return ldexp (mantissa, exponent - 64 - 63);
 }
 
 /*
@@ -299,36 +306,40 @@ utf8_putc (unsigned ch, FILE *fout)
 	putc ((ch & 0x3f) | 0x80, fout);
 }
 
-uinstr_t unpack(t_value rk) {
+uinstr_t unpack (t_value rk)
+{
 	uinstr_t ui;
+
 	ui.i_reg = rk >> 20;
-	if (rk & 02000000) {
+	if (rk & BIT20) {
 		ui.i_opcode = (rk >> 15) & 037;
 		ui.i_opcode += 060;
 		ui.i_addr = rk & BITS15;
 	} else {
 		ui.i_opcode = (rk >> 12) & 077;
 		ui.i_addr = rk & 07777;
-		if (rk & 01000000)
+		if (rk & BIT19)
 			ui.i_addr |= 070000;
 	}
 	return ui;
 }
 
-alureg_t toalu(t_value val) {
+alureg_t toalu (t_value val)
+{
         alureg_t ret;
         ret.l = val >> 24;
         ret.r = val & BITS24;
 	return ret;
 }
 
-t_value fromalu(alureg_t reg) {
+t_value fromalu (alureg_t reg)
+{
         return (t_value) reg.l << 24 | reg.r;
 }
 
 #define JMP(addr) (PC=(addr),PPK=0)
 #define effaddr ADDR(addr + M[reg])
-	
+
 /*
  * Execute one instruction, placed on address PC:PPK.
  * Increment delay. When stopped, perform a longjmp to cpu_halt,
@@ -354,7 +365,7 @@ void cpu_one_inst ()
 
 	if (sim_deb && cpu_dev.dctrl) {
 		fprintf (sim_deb, "*** %05o.%o: ", PC, PPK);
-		fprint_sym (sim_deb, PC, &RK, 0, SWMASK ('M'));
+		besm6_fprint_cmd (sim_deb, RK);
 		fprintf (sim_deb, "\n");
 	}
 	nextpc = PC + 1;
@@ -372,7 +383,7 @@ void cpu_one_inst ()
 
 	delay = 0;
 	corr_stack = 0;
-	
+
 	acc = toalu(ACC);
 	accex = toalu(RMR);
 
@@ -621,7 +632,7 @@ mtj:
 		case 0100 ... 0137:
 			/* TODO: управление блокировкой режима останова БРО
 			 * (бит 1)
-			 * Биты 2 и 3 - признаки формирования контрольных  
+			 * Биты 2 и 3 - признаки формирования контрольных
 			 * разрядов (ПКП и ПКЛ).
 			 */
 			convol_mode = (n >> 1) & 3;
@@ -638,6 +649,14 @@ mtj:
 		case 0237:
 			/* TODO: чтение главного регистра прерываний */
 			longjmp (cpu_halt, STOP_BADCMD);
+			break;
+		default:
+			/* Неиспользуемые адреса */
+			if (sim_deb && cpu_dev.dctrl) {
+				fprintf (sim_deb, "*** %05o.%o: ", PC, PPK);
+				besm6_fprint_cmd (sim_deb, RK);
+				fprintf (sim_deb, ": неправильный адрес спец.регистра\n");
+			}
 			break;
 		}
 		/* Режим АУ - логический, если операция была "чтение" */
@@ -883,7 +902,8 @@ done:
 }
 
 /* ОпПр1, ТО ч.9, стр. 119 */
-void OpInt1() {
+void OpInt1 ()
+{
 	M[PSSREG] = (M[PSREG] & 02003) | supmode;
 	if (PPK)
 		M[PSSREG] |= M23_RIGHT_INSTR;
@@ -900,7 +920,8 @@ void OpInt1() {
 }
 
 /* ОпПр1, ТО ч.9, стр. 119 */
-void OpInt2() {
+void OpInt2 ()
+{
 	M[PSSREG] = (M[PSREG] & 02003) | supmode;
 	M[27] = PC;
 	M[PSREG] |= 02003;
@@ -913,26 +934,30 @@ void OpInt2() {
 	supmode = M23_INTERRUPT;
 }
 
-void IllegalInsn() {
+void IllegalInsn ()
+{
 	OpInt1();
 	// M23_NEXT_RK is not important for this interrupt
 	GRP |= 1 << 12;
 }
 
-void InsnCheck() {
+void InsnCheck ()
+{
 	OpInt1();
 	// M23_NEXT_RK must be 0 for this interrupt; it is already
 	GRP |= 1 << 14;
 }
 
-void InsnProt() {
+void InsnProt ()
+{
 	OpInt1();
 	// M23_NEXT_RK must be 1 for this interrupt
 	M[PSSREG] |= M23_NEXT_RK;
 	GRP |= 1 << 13;
 }
 
-void OperProt() {
+void OperProt ()
+{
 	OpInt1();
 	// M23_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
 	GRP |= 1 << 19;
@@ -967,7 +992,7 @@ t_stat sim_instr (void)
 			break;
 		case STOP_INSN_PROT:
 			InsnProt();
-			break;			
+			break;
 		case STOP_OPERAND_PROT:
 			OperProt();
 			break;
@@ -992,10 +1017,10 @@ t_stat sim_instr (void)
 			return STOP_IBKPT;		/* stop simulation */
 		}
 
-		if (!iintr && !PPK && !M[17] & M17_INTR_DISABLE &&
-			(GRP & MGRP)) {
+		if (!iintr && !PPK && !(M[17] & M17_INTR_DISABLE) &&
+		    (GRP & MGRP)) {
 			/* external interrupt */
-			OpInt2();	
+			OpInt2();
 		}
 		cpu_one_inst ();			/* one instr */
 		if (delay < 1)

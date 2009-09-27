@@ -26,11 +26,11 @@ unsigned tourn;
  * группами по 4 ради компактности (порядок зависит от архитектуры хост-машины).
  * Вся работа должна вестись через TLB.val.
  */
-union { 
+union {
 	uint16 val[32];
 	t_uint64 RP[8];
 } TLB;
- 
+
 unsigned protection;
 
 unsigned iintr_data;	/* protected page number or parity check location */
@@ -236,7 +236,7 @@ t_value mmu_load (int addr)
 			/* С тумблерных регистров */
 			val = pult[addr];
 		}
-	
+
 		if (!IS_NUMBER(val)) {
 			iintr_data = addr & 7;
 			longjmp(cpu_halt, STOP_RAM_CHECK);
@@ -269,10 +269,13 @@ t_value mmu_fetch (int addr)
 
 	/* В режиме супервизора защиты нет */
 	if (supmode) {
-		val = memory[addr];
+		if (addr < 010)
+			val = pult [addr];
+		else
+			val = memory [addr];
 	} else {
 		int page = TLB.val[addr >> 10];
-		/* 
+		/*
 		 * Для команд в режиме пользователя признак защиты -
 		 * 0 в регистре приписки.
 		 */

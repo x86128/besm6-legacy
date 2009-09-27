@@ -15,6 +15,49 @@
 #include "besm6_defs.h"
 #include <math.h>
 
+const char *opname_short [64] = {
+	"зп",	"зпм",	"рег",	"счм",	"сл",	"вч",	"вчоб",	"вчаб",
+	"сч",	"и",	"нтж",	"слц",	"знак",	"или",	"дел",	"умн",
+	"сбр",	"рзб",	"чед",	"нед",  "слп",  "вчп",  "сд",	"рж",
+	"счрж",	"счмр",	"э32",	"увв",	"слпа",	"вчпа",	"сда",	"ржа",
+	"уи",	"уим",	"счи",	"счим", "уии",	"сли",  "э46",	"э47",
+	"э50",	"э51",	"э52",	"э53",	"э54",	"э55",	"э56",	"э57",
+	"э60",	"э61",  "э62",  "э63",  "э64",  "э65",  "э66",  "э67",
+	"э70",	"э71",	"э72",	"э73",	"э74",	"э75",	"э76",	"э77",
+};
+
+static const char *opname_long [16] = {
+	"э20",	"э21",	"мода",	"мод",	"уиа",	"слиа",	"по",	"пе",
+	"пб",	"пв",	"выпр",	"стоп",	"пио",	"пино",	"э36",	"цикл",
+};
+
+/*
+ * Выдача мнемоники по коду инструкции.
+ * Код должен быть в диапазоне 000..077 или 0200..0370.
+ */
+const char *besm6_opname (int opcode)
+{
+	if (opcode & 0200)
+		return opname_long [(opcode >> 3) & 017];
+	return opname_short [opcode];
+};
+
+/*
+ * Выдача кода инструкции по мнемонике (UTF-8).
+ */
+int besm6_opcode (char *instr)
+{
+	int i;
+
+	for (i=0; i<64; ++i)
+		if (strcmp (opname_short[i], instr) == 0)
+			return i;
+	for (i=0; i<16; ++i)
+		if (strcmp (opname_long[i], instr) == 0)
+			return (i << 3) | 0200;
+	return -1;
+}
+
 /*
  * Преобразование вещественного числа в формат БЭСМ-6.
  *
@@ -41,15 +84,16 @@ t_value ieee_to_besm6 (double d)
 	d = ldexp (d, 40);
 	word = d;
 	if (d - word >= 0.5)
-		word += 1;		/* Округление. */
+		word += 1;			/* Округление. */
 	if (exponent < -64)
-		return 0LL;		/* Близкое к нулю число */
+		return 0LL;			/* Близкое к нулю число */
 	if (exponent > 63) {
 		return sign ?
-		0xFEFFFFFFFFFFLL :	/* Максимальное число */
-		0xFF0000000000LL;	/* Минимальное число */
+			0xFEFFFFFFFFFFLL :	/* Максимальное число */
+			0xFF0000000000LL;	/* Минимальное число */
 	}
-	if (sign) word = 0x20000000000LL-word;	/* Знак. */
+	if (sign)
+		word = 0x20000000000LL-word;	/* Знак. */
 	word |= ((t_value) (exponent + 64)) << 41;
 	return word;
 }
@@ -59,187 +103,204 @@ t_value ieee_to_besm6 (double d)
  */
 char *skip_spaces (char *p)
 {
-	if (*p == (char) 0xEF && p[1] == (char) 0xBB && p[2] == (char) 0xBF) {
-		/* Skip zero width no-break space. */
-		p += 3;
-	}
-	while (*p == ' ' || *p == '\t')
-		++p;
-	return p;
-}
-
-/*
- * Чтение строки входного файла.
- */
-t_stat besm6_read_line (FILE *input, int *type, t_value *val)
-{
-	char buf [512], *p;
-	int i;
-again:
-	if (! fgets (buf, sizeof (buf), input)) {
-		*type = 0;
-		return SCPE_OK;
-	}
-	p = skip_spaces (buf);
-	if (*p == '\n' || *p == ';')
-		goto again;
-	if (*p == ':') {
-		/* Адрес размещения данных. */
-		*type = ':';
-		*val = strtol (p+1, 0, 8);
-		return SCPE_OK;
-	}
-	if (*p == '@') {
-		/* Стартовый адрес. */
-		*type = '@';
-		*val = strtol (p+1, 0, 8);
-		return SCPE_OK;
-	}
-	if (*p == '=') {
-		/* Вещественное число. */
-		*type = '=';
-		*val = ieee_to_besm6 (strtod (p+1, 0));
-		return SCPE_OK;
-	}
-	if (*p < '0' || *p > '7') {
-		/* неверная строка входного файла */
-		return SCPE_FMT;
-	}
-
-	/* Слово. */
-	*type = '=';
-	*val = *p - '0';
-	for (i=0; i<16; ++i) {
-		p = skip_spaces (p + 1);
-		if (*p < '0' || *p > '7') {
-			/* слишком короткое слово */
-			return SCPE_FMT;
+	for (;;) {
+		if (*p == (char) 0xEF && p[1] == (char) 0xBB && p[2] == (char) 0xBF) {
+			/* Skip zero width no-break space. */
+			p += 3;
+			continue;
 		}
-		*val = *val << 3 | (*p - '0');
+		if (*p == ' ' || *p == '\t') {
+			++p;
+			continue;
+		}
+		return p;
 	}
-	return SCPE_OK;
 }
 
 /*
- * Load memory from file.
+ * Fetch Unicode symbol from UTF-8 string.
+ * Advance string pointer.
  */
-t_stat besm6_load (FILE *input)
+int utf8_to_unicode (char **p)
 {
-	int addr, type;
-	t_value word;
+	int c1, c2, c3;
+
+	c1 = (unsigned char) *(*p)++;
+	if (! (c1 & 0x80))
+		return c1;
+	c2 = (unsigned char) *(*p)++;
+	if (! (c1 & 0x20))
+		return (c1 & 0x1f) << 6 | (c2 & 0x3f);
+	c3 = (unsigned char) *(*p)++;
+	return (c1 & 0x0f) << 12 | (c2 & 0x3f) << 6 | (c3 & 0x3f);
+}
+
+char *besm6_parse_octal (char *cptr, int *offset)
+{
+	char *eptr;
+
+	*offset = strtol (cptr, &eptr, 8);
+	if (eptr == cptr)
+		return 0;
+	return eptr;
+}
+
+/*
+ * Parse single instruction (half word).
+ * Allow mnemonics or octal code.
+ */
+char *parse_instruction (char *cptr, uint32 *val)
+{
+	int opcode, reg, addr, negate;
+	char gbuf[CBUFSIZE];
+
+	cptr = skip_spaces (cptr);			/* absorb spaces */
+	if (*cptr >= '0' && *cptr <= '7') {
+		/* Восьмеричное представление. */
+		cptr = besm6_parse_octal (cptr, &reg);	/* get register */
+		if (! cptr || reg > 15) {
+			/*printf ("Bad register\n");*/
+			return 0;
+		}
+		cptr = skip_spaces (cptr);		/* absorb spaces */
+		if (*cptr == '2' || *cptr == '3') {
+			/* Длинная команда. */
+			cptr = besm6_parse_octal (cptr, &opcode);
+			if (! cptr || opcode < 020 || opcode > 037) {
+				/*printf ("Bad long opcode\n");*/
+				return 0;
+			}
+			opcode <<= 3;
+		} else {
+			/* Короткая команда. */
+			cptr = besm6_parse_octal (cptr, &opcode);
+			if (! cptr || opcode > 0177) {
+				/*printf ("Bad short opcode\n");*/
+				return 0;
+			}
+		}
+		cptr = besm6_parse_octal (cptr, &addr);	/* get address */
+		if (! cptr || addr > BITS15 ||
+		    (opcode <= 0177 && addr > BITS12)) {
+			/*printf ("Bad address\n");*/
+			return 0;
+		}
+	} else {
+		/* Мнемоническое представление команды. */
+		cptr = get_glyph (cptr, gbuf, 0);	/* get opcode */
+		opcode = besm6_opcode (gbuf);
+		if (opcode < 0) {
+			/*printf ("Bad opname: %s\n", gbuf);*/
+			return 0;
+		}
+		negate = 0;
+		cptr = skip_spaces (cptr);		/* absorb spaces */
+		if (*cptr == '-') {			/* negative offset */
+			negate = 1;
+			cptr = skip_spaces (cptr + 1);	/* absorb spaces */
+		}
+		addr = 0;
+		if (*cptr >= '0' && *cptr <= '7') {
+			/* Восьмеричный адрес. */
+			cptr = besm6_parse_octal (cptr, &addr);
+			if (! cptr || addr > BITS15) {
+				/*printf ("Bad address: %o\n", addr);*/
+				return 0;
+			}
+			if (negate)
+				addr = (- addr) & BITS15;
+			if (opcode <= 077 && addr > BITS12 && addr < 070000) {
+				/*printf ("Bad short address: %o\n", addr);*/
+				return 0;
+			}
+		}
+		reg = 0;
+		cptr = skip_spaces (cptr);		/* absorb spaces */
+		if (*cptr == '(') {
+			/* Индекс-регистр в скобках. */
+			cptr = besm6_parse_octal (cptr+1, &reg);
+			if (! cptr || reg > 15) {
+				/*printf ("Bad register: %o\n", reg);*/
+				return 0;
+			}
+			cptr = skip_spaces (cptr);	/* absorb spaces */
+			if (*cptr != ')') {
+				/*printf ("No closing brace\n");*/
+				return 0;
+			}
+			++cptr;
+		}
+	}
+	*val = reg << 20 | opcode << 12 | addr;
+	return cptr;
+}
+
+/*
+ * Instruction parse: two commands per word.
+ */
+t_stat parse_instruction_word (char *cptr, t_value *val)
+{
+	uint32 left, right;
 	t_stat err;
 
-	addr = 1;
-	PC = 1;
-	PPK = 0;
-	for (;;) {
-		err = besm6_read_line (input, &type, &word);
-		if (err)
-			return err;
-		switch (type) {
-		case 0:			/* EOF */
-			return SCPE_OK;
-		case ':':		/* address */
-			addr = word;
-			break;
-		case '=':		/* word */
-			if (addr < 010)
-				pult[addr] = word;
-			else
-				memory [addr] = word;
-			/* ram_dirty [addr] = 1; */
-			++addr;
-			break;
-		case '@':		/* start address */
-			PC = word;
-			break;
-		}
-		if (addr > MEMSIZE)
-			return SCPE_FMT;
+	*val = 0;
+	cptr = parse_instruction (cptr, &left);
+	if (! cptr)
+		return SCPE_ARG;
+	right = 0;
+	cptr = skip_spaces (cptr);
+	if (*cptr == ',') {
+		cptr = parse_instruction (cptr + 1, &right);
+		if (! cptr)
+			return SCPE_ARG;
 	}
+	cptr = skip_spaces (cptr);			/* absorb spaces */
+	if (*cptr != 0 && *cptr != ';' && *cptr != '\n' && *cptr != '\r') {
+		/*printf ("Extra symbols at eoln: %s\n", cptr);*/
+		return SCPE_2MARG;
+	}
+	*val = (t_value) left << 24 | right;
 	return SCPE_OK;
 }
 
 /*
- * Dump memory to file.
+ * Печать машинной инструкции с мнемоникой.
  */
-t_stat besm6_dump (FILE *of, char *fnam)
+void besm6_fprint_cmd (FILE *of, uint32 cmd)
 {
-	int i, last_addr = -1;
-	t_value cmd;
+	int reg, opcode, addr;
 
-	fprintf (of, "; %s\n", fnam);
-	for (i=1; i<MEMSIZE; ++i) {
-		if (memory [i] == 0)
-			continue;
-		if (i != last_addr+1) {
-			fprintf (of, "\n:%04o\n", i);
-		}
-		last_addr = i;
-		cmd = memory [i];
-		fprintf (of, "%o %02o %04o %04o %04o\n",
-			(int) (cmd >> 42) & 7,
-			(int) (cmd >> 36) & 077,
-			(int) (cmd >> 24) & 07777,
-			(int) (cmd >> 12) & 07777,
-			(int) cmd & 07777);
+	reg = (cmd >> 20) & 017;
+	if (cmd & BIT20) {
+		opcode = (cmd >> 12) & 0370;
+		addr = cmd & BITS15;
+	} else {
+		opcode = (cmd >> 12) & 077;
+		addr = cmd & 07777;
+		if (cmd & BIT19)
+			addr |= 070000;
 	}
-	return SCPE_OK;
+	fprintf (of, "%s", besm6_opname (opcode));
+	if (addr) {
+		fprintf (of, " ");
+		if (addr >= 077700)
+			fprintf (of, "-%o", (addr ^ 077777) + 1);
+		else
+			fprintf (of, "%o", addr);
+	}
+	if (reg) {
+		if (! addr)
+			fprintf (of, " ");
+		fprintf (of, "(%o)", reg);
+	}
 }
 
 /*
- * Loader/dumper
+ * Печать машинной инструкции в восьмеричном виде.
  */
-t_stat sim_load (FILE *fi, char *cptr, char *fnam, int dump_flag)
+void besm6_fprint_insn (FILE *of, uint32 insn)
 {
-	if (dump_flag)
-		return besm6_dump (fi, fnam);
-
-	return besm6_load (fi);
-}
-
-const char *besm6_opname [] = {
-	"зп",	"зпм",	"рег",	"счм",	"сл",	"вч",	"вчоб",	"вчаб",
-	"сч",	"и",	"нтж",	"слц",	"знак",	"или",	"дел",	"умн",
-	"сбр",	"рзб",	"чед",	"нед",  "слп",  "вчп",  "сд",	"рж",
-	"счрж",	"счмр",	"увв",	"УВВ",	"слпа",	"вчпа",	"сда",	"ржа",
-	"уи",	"уим",	"счи",	"счим", "уии",	"сли",  "УИИ",	"СЛИ",
-	"э50",	"э51",	"э52",	"э53",	"э54",	"э55",	"э56",	"э57",
-	"э60",	"э61",  "э62",  "э63",  "э64",  "э65",  "э66",  "э67",
-	"э70",	"э71",	"э72",	"э73",	"э74",	"э75",	"э76",	"э77",
-	"э20",  "э21",  "мода", "мод",  "уиа",  "слиа", "по",   "пе",
-	"пб",   "пв",   "выпр", "стоп", "пио",  "пино", "ПИО", "цикл"
-};
-
-int besm6_instr_to_opcode (char *instr)
-{
-	int i;
-
-	for (i=0; i<64; ++i)
-		if (strcmp (besm6_opname[i], instr) == 0)
-			return i;
-	return -1;
-}
-
-/*
- * Печать машинной инструкции.
- */
-void besm6_fprint_cmd (FILE *of, uinstr_t ui)
-{
-	const char *m;
-
-	m = besm6_opname [ui.i_opcode];
-	fprintf (of, "%s ", m);
-	if (ui.i_addr)
-		fprintf (of, "%o", ui.i_addr);
-	if (ui.i_reg)
-		fprintf (of, "(%o)", ui.i_reg);
-	fprintf (of, ", ");
-}
-
-void besm6_fprint_insn (FILE *of, uint insn)
-{
-	if (insn & 002000000)
+	if (insn & BIT20)
 		fprintf (of, "%02o %02o %05o ",
 			insn >> 20, (insn >> 15) & 037, insn & BITS15);
 	else
@@ -270,89 +331,19 @@ t_stat fprint_sym (FILE *of, t_addr addr, t_value *val,
 	cmd = val[0];
 
 	if (sw & SWMASK ('M')) {			/* symbolic decode? */
-		uinstr_t uil = unpack(cmd >> 24);
-		uinstr_t uir = unpack(cmd & BITS24);
+		besm6_fprint_cmd (of, cmd >> 24);
+		fprintf (of, ",\n\t");
+		besm6_fprint_cmd (of, cmd & BITS24);
 
-		besm6_fprint_cmd (of, uil);
-		besm6_fprint_cmd (of, uir);
 	} else if (sw & SWMASK ('I')) {
 		besm6_fprint_insn (of, cmd >> 24);
 		besm6_fprint_insn (of, cmd & BITS24);
 	} else
-	fprintf (of, "%04o %04o %04o %04o",
-		(int) (cmd >> 36) & 07777,
-		(int) (cmd >> 24) & 07777,
-		(int) (cmd >> 12) & 07777,
-		(int) cmd & 07777);
-	return SCPE_OK;
-}
-
-char *besm6_parse_offset (char *cptr, int *offset)
-{
-	char *tptr, gbuf[CBUFSIZE];
-
-	cptr = get_glyph (cptr, gbuf, 0);	/* get address */
-	*offset = strtotv (gbuf, &tptr, 8);
-	if ((tptr == gbuf) || (*tptr != 0) || (*offset > 07777))
-		return 0;
-	return cptr;
-}
-
-char *besm6_parse_address (char *cptr, int *address, int *relative)
-{
-	cptr = skip_spaces (cptr);			/* absorb spaces */
-	if (*cptr >= '0' && *cptr <= '7')
-		return besm6_parse_offset (cptr, address); /* get address */
-
-	if (*cptr != '@')
-		return 0;
-	*relative |= 1;
-	cptr = skip_spaces (cptr+1);			/* next char */
-	if (*cptr == '+') {
-		cptr = skip_spaces (cptr+1);		/* next char */
-		cptr = besm6_parse_offset (cptr, address);
-		if (! cptr)
-			return 0;
-	} else if (*cptr == '-') {
-		cptr = skip_spaces (cptr+1);		/* next char */
-		cptr = besm6_parse_offset (cptr, address);
-		if (! cptr)
-			return 0;
-		*address = (- *address) & 07777;
-	} else
-		return 0;
-	return cptr;
-}
-
-/*
- * Instruction parse
- */
-t_stat parse_instruction (char *cptr, t_value *val, int32 sw)
-{
-	int opcode, ra, a1, a2, a3;
-	char gbuf[CBUFSIZE];
-
-	cptr = get_glyph (cptr, gbuf, 0);		/* get opcode */
-	opcode = besm6_instr_to_opcode (gbuf);
-	if (opcode < 0)
-		return SCPE_ARG;
-	ra = 0;
-	cptr = besm6_parse_address (cptr, &a1, &ra);	/* get address 1 */
-	if (! cptr)
-		return SCPE_ARG;
-	ra <<= 1;
-	cptr = besm6_parse_address (cptr, &a2, &ra);	/* get address 1 */
-	if (! cptr)
-		return SCPE_ARG;
-	ra <<= 1;
-	cptr = besm6_parse_address (cptr, &a3, &ra);	/* get address 1 */
-	if (! cptr)
-		return SCPE_ARG;
-
-	val[0] = (t_value) opcode << 36 | (t_value) ra << 42 |
-		(t_value) a1 << 24 | a2 << 12 | a3;
-	if (*cptr != 0)
-		return SCPE_2MARG;
+		fprintf (of, "%04o %04o %04o %04o",
+			(int) (cmd >> 36) & 07777,
+			(int) (cmd >> 24) & 07777,
+			(int) (cmd >> 12) & 07777,
+			(int) cmd & 07777);
 	return SCPE_OK;
 }
 
@@ -374,12 +365,11 @@ t_stat parse_sym (char *cptr, t_addr addr, UNIT *uptr, t_value *val, int32 sw)
 
 	if (uptr && (uptr != &cpu_unit))		/* must be CPU */
 		return SCPE_ARG;
-	cptr = skip_spaces (cptr);			/* absorb spaces */
-	if (! parse_instruction (cptr, val, sw))	/* symbolic parse? */
+	if (! parse_instruction_word (cptr, val))	/* symbolic parse? */
 		return SCPE_OK;
 
 	val[0] = 0;
-	for (i=0; i<14; i++) {
+	for (i=0; i<16; i++) {
 		if (*cptr == 0)
 			return SCPE_OK;
 		if (*cptr < '0' || *cptr > '7')
@@ -390,4 +380,165 @@ t_stat parse_sym (char *cptr, t_addr addr, UNIT *uptr, t_value *val, int32 sw)
 	if (*cptr != 0)
 		return SCPE_ARG;
 	return SCPE_OK;
+}
+
+/*
+ * Чтение строки входного файла.
+ * Форматы строк:
+ * п 76543			- адрес пуска
+ * в 12345			- адрес ввода
+ * ч -123.45e+6			- вещественное число
+ * с 0123 4567 0123 4567	- восьмеричное слово
+ * к 00 22 00000 00 010 0000	- команды
+ */
+t_stat besm6_read_line (FILE *input, int *type, t_value *val)
+{
+	char buf [512], *p;
+	int i, c, left, right;
+again:
+	if (! fgets (buf, sizeof (buf), input)) {
+		*type = 0;
+		return SCPE_OK;
+	}
+	p = skip_spaces (buf);
+	if (*p == '\n' || *p == ';')
+		goto again;
+	c = utf8_to_unicode (&p);
+	if (c == CYRILLIC_SMALL_LETTER_VE ||
+	    c == CYRILLIC_CAPITAL_LETTER_VE ||
+	    c == 'b' || c == 'B') {
+		/* Адрес размещения данных. */
+		*type = ':';
+		*val = strtol (p, 0, 8);
+		return SCPE_OK;
+	}
+	if (c == CYRILLIC_SMALL_LETTER_PE ||
+	    c == CYRILLIC_CAPITAL_LETTER_PE ||
+	    c == 'p' || c == 'P') {
+		/* Стартовый адрес. */
+		*type = '@';
+		*val = strtol (p, 0, 8);
+		return SCPE_OK;
+	}
+	if (c == CYRILLIC_SMALL_LETTER_CHE ||
+	    c == CYRILLIC_CAPITAL_LETTER_CHE ||
+	    c == 'f' || c == 'F') {
+		/* Вещественное число. */
+		*type = '=';
+		*val = ieee_to_besm6 (strtod (p, 0));
+		return SCPE_OK;
+	}
+	if (c == CYRILLIC_SMALL_LETTER_ES ||
+	    c == CYRILLIC_CAPITAL_LETTER_ES ||
+	    c == 'c' || c == 'C') {
+		/* Восьмеричное слово. */
+		*type = '=';
+		*val = 0;
+		for (i=0; i<16; ++i) {
+			p = skip_spaces (p);
+			if (*p < '0' || *p > '7') {
+				if (i == 0) {
+					/* слишком короткое слово */
+					goto bad;
+				}
+				break;
+			}
+			*val = *val << 3 | (*p++ - '0');
+		}
+		return SCPE_OK;
+	}
+	if (c == CYRILLIC_SMALL_LETTER_KA ||
+	    c == CYRILLIC_CAPITAL_LETTER_KA ||
+	    c == 'k' || c == 'K') {
+		/* Команда. */
+		*type = '=';
+		if (parse_instruction_word (p, val) != SCPE_OK)
+			goto bad;
+		return SCPE_OK;
+	}
+	/* Неверная строка входного файла */
+bad:	printf ("Invalid input line: %s", buf);
+	if (sim_log)
+		fprintf (sim_log, "Invalid input line: %s", buf);
+	return SCPE_FMT;
+}
+
+/*
+ * Load memory from file.
+ */
+t_stat besm6_load (FILE *input)
+{
+	int addr, type;
+	t_value word;
+	t_stat err;
+
+	addr = 1;
+	PC = 1;
+	PPK = 0;
+	for (;;) {
+		err = besm6_read_line (input, &type, &word);
+		if (err)
+			return err;
+		switch (type) {
+		case 0:			/* EOF */
+			return SCPE_OK;
+		case ':':		/* address */
+			addr = word;
+			break;
+		case '=':		/* word */
+			if (addr < 010)
+				pult [addr] = word;
+			else
+				memory [addr] = word;
+			/* ram_dirty [addr] = 1; */
+			++addr;
+			break;
+		case '@':		/* start address */
+			PC = word;
+			break;
+		}
+		if (addr > MEMSIZE)
+			return SCPE_FMT;
+	}
+	return SCPE_OK;
+}
+
+/*
+ * Dump memory to file.
+ */
+t_stat besm6_dump (FILE *of, char *fnam)
+{
+	int addr, last_addr = -1;
+	t_value word;
+
+	fprintf (of, "; %s\n", fnam);
+	for (addr=1; addr<MEMSIZE; ++addr) {
+		if (addr < 010)
+			word = pult [addr];
+		else
+			word = memory [addr];
+		if (word == 0)
+			continue;
+		if (addr != last_addr+1) {
+			fprintf (of, "\nв %05o\n", addr);
+		}
+		last_addr = addr;
+		fprintf (of, "к ");
+		besm6_fprint_cmd (of, word >> 24);
+		fprintf (of, ", ");
+		besm6_fprint_cmd (of, word & BITS24);
+		fprintf (of, "\n");
+	}
+	return SCPE_OK;
+}
+
+/*
+ * Loader/dumper
+ */
+t_stat sim_load (FILE *fi, char *cptr, char *fnam, int dump_flag)
+{
+	if (dump_flag)
+		return besm6_dump (fi, fnam);
+
+	return besm6_load (fi);
 }
