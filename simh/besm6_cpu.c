@@ -81,6 +81,13 @@ t_value GRP, MGRP;
  */
 #define GRP_WIRED_BITS 01400743700000000LL
 
+uint32 PRP, MPRP;
+#define PRP_WIRED_BITS 0	/* unknown? */
+
+/* после каждого изменения PRP или MPRP нужно выполнять PRP2GRP */
+#define PRP2GRP	do if (PRP&MPRP) GRP |= GRP_SLAVE; \
+		 else GRP &= ~GRP_SLAVE; while (0)
+
 int corr_stack;
 t_value RK, ACC, RMR;
 uint32 delay;
@@ -251,6 +258,7 @@ DEVICE *sim_devices[] = {
 	&reg_dev,
 	&drum_dev,
 	&mmu_dev,
+	&clock_dev,
 	0
 };
 
@@ -705,12 +713,13 @@ mtj:
 			mmu_setprotection (n & 3, ACC);
 			break;
 		case 036:
-			/* TODO: запись в главный регистр маски */
-			longjmp (cpu_halt, STOP_BADCMD);
+			/* Запись в маску главного регистра прерываний */
+			MGRP = ACC;
 			break;
 		case 037:
-			/* TODO: гашение главного регистра прерываний */
-			longjmp (cpu_halt, STOP_BADCMD);
+			/* Гашение главного регистра прерываний */
+			/* нехранящие биты невозможно погасить */
+			GRP &= ACC | GRP_WIRED_BITS;
 			break;
 		case 0100 ... 0137:
 			/* TODO: управление блокировкой режима останова БРО
@@ -728,10 +737,11 @@ mtj:
 		case 0200 ... 0207:
 			/* Чтение БРЗ */
 			ACC = mmu_getcache (n & 7);
+			acc=toalu(ACC);
 			break;
 		case 0237:
-			/* TODO: чтение главного регистра прерываний */
-			longjmp (cpu_halt, STOP_BADCMD);
+			/* Чтение главного регистра прерываний */
+			acc=toalu(GRP);
 			break;
 		default:
 			/* Неиспользуемые адреса */
@@ -746,6 +756,34 @@ mtj:
 		if (n & 0200)
 			RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (3, 3);
+		break;
+	case I_EXT:
+		if (!supmode)
+			longjmp (cpu_halt, STOP_BADCMD);
+		n = (addr + M[reg]) & 07777;
+		switch (n) {
+			case 0030:
+				/* гашение ПРП */
+				PRP &= ACC | PRP_WIRED_BITS;
+				PRP2GRP;
+				break;		
+			case 0034:
+				/* запись в МПРП */
+				MPRP = ACC & 077777777;
+				PRP2GRP;
+				break;
+			case 04030:
+				/* чтение старшей половины ПРП */
+				acc = toalu(PRP & 077770000);
+				break;
+			case 04034:
+				/* чтение младшей половины ПРП */
+				acc = toalu(PRP & 07777 | 0377);
+				break;
+		}
+		/* Режим АУ - логический, если операция была "чтение" */
+		if (n & 04000)
+			RAU = SET_LOGICAL (RAU);
 		break;
 	default:
 		if (op.o_flags & F_STACK) {
@@ -1021,14 +1059,14 @@ void IllegalInsn ()
 {
 	OpInt1();
 	// M23_NEXT_RK is not important for this interrupt
-	GRP |= 1 << 12;
+	GRP |= GRP_ILL_INSN;
 }
 
 void InsnCheck ()
 {
 	OpInt1();
 	// M23_NEXT_RK must be 0 for this interrupt; it is already
-	GRP |= 1 << 14;
+	GRP |= GRP_INSN_CHECK;
 }
 
 void InsnProt ()
@@ -1036,14 +1074,14 @@ void InsnProt ()
 	OpInt1();
 	// M23_NEXT_RK must be 1 for this interrupt
 	M[PSSREG] |= M23_NEXT_RK;
-	GRP |= 1 << 13;
+	GRP |= GRP_INSN_PROT;
 }
 
 void OperProt ()
 {
 	OpInt1();
 	// M23_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
-	GRP |= 1 << 19;
+	GRP |= GRP_OPRND_PROT;
 }
 
 /*
@@ -1115,3 +1153,39 @@ t_stat sim_instr (void)
 			return SCPE_STOP;
 	}
 }
+
+t_stat slow_clk(UNIT * this) {
+	GRP |= GRP_WATCHDOG;
+	sim_activate(this, 80000);
+}
+
+/*
+ * В 9-й части частота таймера 250 Гц (4 мс),
+ * в жизни - 50 Гц (20 мс).
+ */
+t_stat fast_clk(UNIT * this) {
+	GRP |= GRP_TIMER;
+	sim_activate(this, 20000);
+}
+
+
+UNIT clocks[] = {
+	{ UDATA(slow_clk, UNIT_FIX, 0) },
+	{ UDATA(fast_clk, UNIT_FIX, 0) }
+};
+
+t_stat clk_reset(DEVICE * dev) {
+/*
+	Схема автозапуска включается по нереализованной кнопке "МР"
+	sim_activate(&clocks[0], 80000);
+*/
+	sim_activate(&clocks[1], 20000);
+}
+
+DEVICE clock_dev = {
+	"CLK", clocks, NULL, NULL,
+	2, 0, 0, 0, 0, 0,
+	NULL, NULL, &clk_reset,
+	NULL, NULL, NULL, NULL,
+	DEV_DEBUG
+};
