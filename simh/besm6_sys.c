@@ -464,7 +464,7 @@ again:
 	    c == CYRILLIC_CAPITAL_LETTER_KA ||
 	    c == 'k' || c == 'K') {
 		/* Команда. */
-		*type = '=';
+		*type = '*';
 		if (parse_instruction_word (p, val) != SCPE_OK)
 			goto bad;
 		return SCPE_OK;
@@ -499,10 +499,16 @@ t_stat besm6_load (FILE *input)
 			break;
 		case '=':		/* word */
 			if (addr < 010)
-				pult [addr] = word;
+				pult [addr] = CONVOL_NUMBER (word, RUU);
 			else
-				memory [addr] = word;
-			/* ram_dirty [addr] = 1; */
+				memory [addr] = CONVOL_NUMBER (word, RUU);
+			++addr;
+			break;
+		case '*':		/* instruction */
+			if (addr < 010)
+				pult [addr] = CONVOL_INSN (word, RUU);
+			else
+				memory [addr] = CONVOL_INSN (word, RUU);
 			++addr;
 			break;
 		case '@':		/* start address */
@@ -535,11 +541,19 @@ t_stat besm6_dump (FILE *of, char *fnam)
 			fprintf (of, "\nв %05o\n", addr);
 		}
 		last_addr = addr;
-		fprintf (of, "к ");
-		besm6_fprint_cmd (of, word >> 24);
-		fprintf (of, ", ");
-		besm6_fprint_cmd (of, word & BITS24);
-		fprintf (of, "\n");
+		if (IS_INSN (word)) {
+			fprintf (of, "к ");
+			besm6_fprint_cmd (of, word >> 24);
+			fprintf (of, ", ");
+			besm6_fprint_cmd (of, word & BITS24);
+			fprintf (of, "\n");
+		} else {
+			fprintf (of, "с %04o %04o %04o %04o\n",
+				(int) (word >> 36) & 07777,
+				(int) (word >> 24) & 07777,
+				(int) (word >> 12) & 07777,
+				(int) word & 07777);
+		}
 	}
 	return SCPE_OK;
 }

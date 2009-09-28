@@ -151,6 +151,9 @@ void mmu_protection_check (int addr)
 	/* Защита не заблокирована, а лист закрыт */
 	if (! tmp_prot_disabled && (RZ & (1 << (addr >> 10)))) {
 		iintr_data = addr >> 10;
+		if (sim_deb && cpu_dev.dctrl) {
+			fprintf (sim_deb, "*** %05o: защита числа\n", addr);
+		}
 		longjmp (cpu_halt, STOP_OPERAND_PROT);
 	}
 }
@@ -195,7 +198,7 @@ void mmu_store (int addr, t_value val)
 		matching = oldest;
 		BAZ[oldest] = addr;
 	}
-	BRZ[matching] = SET_CONVOL (val, RUU);
+	BRZ[matching] = CONVOL_NUMBER (val, RUU);
 	set_wins (matching);
 }
 
@@ -234,14 +237,22 @@ t_value mmu_load (int addr)
 			val = pult[addr];
 		}
 
-		if (!IS_NUMBER (val)) {
+		if (! IS_NUMBER (val)) {
 			iintr_data = addr & 7;
+			if (sim_deb && cpu_dev.dctrl) {
+				fprintf (sim_deb, "*** %05o: контроль числа\n",
+					addr);
+			}
 			longjmp (cpu_halt, STOP_RAM_CHECK);
 		}
 	} else {
 		val = BRZ[matching];
-		if (!IS_NUMBER (val)) {
+		if (! IS_NUMBER (val)) {
 			iintr_data = matching;
+			if (sim_deb && cpu_dev.dctrl) {
+				fprintf (sim_deb, "*** %05o: контроль числа БРЗ\n",
+					addr);
+			}
 			longjmp (cpu_halt, STOP_CACHE_CHECK);
 		}
 	}
@@ -261,6 +272,9 @@ t_value mmu_fetch (int addr)
 		 */
 		if (IS_SUPERVISOR (RUU))
 			return 0;
+		if (sim_deb && cpu_dev.dctrl) {
+			fprintf (sim_deb, "*** передача управления на 0\n");
+		}
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 
@@ -278,6 +292,10 @@ t_value mmu_fetch (int addr)
 		 */
 		if (page == 0) {
 			iintr_data = addr >> 10;
+			if (sim_deb && cpu_dev.dctrl) {
+				fprintf (sim_deb, "*** %05o: защита команды\n",
+					addr);
+			}
 			longjmp (cpu_halt, STOP_INSN_PROT);
 		}
 
@@ -287,9 +305,13 @@ t_value mmu_fetch (int addr)
 		val = memory[addr];
 	}
 
-	if (!IS_INSN (val))
+	if (! IS_INSN (val)) {
+		if (sim_deb && cpu_dev.dctrl) {
+			fprintf (sim_deb, "*** %05o: контроль команды\n",
+				addr);
+		}
 		longjmp (cpu_halt, STOP_INSN_CHECK);
-
+	}
 	return val & WORD;
 }
 
@@ -334,7 +356,7 @@ void mmu_setprotection (int idx, t_value val)
 
 void mmu_setcache (int idx, t_value val)
 {
-	BRZ[idx] = SET_CONVOL (val, RUU);
+	BRZ[idx] = CONVOL_NUMBER (val, RUU);
 }
 
 t_value mmu_getcache (int idx)
