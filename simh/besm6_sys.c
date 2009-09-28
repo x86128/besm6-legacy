@@ -342,7 +342,7 @@ t_stat fprint_sym (FILE *of, t_addr addr, t_value *val,
 		besm6_fprint_insn (of, cmd >> 24);
 		besm6_fprint_insn (of, cmd & BITS24);
 	} else if (sw & SWMASK ('F')) {
-		fprintf (of, "%20.14g", besm6_to_ieee(cmd));
+		fprintf (of, "%#.2g", besm6_to_ieee(cmd));
 	} else if (sw & SWMASK ('B')) {
 		fprintf (of, "%03o %03o %03o %03o %03o %03o",
 			(int) (cmd >> 40) & 0377,

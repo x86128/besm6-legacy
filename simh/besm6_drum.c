@@ -25,11 +25,11 @@ UNIT drum_unit = {
 };
 
 REG drum_reg[] = {
-	{ "УЧ",     &ext_op,         8, 12, 0, 1 },
-	{ "А_МЗУ",  &ext_disk_addr,  8, 12, 0, 1 },
-	{ "α_МОЗУ", &ext_ram_start,  8, 12, 0, 1 },
-	{ "ω_МОЗУ", &ext_ram_finish, 8, 12, 0, 1 },
-	{ 0 }
+{ "УЧ",     &ext_op,         8, 12, 0, 1 },
+{ "А_МЗУ",  &ext_disk_addr,  8, 12, 0, 1 },
+{ "α_МОЗУ", &ext_ram_start,  8, 12, 0, 1 },
+{ "ω_МОЗУ", &ext_ram_finish, 8, 12, 0, 1 },
+{ 0 }
 };
 
 MTAB drum_mod[] = {
