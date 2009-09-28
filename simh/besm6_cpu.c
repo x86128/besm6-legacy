@@ -73,15 +73,15 @@
 #define TRAPRETREG	26
 
 t_value memory [MEMSIZE];
-uint32 PC, M [NREGS], RAU, PPK, addrmod;
-uint32 supmode, convol_mode;
+uint32 PC, M [NREGS], RAU, RUU;
 t_value GRP, MGRP;
+uint32 PRP, MPRP;
+
 /* нехранящие биты ГРП должны сбрасываться путем обнуления тех регистров,
  * сборкой которых они являются
  */
 #define GRP_WIRED_BITS 01400743700000000LL
 
-uint32 PRP, MPRP;
 #define PRP_WIRED_BITS 0	/* unknown? */
 
 /* после каждого изменения PRP или MPRP нужно выполнять PRP2GRP */
@@ -110,8 +110,6 @@ UNIT cpu_unit = { UDATA (NULL, UNIT_FIX, MEMSIZE) };
 
 REG cpu_reg[] = {
 	{ "СчАС", &PC,    8, 15, 0, 1 }, /* счётчик адреса команды */
-	{ "ППК",  &PPK,   2, 1,  0, 1 }, /* признак правой команды */
-/* TODO: добавить ПКП, ПКЛ, БРО */
 	{ "РК",   &RK,    8, 24, 0, 1 }, /* регистр выполняемой команды */
 	{ "СМ",   &ACC,   8, 48, 0, 1 }, /* сумматор */
 	{ "РМР",  &RMR,   8, 48, 0, 1 }, /* регистр младших разрядов */
@@ -138,6 +136,7 @@ REG cpu_reg[] = {
 	{ "М27",  &M[27], 8, 15, 0, 1 }, /* адрес возврата из прерывания */
 	{ "М28",  &M[28], 8, 15, 0, 1 }, /* адрес останова по выполнению */
 	{ "М29",  &M[29], 8, 15, 0, 1 }, /* адрес останова по чтению/записи */
+	{ "РУУ",  &RUU,   2, 9,  0, 1 }, /* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
 	{ "ГРП",  &GRP,   8, 48, 0, 1 }, /* главный регистр прерываний */
 	{ "МГРП", &MGRP,  8, 48, 0, 1 }, /* маска ГРП */
 	{ 0 }
@@ -160,10 +159,8 @@ DEVICE cpu_dev = {
  */
 REG reg_reg[] = {
 	{ "PC",    &PC,		8, 15, 0, 1 }, /* счётчик адреса команды */
-	{ "PPK",   &PPK,	2, 1,  0, 1 }, /* признак правой команды */
-/* TODO: добавить ПКП, ПКЛ, БРО */
 	{ "RK",    &RK,		8, 24, 0, 1 }, /* регистр выполняемой команды */
-	{ "SM",    &ACC,	8, 48, 0, 1 }, /* сумматор */
+	{ "ACC",   &ACC,	8, 48, 0, 1 }, /* сумматор */
 	{ "RMR",   &RMR,	8, 48, 0, 1 }, /* регистр младших разрядов */
 	{ "RAU",   &RAU,	2, 6,  0, 1 }, /* режимы АУ */
 	{ "M1",    &M[1],	8, 15, 0, 1 }, /* регистры-модификаторы */
@@ -188,6 +185,7 @@ REG reg_reg[] = {
 	{ "M27",   &M[27],	8, 15, 0, 1 }, /* адрес возврата из прерывания */
 	{ "M28",   &M[28],	8, 15, 0, 1 }, /* адрес останова по выполнению */
 	{ "M29",   &M[29],	8, 15, 0, 1 }, /* адрес останова по чтению/записи */
+	{ "RUU",   &RUU,        2, 9,  0, 1 }, /* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
 	{ "GRP",   &GRP,	8, 48, 0, 1 }, /* главный регистр прерываний */
 	{ "MGRP",  &MGRP,	8, 48, 0, 1 }, /* маска ГРП */
 
@@ -207,7 +205,7 @@ REG reg_reg[] = {
 	{ "BAZ5",  &BAZ[5],	8, 16, 0, 1 },
 	{ "BAZ6",  &BAZ[6],	8, 16, 0, 1 },
 	{ "BAZ7",  &BAZ[7],	8, 16, 0, 1 },
-	{ "Tourn", &tourn,	8, 28, 0, 1 },
+	{ "TABST", &TABST,	8, 28, 0, 1 },
 	{ "RP0",   &RP[0],	8, 48, 0, 1 },
 	{ "RP1",   &RP[1],	8, 48, 0, 1 },
 	{ "RP2",   &RP[2],	8, 48, 0, 1 },
@@ -216,7 +214,7 @@ REG reg_reg[] = {
 	{ "RP5",   &RP[5],	8, 48, 0, 1 },
 	{ "RP6",   &RP[6],	8, 48, 0, 1 },
 	{ "RP7",   &RP[7],	8, 48, 0, 1 },
-	{ "Prot",  &protection,	8, 32, 0, 1 },
+	{ "RZ",    &RZ,		8, 32, 0, 1 },
 	{ "FP1",   &pult[1],	8, 50, 0, 1 },
 	{ "FP2",   &pult[2],	8, 50, 0, 1 },
 	{ "FP3",   &pult[3],	8, 50, 0, 1 },
@@ -339,7 +337,8 @@ t_stat cpu_reset (DEVICE *dptr)
 
 	ACC = 0;
 	RMR = 0;
-	PPK = 0;
+	RAU = 0;
+	RUU = RUU_EXTRACODE | RUU_AVOST_DISABLE;
 	for (i=0; i<NREGS; ++i)
 		M[i] = 0;
 
@@ -352,7 +351,6 @@ t_stat cpu_reset (DEVICE *dptr)
 		M23_INTR_DISABLE;
 
 	GRP = MGRP = 0;
-	supmode = M23_EXTRACODE;
 	sim_brk_types = sim_brk_dflt = SWMASK ('E');
 	return SCPE_OK;
 }
@@ -427,11 +425,11 @@ t_value fromalu (alureg_t reg)
         return (t_value) reg.l << 24 | reg.r;
 }
 
-#define JMP(addr) (PC=(addr),PPK=0)
-#define effaddr ADDR(addr + M[reg])
+#define JMP(addr)	(PC = (addr), RUU &= ~RUU_RIGHT_INSTR)
+#define effaddr		ADDR(addr + M[reg])
 
 /*
- * Execute one instruction, placed on address PC:PPK.
+ * Execute one instruction, placed on address PC:RUU_RIGHT_INSTR.
  * Increment delay. When stopped, perform a longjmp to cpu_halt,
  * sending a stop code.
  */
@@ -442,7 +440,7 @@ void cpu_one_inst ()
 	optab_t op;
 
 	t_value word = mmu_fetch (PC);
-	if (PPK)
+	if (RUU & RUU_RIGHT_INSTR)
 		RK = word;		/* get right instruction */
 	else
 		RK = word >> 24;	/* get left instruction */
@@ -454,19 +452,20 @@ void cpu_one_inst ()
 	reg = ui.i_reg;
 
 	if (sim_deb && cpu_dev.dctrl) {
-		fprintf (sim_deb, "*** %05o.%o: ", PC, PPK);
+		fprintf (sim_deb, "*** %05o%s: ", PC,
+			(RUU & RUU_RIGHT_INSTR) ? "п" : "л");
 		besm6_fprint_cmd (sim_deb, RK);
 		fprintf (sim_deb, "\n");
 	}
 	nextpc = PC + 1;
-	if (PPK) {
+	if (RUU & RUU_RIGHT_INSTR) {
 		PC += 1;			/* increment PC */
-		PPK = 0;
+		RUU &= ~RUU_RIGHT_INSTR;
 	} else {
-		PPK = 1;
+		RUU |= RUU_RIGHT_INSTR;
 	}
 
-	if (addrmod) {
+	if (RUU & RUU_MOD_RK) {
                 addr = ADDR (ui.i_addr + M[16]);
         } else
                 addr = ui.i_addr;
@@ -501,17 +500,21 @@ void cpu_one_inst ()
 	case I_VTM:
 		M[reg] = addr;
 		M[0] = 0;
-		if (supmode && reg == 0) {
-			M[PSREG] &= ~02003;
-			M[PSREG] |= addr & 02003;
+		if (IS_SUPERVISOR (RUU) && reg == 0) {
+			M[PSREG] &= ~(M17_INTR_DISABLE |
+				M17_MMAP_DISABLE | M17_PROT_DISABLE);
+			M[PSREG] |= addr & (M17_INTR_DISABLE |
+				M17_MMAP_DISABLE | M17_PROT_DISABLE);
 		}
 		break;
 	case I_UTM:
 		M[reg] = effaddr;
 		M[0] = 0;
-		if (supmode && reg == 0) {
-			M[PSREG] &= ~02003;
-			M[PSREG] |= addr & 02003;
+		if (IS_SUPERVISOR (RUU) && reg == 0) {
+			M[PSREG] &= ~(M17_INTR_DISABLE |
+				M17_MMAP_DISABLE | M17_PROT_DISABLE);
+			M[PSREG] |= addr & (M17_INTR_DISABLE |
+				M17_MMAP_DISABLE | M17_PROT_DISABLE);
 		}
 		break;
 	case I_VLM:
@@ -532,7 +535,7 @@ void cpu_one_inst ()
 		/*      fall    thru    */
 	case I_ITA:
 		acc.l = 0;
-		acc.r = M[effaddr & (supmode ? 0x1f : 0xf)];
+		acc.r = M[effaddr & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf)];
 		break;
 	case I_XTR:
 		CHK_STACK;
@@ -645,14 +648,14 @@ common_add:
 		JMP (addr);
 		break;
 	case I_ATI:
-		if (supmode) {
+		if (IS_SUPERVISOR (RUU)) {
 			M[effaddr & 0x1f] = ADDR (acc.r);
 		} else
 			M[effaddr & 0xf] = ADDR (acc.r);
 		M[0] = 0;
 		break;
 	case I_STI: {
-		uint8   rg = effaddr & (supmode ? 0x1f : 0xf);
+		uint8   rg = effaddr & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf);
 		uint16  ad = ADDR (acc.r);
 
 		M[rg] = ad;
@@ -663,41 +666,50 @@ common_add:
 		break;
 	}
 	case I_MTJ:
-		if (supmode) {
-mtj:
-			M[addr & 0x1f] = M[reg];
+		if (IS_SUPERVISOR (RUU)) {
+mtj:			M[addr & 0x1f] = M[reg];
 		} else
 			M[addr & 0xf] = M[reg];
 		M[0] = 0;
 		break;
 	case I_MPJ: {
 		uint8 rg = addr & 0xf;
-		if (rg & 020 && supmode)
+		if (rg & 020 && IS_SUPERVISOR (RUU))
 			goto mtj;
 		M[rg] = ADDR (M[rg] + M[reg]);
 		M[0] = 0;
 		break;
 	}
 	case I_IRET:
-		if (!supmode) {
+		if (! IS_SUPERVISOR (RUU)) {
 			longjmp (cpu_halt, STOP_BADCMD);
 		}
-		M[PSREG] = M[PSSREG] & 02003;
+		M[PSREG] = M[PSSREG] & (M23_INTR_DISABLE |
+			M23_MMAP_DISABLE | M23_PROT_DISABLE);
 		JMP (M[(reg & 3) | 030]);
-		PPK = !!(M[PSSREG] & 0400);
-		supmode = M[PSSREG] & (M23_EXTRACODE|M23_INTERRUPT);
-		addrmod = M[PSSREG] & M23_NEXT_RK ? 1 : 0;
+		if (M[PSSREG] & M23_RIGHT_INSTR)
+			RUU |= RUU_RIGHT_INSTR;
+		else
+			RUU &= ~RUU_RIGHT_INSTR;
+		RUU = SET_SUPERVISOR (RUU,
+			M[PSSREG] & (M23_EXTRACODE | M23_INTERRUPT));
+		if (M[PSSREG] & M23_NEXT_RK)
+			RUU |= RUU_MOD_RK;
+		else
+			RUU &= ~RUU_MOD_RK;
 		break;
 	case I_TRAP:
 		M[TRAPRETREG] = nextpc;
-		M[PSSREG] = (M[PSREG] & 02003) | supmode;
+		M[PSSREG] = (M[PSREG] & (M17_INTR_DISABLE | M17_MMAP_DISABLE |
+			M17_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
 		M[016] = effaddr;
-		supmode = M23_EXTRACODE;
-		M[PSREG] = 02007; // 2003 ?
+		RUU = SET_SUPERVISOR (RUU, M23_EXTRACODE);
+		M[PSREG] = M17_INTR_DISABLE | M17_MMAP_DISABLE |
+			M17_PROT_DISABLE | /*?*/ M17_INTR_HALT;
 		JMP (0500 + ui.i_opcode); // E20? E21?
 		break;
 	case I_MOD:
-		if (!supmode)
+		if (! IS_SUPERVISOR (RUU))
 			longjmp (cpu_halt, STOP_BADCMD);
 		n = (addr + M[reg]) & 0377;
 		switch (n) {
@@ -722,12 +734,21 @@ mtj:
 			GRP &= ACC | GRP_WIRED_BITS;
 			break;
 		case 0100 ... 0137:
-			/* TODO: управление блокировкой режима останова БРО
-			 * (бит 1)
+			/* Бит 1: управление блокировкой режима останова БРО.
 			 * Биты 2 и 3 - признаки формирования контрольных
-			 * разрядов (ПКП и ПКЛ).
-			 */
-			convol_mode = (n >> 1) & 3;
+			 * разрядов (ПКП и ПКЛ). */
+			if (n & 1)
+				RUU |= RUU_AVOST_DISABLE;
+			else
+				RUU &= ~RUU_AVOST_DISABLE;
+			if (n & 2)
+				RUU |= RUU_CONVOL_RIGHT;
+			else
+				RUU &= ~RUU_CONVOL_RIGHT;
+			if (n & 4)
+				RUU |= RUU_CONVOL_LEFT;
+			else
+				RUU &= ~RUU_CONVOL_LEFT;
 			break;
 		case 0140 ... 0177:
 			/* TODO: управление блокировкой схемы
@@ -746,7 +767,8 @@ mtj:
 		default:
 			/* Неиспользуемые адреса */
 			if (sim_deb && cpu_dev.dctrl) {
-				fprintf (sim_deb, "*** %05o.%o: ", PC, PPK);
+				fprintf (sim_deb, "*** %05o%s: ", PC,
+					(RUU & RUU_RIGHT_INSTR) ? "п" : "л");
 				besm6_fprint_cmd (sim_deb, RK);
 				fprintf (sim_deb, ": неправильный адрес спец.регистра\n");
 			}
@@ -758,7 +780,7 @@ mtj:
 		delay = MEAN_TIME (3, 3);
 		break;
 	case I_EXT:
-		if (!supmode)
+		if (! IS_SUPERVISOR (RUU))
 			longjmp (cpu_halt, STOP_BADCMD);
 		n = (addr + M[reg]) & 07777;
 		switch (n) {
@@ -766,7 +788,7 @@ mtj:
 				/* гашение ПРП */
 				PRP &= ACC | PRP_WIRED_BITS;
 				PRP2GRP;
-				break;		
+				break;
 			case 0034:
 				/* запись в МПРП */
 				MPRP = ACC & 077777777;
@@ -794,7 +816,7 @@ mtj:
 		} else if (op.o_flags & F_NAI)
 			GET_NAI_OP;
 
-		if (!supmode && op.o_flags & F_PRIV)
+		if (! IS_SUPERVISOR (RUU) && op.o_flags & F_PRIV)
 			longjmp (cpu_halt, STOP_BADCMD);
 		else
 			(*op.o_impl)();
@@ -1016,8 +1038,10 @@ done:
 	 * Команда выполнилась успешно: можно сбросить признаки
 	 * модификации адреса, если они не были только что установлены.
 	 */
-	addrmod = nextaddrmod;
-	if (addrmod == 0) {
+	if (nextaddrmod)
+		RUU |= RUU_MOD_RK;
+	else {
+		RUU &= ~RUU_MOD_RK;
 		M[16] = 0;
 	}
 }
@@ -1025,34 +1049,36 @@ done:
 /* ОпПр1, ТО ч.9, стр. 119 */
 void OpInt1 ()
 {
-	M[PSSREG] = (M[PSREG] & 02003) | supmode;
-	if (PPK)
+	M[PSSREG] = (M[PSREG] & (M17_INTR_DISABLE | M17_MMAP_DISABLE |
+		M17_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
+	if (RUU & RUU_RIGHT_INSTR)
 		M[PSSREG] |= M23_RIGHT_INSTR;
 	M[27] = PC;
-	M[PSREG] |= 02003;
-	if (addrmod) {
+	M[PSREG] |= M17_INTR_DISABLE | M17_MMAP_DISABLE | M17_PROT_DISABLE;
+	if (RUU & RUU_MOD_RK) {
 		M[PSSREG] |= M23_MOD_RK;
-		addrmod = 0;
+		RUU &= ~RUU_MOD_RK;
 	}
 
 	PC = 0500;
-	PPK = 0;
-	supmode = M23_INTERRUPT;
+	RUU &= ~RUU_RIGHT_INSTR;
+	RUU = SET_SUPERVISOR (RUU, M23_INTERRUPT);
 }
 
 /* ОпПр1, ТО ч.9, стр. 119 */
 void OpInt2 ()
 {
-	M[PSSREG] = (M[PSREG] & 02003) | supmode;
+	M[PSSREG] = (M[PSREG] & (M17_INTR_DISABLE | M17_MMAP_DISABLE |
+		M17_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
 	M[27] = PC;
-	M[PSREG] |= 02003;
-	if (addrmod) {
+	M[PSREG] |= M17_INTR_DISABLE | M17_MMAP_DISABLE | M17_PROT_DISABLE;
+	if (RUU & RUU_MOD_RK) {
 		M[PSSREG] |= M23_MOD_RK;
-		addrmod = 0;
+		RUU &= ~RUU_MOD_RK;
 	}
 	PC = 0501;
-	PPK = 0;
-	supmode = M23_INTERRUPT;
+	RUU &= ~RUU_RIGHT_INSTR;
+	RUU = SET_SUPERVISOR (RUU, M23_INTERRUPT);
 }
 
 void IllegalInsn ()
@@ -1095,7 +1121,7 @@ t_stat sim_instr (void)
 	/* Restore register state */
 	PC = PC & BITS15;				/* mask PC */
 	sim_cancel_step ();				/* defang SCP step */
-	mmu_settlb ();					/* copy RP to TLB */
+	mmu_setup ();					/* copy RP to TLB */
 
 	/* An internal interrupt or user intervention */
 	r = setjmp (cpu_halt);
@@ -1139,8 +1165,8 @@ t_stat sim_instr (void)
 			return STOP_IBKPT;		/* stop simulation */
 		}
 
-		if (!iintr && !PPK && !(M[17] & M17_INTR_DISABLE) &&
-		    (GRP & MGRP)) {
+		if (! iintr && ! (RUU & RUU_RIGHT_INSTR) &&
+		    ! (M[17] & M17_INTR_DISABLE) && (GRP & MGRP)) {
 			/* external interrupt */
 			OpInt2();
 		}
