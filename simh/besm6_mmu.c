@@ -18,7 +18,7 @@ UNIT mmu_unit = {
 };
 
 t_value BRZ[8];
-uint32 BAZ[8], tourn, protection;
+uint32 BAZ[8], TABST, RZ;
 
 /*
  * 64-битные регистры RP0-RP7 - для отображения регистров приписки,
@@ -50,7 +50,7 @@ REG mmu_reg[] = {
 	{ "БАЗ5",  &BAZ[5],	8, 16, 0, 1 },
 	{ "БАЗ6",  &BAZ[6],	8, 16, 0, 1 },
 	{ "БАЗ7",  &BAZ[7],	8, 16, 0, 1 },
-	{ "ТАБСТ", &tourn,	8, 28, 0, 1 },	/* Таблица старшинства БРЗ */
+	{ "ТАБСТ", &TABST,	8, 28, 0, 1 },	/* Таблица старшинства БРЗ */
 	{ "РП0",   &RP[0],	8, 48, 0, 1 },	/* Регистры приписки, по 12 бит */
 	{ "РП1",   &RP[1],	8, 48, 0, 1 },
 	{ "РП2",   &RP[2],	8, 48, 0, 1 },
@@ -59,7 +59,7 @@ REG mmu_reg[] = {
 	{ "РП5",   &RP[5],	8, 48, 0, 1 },
 	{ "РП6",   &RP[6],	8, 48, 0, 1 },
 	{ "РП7",   &RP[7],	8, 48, 0, 1 },
-	{ "РЗ",    &protection,	8, 32, 0, 1 },	/* Регистр защиты */
+	{ "РЗ",    &RZ,		8, 32, 0, 1 },	/* Регистр защиты */
 	{ "ТР1",   &pult[1],	8, 50, 0, 1 },	/* Тумблерные регистры */
 	{ "ТР2",   &pult[2],	8, 50, 0, 1 },
 	{ "ТР3",   &pult[3],	8, 50, 0, 1 },
@@ -93,8 +93,8 @@ t_stat mmu_reset (DEVICE *dptr)
 	for (i = 0; i < 8; ++i) {
 		BRZ[i] = BAZ[i] = RP[i] = 0;
 	}
-	tourn = 0;
-	protection = 0;
+	TABST = 0;
+	RZ = 0;
 	/*
 	 * Front panel switches survive the reset
 	 */
@@ -102,7 +102,8 @@ t_stat mmu_reset (DEVICE *dptr)
 	return SCPE_OK;
 }
 
-#define loses_to_all(i) ((tourn & win_mask[i]) == 0 && (tourn & lose_mask[i]) == lose_mask[i])
+#define loses_to_all(i) ((TABST & win_mask[i]) == 0 && \
+			(TABST & lose_mask[i]) == lose_mask[i])
 
 /*
  * N wins over M if the bit is set
@@ -139,15 +140,16 @@ static unsigned lose_mask[8] = {
 	1<<6|1<<12|1<<17|1<<21|1<<24|1<<26|1<<27
 };
 
-#define set_wins(i) tourn = tourn & ~lose_mask[i] | win_mask[i]
+#define set_wins(i) TABST = (TABST & ~lose_mask[i]) | win_mask[i]
 
 void mmu_protection_check (int addr)
 {
 	/* Защита блокируется в режиме супервизора для адресов 1-7 */
-	int tmp_prot_disabled = prot_disabled || (supmode && addr < 010);
+	int tmp_prot_disabled = (M[17] & M17_PROT_DISABLE) ||
+		(IS_SUPERVISOR (RUU) && addr < 010);
 
 	/* Защита не заблокирована, а лист закрыт */
-	if (!tmp_prot_disabled && (protection & (1 << (addr >> 10)))) {
+	if (! tmp_prot_disabled && (RZ & (1 << (addr >> 10)))) {
 		iintr_data = addr >> 10;
 		longjmp (cpu_halt, STOP_OPERAND_PROT);
 	}
@@ -168,7 +170,8 @@ void mmu_store (int addr, t_value val)
 	mmu_protection_check (addr);
 
 	/* Различаем адреса с припиской и без */
-	addr |= sup_mmap << 15;
+	if (M[17] & M17_MMAP_DISABLE)
+		addr |= 0100000;
 	for (i = 0; i < 8; ++i) {
 		if (loses_to_all (i)) oldest = i;
 		if (addr == BAZ[i]) {
@@ -192,7 +195,7 @@ void mmu_store (int addr, t_value val)
 		matching = oldest;
 		BAZ[oldest] = addr;
 	}
-	BRZ[matching] = SET_CONVOL (val, convol_mode);
+	BRZ[matching] = SET_CONVOL (val, RUU);
 	set_wins (matching);
 }
 
@@ -211,7 +214,8 @@ t_value mmu_load (int addr)
 	mmu_protection_check (addr);
 
 	/* Различаем адреса с припиской и без */
-	addr |= sup_mmap << 15;
+	if (M[17] & M17_MMAP_DISABLE)
+		addr |= 0100000;
 	for (i = 0; i < 8; ++i) {
 		if (addr == BAZ[i]) {
 			matching = i;
@@ -255,13 +259,13 @@ t_value mmu_fetch (int addr)
 		/* В режиме супервизора слово 0 - команда,
 		 * в режиме пользователя - число
 		 */
-		if (supmode)
+		if (IS_SUPERVISOR (RUU))
 			return 0;
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 
 	/* В режиме супервизора защиты нет */
-	if (supmode) {
+	if (IS_SUPERVISOR (RUU)) {
 		if (addr < 010)
 			val = pult [addr];
 		else
@@ -307,7 +311,7 @@ void mmu_setrp (int idx, t_value val)
 	TLB[idx*4+3] = p3;
 }
 
-void mmu_settlb ()
+void mmu_setup ()
 {
 	int i;
 
@@ -325,12 +329,12 @@ void mmu_setprotection (int idx, t_value val)
 	/* Разряды сумматора, записываемые в регистр защиты - 21-28 */
 	int mask = 0xff << (idx * 8);
 	val = ((val >> 20) & 0xff) << (idx * 8);
-	protection = protection & ~mask | val;
+	RZ = (RZ & ~mask) | val;
 }
 
 void mmu_setcache (int idx, t_value val)
 {
-	BRZ[idx] = SET_CONVOL (val, convol_mode);
+	BRZ[idx] = SET_CONVOL (val, RUU);
 }
 
 t_value mmu_getcache (int idx)

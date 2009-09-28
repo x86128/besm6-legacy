@@ -332,7 +332,10 @@ t_stat fprint_sym (FILE *of, t_addr addr, t_value *val,
 
 	if (sw & SWMASK ('M')) {			/* symbolic decode? */
 		besm6_fprint_cmd (of, cmd >> 24);
-		fprintf (of, ",\n\t");
+		if (sw & SIM_SW_STOP) 			/* stop point */
+			fprintf (of, ", ");
+		else
+			fprintf (of, ",\n\t");
 		besm6_fprint_cmd (of, cmd & BITS24);
 
 	} else if (sw & SWMASK ('I')) {
@@ -484,7 +487,6 @@ t_stat besm6_load (FILE *input)
 
 	addr = 1;
 	PC = 1;
-	PPK = 0;
 	for (;;) {
 		err = besm6_read_line (input, &type, &word);
 		if (err)
