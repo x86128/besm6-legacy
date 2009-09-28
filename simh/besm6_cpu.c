@@ -317,9 +317,9 @@ t_stat cpu_deposit (t_value val, t_addr addr, UNIT *uptr, int32 sw)
 	if (addr >= MEMSIZE)
 		return SCPE_NXM;
 	if (addr < 010)
-		pult [addr] = val;
+		pult [addr] = CONVOL_INSN (val, RUU);
 	else
-		memory [addr] = val;
+		memory [addr] = CONVOL_INSN (val, RUU);
 	return SCPE_OK;
 }
 
@@ -1132,6 +1132,11 @@ t_stat sim_instr (void)
 	/* An internal interrupt or user intervention */
 	r = setjmp (cpu_halt);
 	if (r) {
+		if (sim_deb && cpu_dev.dctrl) {
+			fprintf (sim_deb, "*** %05o%s: %s\n", PC,
+				(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
+				sim_stop_messages [r]);
+		}
 		M[15] += corr_stack;
 		switch (r) {
 		case STOP_STOP:				/* STOP insn */
