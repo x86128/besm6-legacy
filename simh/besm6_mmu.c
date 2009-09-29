@@ -151,9 +151,7 @@ void mmu_protection_check (int addr)
 	/* Защита не заблокирована, а лист закрыт */
 	if (! tmp_prot_disabled && (RZ & (1 << (addr >> 10)))) {
 		iintr_data = addr >> 10;
-		if (sim_deb && cpu_dev.dctrl) {
-			fprintf (sim_deb, "??? %05o: защита числа\n", addr);
-		}
+		besm6_debug ("??? %05o: защита числа", addr);
 		longjmp (cpu_halt, STOP_OPERAND_PROT);
 	}
 }
@@ -239,20 +237,14 @@ t_value mmu_load (int addr)
 
 		if (! IS_NUMBER (val)) {
 			iintr_data = addr & 7;
-			if (sim_deb && cpu_dev.dctrl) {
-				fprintf (sim_deb, "??? %05o: контроль числа\n",
-					addr);
-			}
+			besm6_debug ("??? %05o: контроль числа", addr);
 			longjmp (cpu_halt, STOP_RAM_CHECK);
 		}
 	} else {
 		val = BRZ[matching];
 		if (! IS_NUMBER (val)) {
 			iintr_data = matching;
-			if (sim_deb && cpu_dev.dctrl) {
-				fprintf (sim_deb, "??? %05o: контроль числа БРЗ\n",
-					addr);
-			}
+			besm6_debug ("??? %05o: контроль числа БРЗ", addr);
 			longjmp (cpu_halt, STOP_CACHE_CHECK);
 		}
 	}
@@ -272,9 +264,7 @@ t_value mmu_fetch (int addr)
 		 */
 		if (IS_SUPERVISOR (RUU))
 			return 0;
-		if (sim_deb && cpu_dev.dctrl) {
-			fprintf (sim_deb, "??? передача управления на 0\n");
-		}
+		besm6_debug ("??? передача управления на 0");
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 
@@ -292,10 +282,7 @@ t_value mmu_fetch (int addr)
 		 */
 		if (page == 0) {
 			iintr_data = addr >> 10;
-			if (sim_deb && cpu_dev.dctrl) {
-				fprintf (sim_deb, "??? %05o: защита команды\n",
-					addr);
-			}
+			besm6_debug ("??? %05o: защита команды", addr);
 			longjmp (cpu_halt, STOP_INSN_PROT);
 		}
 
@@ -306,10 +293,7 @@ t_value mmu_fetch (int addr)
 	}
 
 	if (! IS_INSN (val)) {
-		if (sim_deb && cpu_dev.dctrl) {
-			fprintf (sim_deb, "??? %05o: контроль команды\n",
-				addr);
-		}
+		besm6_debug ("??? %05o: контроль команды", addr);
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 	return val & WORD;
@@ -369,16 +353,9 @@ void mmu_print_brz ()
 	int i, k;
 
 	for (i=0; i<8; ++i) {
-		printf ("БРЗ [%d] = '", i);
-		if (sim_log)
-			fprintf (sim_log, "БРЗ [%d] = '", i);
-		for (k=47; k>=0; --k) {
-			printf ("%c", (BRZ[i] >> k & 1) ? '*' : ' ');
-			if (sim_log)
-				fprintf (sim_log, "%c", (BRZ[i] >> k & 1) ? '*' : ' ');
-		}
-		printf ("'\r\n");
-		if (sim_log)
-			fprintf (sim_log, "'\n");
+		besm6_log_cont ("БРЗ [%d] = '", i);
+		for (k=47; k>=0; --k)
+			besm6_log_cont ("%c", (BRZ[i] >> k & 1) ? '*' : ' ');
+		besm6_log ("'");
 	}
 }

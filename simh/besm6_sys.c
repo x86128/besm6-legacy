@@ -59,6 +59,58 @@ int besm6_opcode (char *instr)
 }
 
 /*
+ * Выдача на консоль и в файл протокола.
+ * Добавляет перевод строки.
+ */
+void besm6_log (const char *fmt, ...)
+{
+	va_list args;
+
+	va_start (args, fmt);
+	vprintf (fmt, args);
+	printf ("\r\n");
+	if (sim_log) {
+		vfprintf (sim_log, fmt, args);
+		fprintf (sim_log, "\n");
+	}
+	va_end (args);
+}
+
+/*
+ * Не добавляет перевод строки.
+ */
+void besm6_log_cont (const char *fmt, ...)
+{
+	va_list args;
+
+	va_start (args, fmt);
+	vprintf (fmt, args);
+	if (sim_log)
+		vfprintf (sim_log, fmt, args);
+	va_end (args);
+}
+
+/*
+ * Выдача на консоль и в файл отладки: если включён режим "cpu debug".
+ * Добавляет перевод строки.
+ */
+void besm6_debug (const char *fmt, ...)
+{
+	va_list args;
+
+	if (! cpu_dev.dctrl)
+		return;
+	va_start (args, fmt);
+	vprintf (fmt, args);
+	printf ("\r\n");
+	if (sim_deb) {
+		vfprintf (sim_deb, fmt, args);
+		fprintf (sim_deb, "\n");
+	}
+	va_end (args);
+}
+
+/*
  * Преобразование вещественного числа в формат БЭСМ-6.
  *
  * Представление чисел в IEEE 754 (double):
@@ -475,9 +527,7 @@ again:
 		return SCPE_OK;
 	}
 	/* Неверная строка входного файла */
-bad:	printf ("Invalid input line: %s", buf);
-	if (sim_log)
-		fprintf (sim_log, "Invalid input line: %s", buf);
+bad:	besm6_log ("Invalid input line: %s", buf);
 	return SCPE_FMT;
 }
 
