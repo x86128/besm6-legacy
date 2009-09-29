@@ -36,23 +36,24 @@
 #include <sys/stat.h>
 
 /*
- * Регистр 23: сохранённые режимы УУ.
+ * Регистр 027: сохранённые режимы УУ.
+ * PSW: saved program status word.
  */
-#define M23_MMAP_DISABLE	000001	/* БлП - блокировка приписки */
-#define M23_PROT_DISABLE	000002	/* БлЗ - блокировка защиты */
-#define M23_EXTRACODE		000004	/* РежЭ - режим экстракода */
-#define M23_INTERRUPT		000010	/* РежПр - режим прерывания */
-#define M23_MOD_RK		000020	/* ПрИК(РК) - на регистр РК принята
+#define SPSW_MMAP_DISABLE	000001	/* БлП - блокировка приписки */
+#define SPSW_PROT_DISABLE	000002	/* БлЗ - блокировка защиты */
+#define SPSW_EXTRACODE		000004	/* РежЭ - режим экстракода */
+#define SPSW_INTERRUPT		000010	/* РежПр - режим прерывания */
+#define SPSW_MOD_RK		000020	/* ПрИК(РК) - на регистр РК принята
 					   команда, которая должна быть
 					   модифицирована регистром М[16] */
-#define M23_MOD_RR		000040	/* ПрИК(РР) - на регистре РР находится
+#define SPSW_MOD_RR		000040	/* ПрИК(РР) - на регистре РР находится
 					   команда, выполненная с модификацией */
-#define M23_UNKNOWN		000100	/* НОК? вписано карандашом в 9 томе */
-#define M23_RIGHT_INSTR		000400	/* ПрК - признак правой команды */
-#define M23_NEXT_RK		001000	/* ГД./ДК2 - на регистр РК принята
+#define SPSW_UNKNOWN		000100	/* НОК? вписано карандашом в 9 томе */
+#define SPSW_RIGHT_INSTR	000400	/* ПрК - признак правой команды */
+#define SPSW_NEXT_RK		001000	/* ГД./ДК2 - на регистр РК принята
 					   команда, следующая после вызвавшей
 					   прерывание */
-#define M23_INTR_DISABLE	002000	/* БлПр - блокировка внешнего прерывания */
+#define SPSW_INTR_DISABLE	002000	/* БлПр - блокировка внешнего прерывания */
 
 t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
@@ -103,21 +104,21 @@ REG cpu_reg[] = {
 { "М5",    &M[5],	8, 15, 0, 1 },
 { "М6",    &M[6],	8, 15, 0, 1 },
 { "М7",    &M[7],	8, 15, 0, 1 },
-{ "М8",    &M[8],	8, 15, 0, 1 },
-{ "М9",    &M[9],	8, 15, 0, 1 },
-{ "М10",   &M[10],	8, 15, 0, 1 },
-{ "М11",   &M[11],	8, 15, 0, 1 },
-{ "М12",   &M[12],	8, 15, 0, 1 },
-{ "М13",   &M[13],	8, 15, 0, 1 },
-{ "М14",   &M[14],	8, 15, 0, 1 },
-{ "М15",   &M[15],	8, 15, 0, 1 },		/* указатель магазина */
-{ "М16",   &M[16],	8, 15, 0, 1 },		/* модификатор адреса */
-{ "М17",   &M[17],	8, 15, 0, 1 },		/* режимы УУ */
-{ "М23",   &M[23],	8, 15, 0, 1 },		/* упрятывание режимов УУ */
-{ "М26",   &M[26],	8, 15, 0, 1 },		/* адрес возврата из экстракода */
-{ "М27",   &M[27],	8, 15, 0, 1 },		/* адрес возврата из прерывания */
-{ "М28",   &M[28],	8, 15, 0, 1 },		/* адрес останова по выполнению */
-{ "М29",   &M[29],	8, 15, 0, 1 },		/* адрес останова по чтению/записи */
+{ "М10",   &M[010],	8, 15, 0, 1 },
+{ "М11",   &M[011],	8, 15, 0, 1 },
+{ "М12",   &M[012],	8, 15, 0, 1 },
+{ "М13",   &M[013],	8, 15, 0, 1 },
+{ "М14",   &M[014],	8, 15, 0, 1 },
+{ "М15",   &M[015],	8, 15, 0, 1 },
+{ "М16",   &M[016],	8, 15, 0, 1 },
+{ "М17",   &M[017],	8, 15, 0, 1 },		/* указатель магазина */
+{ "М20",   &M[020],	8, 15, 0, 1 },		/* MOD - модификатор адреса */
+{ "М21",   &M[021],	8, 15, 0, 1 },		/* PSW - режимы УУ */
+{ "М27",   &M[027],	8, 15, 0, 1 },		/* SPSW - упрятывание режимов УУ */
+{ "М32",   &M[032],	8, 15, 0, 1 },		/* ERET - адрес возврата из экстракода */
+{ "М33",   &M[033],	8, 15, 0, 1 },		/* IRET - адрес возврата из прерывания */
+{ "М34",   &M[034],	8, 15, 0, 1 },		/* IBP - адрес останова по выполнению */
+{ "М35",   &M[035],	8, 15, 0, 1 },		/* DWP - адрес останова по чтению/записи */
 { "РУУ",   &RUU,	2, 9,  0, 1 },		/* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
 { "ГРП",   &GRP,	8, 48, 0, 1, REG_VMIO},	/* главный регистр прерываний */
 { "МГРП",  &MGRP,	8, 48, 0, 1, REG_VMIO},	/* маска ГРП */
@@ -153,21 +154,21 @@ REG reg_reg[] = {
 { "M5",    &M[5],	8, 15, 0, 1 },
 { "M6",    &M[6],	8, 15, 0, 1 },
 { "M7",    &M[7],	8, 15, 0, 1 },
-{ "M8",    &M[8],	8, 15, 0, 1 },
-{ "M9",    &M[9],	8, 15, 0, 1 },
-{ "M10",   &M[10],	8, 15, 0, 1 },
-{ "M11",   &M[11],	8, 15, 0, 1 },
-{ "M12",   &M[12],	8, 15, 0, 1 },
-{ "M13",   &M[13],	8, 15, 0, 1 },
-{ "M14",   &M[14],	8, 15, 0, 1 },
-{ "M15",   &M[15],	8, 15, 0, 1 },		/* указатель магазина */
-{ "M16",   &M[16],	8, 15, 0, 1 },		/* модификатор адреса */
-{ "M17",   &M[17],	8, 15, 0, 1 },		/* режимы УУ */
-{ "M23",   &M[23],	8, 15, 0, 1 },		/* упрятывание режимов УУ */
-{ "M26",   &M[26],	8, 15, 0, 1 },		/* адрес возврата из экстракода */
-{ "M27",   &M[27],	8, 15, 0, 1 },		/* адрес возврата из прерывания */
-{ "M28",   &M[28],	8, 15, 0, 1 },		/* адрес останова по выполнению */
-{ "M29",   &M[29],	8, 15, 0, 1 },		/* адрес останова по чтению/записи */
+{ "M10",   &M[010],	8, 15, 0, 1 },
+{ "M11",   &M[011],	8, 15, 0, 1 },
+{ "M12",   &M[012],	8, 15, 0, 1 },
+{ "M13",   &M[013],	8, 15, 0, 1 },
+{ "M14",   &M[014],	8, 15, 0, 1 },
+{ "M15",   &M[015],	8, 15, 0, 1 },
+{ "M16",   &M[016],	8, 15, 0, 1 },
+{ "M17",   &M[017],	8, 15, 0, 1 },		/* указатель магазина */
+{ "M20",   &M[020],	8, 15, 0, 1 },		/* MOD - модификатор адреса */
+{ "M21",   &M[021],	8, 15, 0, 1 },		/* PSW - режимы УУ */
+{ "M27",   &M[027],	8, 15, 0, 1 },		/* SPSW - упрятывание режимов УУ */
+{ "M32",   &M[032],	8, 15, 0, 1 },		/* ERET - адрес возврата из экстракода */
+{ "M33",   &M[033],	8, 15, 0, 1 },		/* IRET - адрес возврата из прерывания */
+{ "M34",   &M[034],	8, 15, 0, 1 },		/* IBP - адрес останова по выполнению */
+{ "M35",   &M[035],	8, 15, 0, 1 },		/* DWP - адрес останова по чтению/записи */
 { "RUU",   &RUU,        2, 9,  0, 1 },		/* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
 { "GRP",   &GRP,	8, 48, 0, 1, REG_VMIO},	/* главный регистр прерываний */
 { "MGRP",  &MGRP,	8, 48, 0, 1, REG_VMIO},	/* маска ГРП */
@@ -326,12 +327,12 @@ t_stat cpu_reset (DEVICE *dptr)
 		M[i] = 0;
 
 	/* Регистр 17: БлП, БлЗ, ПОП, ПОК, БлПр */
-	M[17] = M17_MMAP_DISABLE | M17_PROT_DISABLE | M17_INTR_HALT |
-		M17_CHECK_HALT | M17_INTR_DISABLE;
+	M[PSW] = PSW_MMAP_DISABLE | PSW_PROT_DISABLE | PSW_INTR_HALT |
+		PSW_CHECK_HALT | PSW_INTR_DISABLE;
 
 	/* Регистр 23: БлП, БлЗ, РежЭ, БлПр */
-	M[23] = M23_MMAP_DISABLE | M23_PROT_DISABLE | M23_EXTRACODE |
-		M23_INTR_DISABLE;
+	M[SPSW] = SPSW_MMAP_DISABLE | SPSW_PROT_DISABLE | SPSW_EXTRACODE |
+		SPSW_INTR_DISABLE;
 
 	GRP = MGRP = 0;
 	sim_brk_types = sim_brk_dflt = SWMASK ('E');
@@ -446,10 +447,9 @@ void cpu_one_inst ()
 	}
 
 	if (RUU & RUU_MOD_RK) {
-                addr = ADDR (ui.i_addr + M[16]);
+                addr = ADDR (ui.i_addr + M[MOD]);
         } else
                 addr = ui.i_addr;
-	Aex = ADDR (addr + M[reg]);
 
 	delay = 0;
 	corr_stack = 0;
@@ -459,46 +459,53 @@ void cpu_one_inst ()
 
 	switch (op.o_inline) {
 	case I_ATX:
+		Aex = ADDR (addr + M[reg]);
 		mmu_store (Aex, ACC);
-		if (!addr && (reg == 15))
-			M[15] = ADDR (M[15] + 1);
+		if (!addr && (reg == 017))
+			M[017] = ADDR (M[017] + 1);
 		break;
 	case I_STX:
+		Aex = ADDR (addr + M[reg]);
 		mmu_store (Aex, ACC);
 		STK_POP;
 		break;
 	case I_XTS:
 		STK_PUSH;
 		corr_stack = -1;
+		Aex = ADDR (addr + M[reg]);
 		GET_OP;
 		acc = enreg;
 		break;
 	case I_XTA:
 		CHK_STACK;
+		Aex = ADDR (addr + M[reg]);
 		GET_OP;
 		acc = enreg;
 		break;
 	case I_VTM:
+		Aex = addr;
 		M[reg] = addr;
 		M[0] = 0;
 		if (IS_SUPERVISOR (RUU) && reg == 0) {
-			M[17] &= ~(M17_INTR_DISABLE |
-				M17_MMAP_DISABLE | M17_PROT_DISABLE);
-			M[17] |= addr & (M17_INTR_DISABLE |
-				M17_MMAP_DISABLE | M17_PROT_DISABLE);
+			M[PSW] &= ~(PSW_INTR_DISABLE |
+				PSW_MMAP_DISABLE | PSW_PROT_DISABLE);
+			M[PSW] |= addr & (PSW_INTR_DISABLE |
+				PSW_MMAP_DISABLE | PSW_PROT_DISABLE);
 		}
 		break;
 	case I_UTM:
+		Aex = ADDR (addr + M[reg]);
 		M[reg] = Aex;
 		M[0] = 0;
 		if (IS_SUPERVISOR (RUU) && reg == 0) {
-			M[17] &= ~(M17_INTR_DISABLE |
-				M17_MMAP_DISABLE | M17_PROT_DISABLE);
-			M[17] |= addr & (M17_INTR_DISABLE |
-				M17_MMAP_DISABLE | M17_PROT_DISABLE);
+			M[PSW] &= ~(PSW_INTR_DISABLE |
+				PSW_MMAP_DISABLE | PSW_PROT_DISABLE);
+			M[PSW] |= addr & (PSW_INTR_DISABLE |
+				PSW_MMAP_DISABLE | PSW_PROT_DISABLE);
 		}
 		break;
 	case I_VLM:
+		Aex = addr;
 		if (!M[reg])
 			break;
 		M[reg] = ADDR (M[reg] + 1);
@@ -506,10 +513,12 @@ void cpu_one_inst ()
 		RUU &= ~RUU_RIGHT_INSTR;
 		break;
 	case I_UJ:
+		Aex = ADDR (addr + M[reg]);
 		PC = Aex;
 		RUU &= ~RUU_RIGHT_INSTR;
 		break;
 	case I_STOP:
+		Aex = ADDR (addr + M[reg]);
 		mmu_print_brz ();
 		longjmp (cpu_halt, STOP_STOP);
 		break;
@@ -517,19 +526,23 @@ void cpu_one_inst ()
 		STK_PUSH;
 		/*      fall    thru    */
 	case I_ITA:
+		Aex = ADDR (addr + M[reg]);
 		acc.l = 0;
 		acc.r = M[Aex & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf)];
 		break;
 	case I_XTR:
 		CHK_STACK;
+		Aex = ADDR (addr + M[reg]);
 		GET_OP;
 set_mode:
 		RAU = enreg.o & 077;
 		break;
 	case I_NTR:
+		Aex = ADDR (addr + M[reg]);
 		GET_NAI_OP;
 		goto set_mode;
 	case I_RTE:
+		Aex = ADDR (addr + M[reg]);
 		GET_NAI_OP;
 		acc.o = RAU;
 		acc.l = (long) (acc.o & enreg.o) << 17;
@@ -537,6 +550,7 @@ set_mode:
 		break;
 	case I_ASUB:
 		CHK_STACK;
+		Aex = ADDR (addr + M[reg]);
 		GET_OP;
 		if (NEGATIVE (acc))
 			NEGATE (acc);
@@ -545,21 +559,25 @@ set_mode:
 		goto common_add;
 	case I_RSUB:
 		CHK_STACK;
+		Aex = ADDR (addr + M[reg]);
 		GET_OP;
 		NEGATE (acc);
 		goto common_add;
 	case I_SUB:
 		CHK_STACK;
+		Aex = ADDR (addr + M[reg]);
 		GET_OP;
 		NEGATE (enreg);
 		goto common_add;
 	case I_ADD:
 		CHK_STACK;
+		Aex = ADDR (addr + M[reg]);
 		GET_OP;
 common_add:
 		add();
 		break;
 	case I_YTA:
+		Aex = ADDR (addr + M[reg]);
 		if (IS_LOGICAL (RAU)) {
 			acc = accex;
 			break;
@@ -575,6 +593,7 @@ common_add:
 		PACK (enreg);
 		break;
 	case I_UZA:
+		Aex = ADDR (addr + M[reg]);
 		accex = acc;
 		if (IS_ADDITIVE (RAU)) {
 			if (acc.l & 0x10000)
@@ -591,6 +610,7 @@ common_add:
 		RUU &= ~RUU_RIGHT_INSTR;
 		break;
 	case I_UIA:
+		Aex = ADDR (addr + M[reg]);
 		accex = acc;
 		if (IS_ADDITIVE (RAU)) {
 			if (! (acc.l & 0x10000))
@@ -607,16 +627,19 @@ common_add:
 		RUU &= ~RUU_RIGHT_INSTR;
 		break;
 	case I_UTC:
-		M[16] = Aex;
+		Aex = ADDR (addr + M[reg]);
+		M[MOD] = Aex;
 		nextaddrmod = 1;
 		break;
 	case I_WTC:
 		CHK_STACK;
+		Aex = ADDR (addr + M[reg]);
 		GET_OP;
-		M[16] = ADDR (enreg.r);
+		M[MOD] = ADDR (enreg.r);
 		nextaddrmod = 1;
 		break;
 	case I_VZM:
+		Aex = addr;
 		if (ui.i_opcode & 1) {
 			if (M[reg]) {
 				PC = addr;
@@ -630,12 +653,14 @@ common_add:
 		}
 		break;
 	case I_VJM:
+		Aex = addr;
 		M[reg] = nextpc;
 		M[0] = 0;
 		PC = addr;
 		RUU &= ~RUU_RIGHT_INSTR;
 		break;
 	case I_ATI:
+		Aex = ADDR (addr + M[reg]);
 		if (IS_SUPERVISOR (RUU)) {
 			M[Aex & 0x1f] = ADDR (acc.r);
 		} else
@@ -643,17 +668,20 @@ common_add:
 		M[0] = 0;
 		break;
 	case I_STI: {
-		uint8   rg = Aex & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf);
-		uint16  ad = ADDR (acc.r);
+		unsigned rg, ad;
 
+		Aex = ADDR (addr + M[reg]);
+		rg = Aex & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf);
+		ad = ADDR (acc.r);
 		M[rg] = ad;
 		M[0] = 0;
-		if (rg != 15)
-			M[15] = ADDR (M[15] - 1);
-		LOAD (acc, M[15]);
+		if (rg != 017)
+			M[017] = ADDR (M[017] - 1);
+		LOAD (acc, M[017]);
 		break;
 	}
 	case I_MTJ:
+		Aex = addr;
 		if (IS_SUPERVISOR (RUU)) {
 mtj:			M[addr & 0x1f] = M[reg];
 		} else
@@ -662,6 +690,7 @@ mtj:			M[addr & 0x1f] = M[reg];
 		break;
 	case I_MPJ: {
 		uint8 rg = addr & 0xf;
+		Aex = addr;
 		if (rg & 020 && IS_SUPERVISOR (RUU))
 			goto mtj;
 		M[rg] = ADDR (M[rg] + M[reg]);
@@ -669,43 +698,46 @@ mtj:			M[addr & 0x1f] = M[reg];
 		break;
 	}
 	case I_IRET:
+		Aex = addr;
 		if (! IS_SUPERVISOR (RUU)) {
 			longjmp (cpu_halt, STOP_BADCMD);
 		}
-		M[17] = M[23] & (M23_INTR_DISABLE |
-			M23_MMAP_DISABLE | M23_PROT_DISABLE);
+		M[PSW] = M[SPSW] & (SPSW_INTR_DISABLE |
+			SPSW_MMAP_DISABLE | SPSW_PROT_DISABLE);
 		PC = M[(reg & 3) | 030];
 		RUU &= ~RUU_RIGHT_INSTR;
-		if (M[23] & M23_RIGHT_INSTR)
+		if (M[SPSW] & SPSW_RIGHT_INSTR)
 			RUU |= RUU_RIGHT_INSTR;
 		else
 			RUU &= ~RUU_RIGHT_INSTR;
 		RUU = SET_SUPERVISOR (RUU,
-			M[23] & (M23_EXTRACODE | M23_INTERRUPT));
-		if (M[23] & M23_NEXT_RK)
+			M[SPSW] & (SPSW_EXTRACODE | SPSW_INTERRUPT));
+		if (M[SPSW] & SPSW_NEXT_RK)
 			RUU |= RUU_MOD_RK;
 		else
 			RUU &= ~RUU_MOD_RK;
 		break;
 	case I_TRAP:
+		Aex = ADDR (addr + M[reg]);
 		/* Адрес возврата из экстракода. */
-		M[26] = nextpc;
+		M[ERET] = nextpc;
 		/* Сохранённые режимы УУ. */
-		M[23] = (M[17] & (M17_INTR_DISABLE | M17_MMAP_DISABLE |
-			M17_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
+		M[SPSW] = (M[PSW] & (PSW_INTR_DISABLE | PSW_MMAP_DISABLE |
+			PSW_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
 		/* Текущие режимы УУ. */
-		M[17] = M17_INTR_DISABLE | M17_MMAP_DISABLE |
-			M17_PROT_DISABLE | /*?*/ M17_INTR_HALT;
+		M[PSW] = PSW_INTR_DISABLE | PSW_MMAP_DISABLE |
+			PSW_PROT_DISABLE | /*?*/ PSW_INTR_HALT;
 		M[14] = Aex;
-		RUU = SET_SUPERVISOR (RUU, M23_EXTRACODE);
+		RUU = SET_SUPERVISOR (RUU, SPSW_EXTRACODE);
 
 		PC = 0500 + ui.i_opcode;	// E20? E21?
 		RUU &= ~RUU_RIGHT_INSTR;
 		break;
 	case I_MOD:
+		Aex = ADDR (addr + M[reg]);
 		if (! IS_SUPERVISOR (RUU))
 			longjmp (cpu_halt, STOP_BADCMD);
-		n = (addr + M[reg]) & 0377;
+		n = Aex & 0377;
 		switch (n) {
 		case 0 ... 7:
 			mmu_setcache (n, ACC);
@@ -774,9 +806,10 @@ mtj:			M[addr & 0x1f] = M[reg];
 		delay = MEAN_TIME (3, 3);
 		break;
 	case I_EXT:
+		Aex = ADDR (addr + M[reg]);
 		if (! IS_SUPERVISOR (RUU))
 			longjmp (cpu_halt, STOP_BADCMD);
-		n = (addr + M[reg]) & 07777;
+		n = Aex & 07777;
 		switch (n) {
 			case 0030:
 				/* гашение ПРП */
@@ -805,6 +838,7 @@ mtj:			M[addr & 0x1f] = M[reg];
 		if (op.o_flags & F_STACK) {
 			CHK_STACK;
 		}
+		Aex = ADDR (addr + M[reg]);
 		if (op.o_flags & F_OP) {
 			GET_OP;
 		} else if (op.o_flags & F_NAI)
@@ -1036,72 +1070,46 @@ done:
 		RUU |= RUU_MOD_RK;
 	else {
 		RUU &= ~RUU_MOD_RK;
-		M[16] = 0;
+		M[MOD] = 0;
 	}
 }
 
-/* ОпПр1, ТО ч.9, стр. 119 */
+/*
+ * ОпПр1, ТО ч.9, стр. 119
+ */
 void OpInt1 ()
 {
-	M[23] = (M[17] & (M17_INTR_DISABLE | M17_MMAP_DISABLE |
-		M17_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
+	M[SPSW] = (M[PSW] & (PSW_INTR_DISABLE | PSW_MMAP_DISABLE |
+		PSW_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
 	if (RUU & RUU_RIGHT_INSTR)
-		M[23] |= M23_RIGHT_INSTR;
-	M[27] = PC;
-	M[17] |= M17_INTR_DISABLE | M17_MMAP_DISABLE | M17_PROT_DISABLE;
+		M[SPSW] |= SPSW_RIGHT_INSTR;
+	M[IRET] = PC;
+	M[PSW] |= PSW_INTR_DISABLE | PSW_MMAP_DISABLE | PSW_PROT_DISABLE;
 	if (RUU & RUU_MOD_RK) {
-		M[23] |= M23_MOD_RK;
+		M[SPSW] |= SPSW_MOD_RK;
 		RUU &= ~RUU_MOD_RK;
 	}
-
 	PC = 0500;
 	RUU &= ~RUU_RIGHT_INSTR;
-	RUU = SET_SUPERVISOR (RUU, M23_INTERRUPT);
+	RUU = SET_SUPERVISOR (RUU, SPSW_INTERRUPT);
 }
 
-/* ОпПр1, ТО ч.9, стр. 119 */
+/*
+ * ОпПр1, ТО ч.9, стр. 119
+ */
 void OpInt2 ()
 {
-	M[23] = (M[17] & (M17_INTR_DISABLE | M17_MMAP_DISABLE |
-		M17_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
-	M[27] = PC;
-	M[17] |= M17_INTR_DISABLE | M17_MMAP_DISABLE | M17_PROT_DISABLE;
+	M[SPSW] = (M[PSW] & (PSW_INTR_DISABLE | PSW_MMAP_DISABLE |
+		PSW_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
+	M[IRET] = PC;
+	M[PSW] |= PSW_INTR_DISABLE | PSW_MMAP_DISABLE | PSW_PROT_DISABLE;
 	if (RUU & RUU_MOD_RK) {
-		M[23] |= M23_MOD_RK;
+		M[SPSW] |= SPSW_MOD_RK;
 		RUU &= ~RUU_MOD_RK;
 	}
 	PC = 0501;
 	RUU &= ~RUU_RIGHT_INSTR;
-	RUU = SET_SUPERVISOR (RUU, M23_INTERRUPT);
-}
-
-void IllegalInsn ()
-{
-	OpInt1();
-	// M23_NEXT_RK is not important for this interrupt
-	GRP |= GRP_ILL_INSN;
-}
-
-void InsnCheck ()
-{
-	OpInt1();
-	// M23_NEXT_RK must be 0 for this interrupt; it is already
-	GRP |= GRP_INSN_CHECK;
-}
-
-void InsnProt ()
-{
-	OpInt1();
-	// M23_NEXT_RK must be 1 for this interrupt
-	M[23] |= M23_NEXT_RK;
-	GRP |= GRP_INSN_PROT;
-}
-
-void OperProt ()
-{
-	OpInt1();
-	// M23_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
-	GRP |= GRP_OPRND_PROT;
+	RUU = SET_SUPERVISOR (RUU, SPSW_INTERRUPT);
 }
 
 /*
@@ -1121,27 +1129,36 @@ t_stat sim_instr (void)
 	r = setjmp (cpu_halt);
 	if (r) {
 		if (sim_deb && cpu_dev.dctrl) {
-			fprintf (sim_deb, "*** %05o%s: %s\n", PC,
+			fprintf (sim_deb, "/// %05o%s: %s\n", PC,
 				(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
 				sim_stop_messages [r]);
 		}
-		M[15] += corr_stack;
+		M[017] += corr_stack;
 		switch (r) {
 		case STOP_STOP:				/* STOP insn */
 		case STOP_IBKPT:			/* breakpoint req */
 		case STOP_RUNOUT:			/* must not happen */
 			return r;
 		case STOP_BADCMD:
-			IllegalInsn();
+			OpInt1();
+			// SPSW_NEXT_RK is not important for this interrupt
+			GRP |= GRP_ILL_INSN;
 			break;
 		case STOP_INSN_CHECK:
-			InsnCheck();
+			OpInt1();
+			// SPSW_NEXT_RK must be 0 for this interrupt; it is already
+			GRP |= GRP_INSN_CHECK;
 			break;
 		case STOP_INSN_PROT:
-			InsnProt();
+			OpInt1();
+			// SPSW_NEXT_RK must be 1 for this interrupt
+			M[SPSW] |= SPSW_NEXT_RK;
+			GRP |= GRP_INSN_PROT;
 			break;
 		case STOP_OPERAND_PROT:
-			OperProt();
+			OpInt1();
+			// SPSW_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
+			GRP |= GRP_OPRND_PROT;
 			break;
 		}
 		iintr = 1;
@@ -1165,7 +1182,7 @@ t_stat sim_instr (void)
 		}
 
 		if (! iintr && ! (RUU & RUU_RIGHT_INSTR) &&
-		    ! (M[17] & M17_INTR_DISABLE) && (GRP & MGRP)) {
+		    ! (M[PSW] & PSW_INTR_DISABLE) && (GRP & MGRP)) {
 			/* external interrupt */
 			OpInt2();
 		}

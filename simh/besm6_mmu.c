@@ -145,14 +145,14 @@ static unsigned lose_mask[8] = {
 void mmu_protection_check (int addr)
 {
 	/* Защита блокируется в режиме супервизора для адресов 1-7 */
-	int tmp_prot_disabled = (M[17] & M17_PROT_DISABLE) ||
+	int tmp_prot_disabled = (M[PSW] & PSW_PROT_DISABLE) ||
 		(IS_SUPERVISOR (RUU) && addr < 010);
 
 	/* Защита не заблокирована, а лист закрыт */
 	if (! tmp_prot_disabled && (RZ & (1 << (addr >> 10)))) {
 		iintr_data = addr >> 10;
 		if (sim_deb && cpu_dev.dctrl) {
-			fprintf (sim_deb, "*** %05o: защита числа\n", addr);
+			fprintf (sim_deb, "??? %05o: защита числа\n", addr);
 		}
 		longjmp (cpu_halt, STOP_OPERAND_PROT);
 	}
@@ -173,7 +173,7 @@ void mmu_store (int addr, t_value val)
 	mmu_protection_check (addr);
 
 	/* Различаем адреса с припиской и без */
-	if (M[17] & M17_MMAP_DISABLE)
+	if (M[PSW] & PSW_MMAP_DISABLE)
 		addr |= 0100000;
 	for (i = 0; i < 8; ++i) {
 		if (loses_to_all (i)) oldest = i;
@@ -217,7 +217,7 @@ t_value mmu_load (int addr)
 	mmu_protection_check (addr);
 
 	/* Различаем адреса с припиской и без */
-	if (M[17] & M17_MMAP_DISABLE)
+	if (M[PSW] & PSW_MMAP_DISABLE)
 		addr |= 0100000;
 	for (i = 0; i < 8; ++i) {
 		if (addr == BAZ[i]) {
@@ -240,7 +240,7 @@ t_value mmu_load (int addr)
 		if (! IS_NUMBER (val)) {
 			iintr_data = addr & 7;
 			if (sim_deb && cpu_dev.dctrl) {
-				fprintf (sim_deb, "*** %05o: контроль числа\n",
+				fprintf (sim_deb, "??? %05o: контроль числа\n",
 					addr);
 			}
 			longjmp (cpu_halt, STOP_RAM_CHECK);
@@ -250,7 +250,7 @@ t_value mmu_load (int addr)
 		if (! IS_NUMBER (val)) {
 			iintr_data = matching;
 			if (sim_deb && cpu_dev.dctrl) {
-				fprintf (sim_deb, "*** %05o: контроль числа БРЗ\n",
+				fprintf (sim_deb, "??? %05o: контроль числа БРЗ\n",
 					addr);
 			}
 			longjmp (cpu_halt, STOP_CACHE_CHECK);
@@ -273,7 +273,7 @@ t_value mmu_fetch (int addr)
 		if (IS_SUPERVISOR (RUU))
 			return 0;
 		if (sim_deb && cpu_dev.dctrl) {
-			fprintf (sim_deb, "*** передача управления на 0\n");
+			fprintf (sim_deb, "??? передача управления на 0\n");
 		}
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
@@ -293,7 +293,7 @@ t_value mmu_fetch (int addr)
 		if (page == 0) {
 			iintr_data = addr >> 10;
 			if (sim_deb && cpu_dev.dctrl) {
-				fprintf (sim_deb, "*** %05o: защита команды\n",
+				fprintf (sim_deb, "??? %05o: защита команды\n",
 					addr);
 			}
 			longjmp (cpu_halt, STOP_INSN_PROT);
@@ -307,7 +307,7 @@ t_value mmu_fetch (int addr)
 
 	if (! IS_INSN (val)) {
 		if (sim_deb && cpu_dev.dctrl) {
-			fprintf (sim_deb, "*** %05o: контроль команды\n",
+			fprintf (sim_deb, "??? %05o: контроль команды\n",
 				addr);
 		}
 		longjmp (cpu_halt, STOP_INSN_CHECK);
