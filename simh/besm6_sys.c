@@ -330,12 +330,17 @@ t_stat fprint_sym (FILE *of, t_addr addr, t_value *val,
 
 	cmd = val[0];
 
+
 	if (sw & SWMASK ('M')) {			/* symbolic decode? */
+		if (sw & SIM_SW_STOP && addr == PC && !(RUU & RUU_RIGHT_INSTR))
+			fprintf (of, "-> ");
 		besm6_fprint_cmd (of, cmd >> 24);
 		if (sw & SIM_SW_STOP) 			/* stop point */
 			fprintf (of, ", ");
 		else
 			fprintf (of, ",\n\t");
+		if (sw & SIM_SW_STOP && addr == PC && (RUU & RUU_RIGHT_INSTR))
+			fprintf (of, "-> ");
 		besm6_fprint_cmd (of, cmd & BITS24);
 
 	} else if (sw & SWMASK ('I')) {
