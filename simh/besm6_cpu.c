@@ -792,12 +792,8 @@ mtj:			M[addr & 0x1f] = M[reg];
 			break;
 		default:
 			/* Неиспользуемые адреса */
-			if (sim_deb && cpu_dev.dctrl) {
-				fprintf (sim_deb, "*** %05o%s: ", PC,
-					(RUU & RUU_RIGHT_INSTR) ? "п" : "л");
-				besm6_fprint_cmd (sim_deb, RK);
-				fprintf (sim_deb, ": неправильный адрес спец.регистра\n");
-			}
+			besm6_debug ("*** %05o%s: РЕГ %o - неправильный адрес спец.регистра",
+				PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", n);
 			break;
 		}
 		/* Режим АУ - логический, если операция была "чтение" */
@@ -1128,11 +1124,10 @@ t_stat sim_instr (void)
 	/* An internal interrupt or user intervention */
 	r = setjmp (cpu_halt);
 	if (r) {
-		if (sim_deb && cpu_dev.dctrl) {
-			fprintf (sim_deb, "/// %05o%s: %s\n", PC,
-				(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
-				sim_stop_messages [r]);
-		}
+		besm6_debug ("/// %05o%s: %s", PC,
+			(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
+			sim_stop_messages [r]);
+
 		M[017] += corr_stack;
 		switch (r) {
 		case STOP_STOP:				/* STOP insn */
