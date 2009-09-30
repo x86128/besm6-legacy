@@ -197,6 +197,17 @@ char *besm6_parse_octal (char *cptr, int *offset)
 	return eptr;
 }
 
+static char *get_alnum (char *iptr, char *optr)
+{
+	while ((*iptr >= 'a' && *iptr<='z') ||
+	    (*iptr >= 'A' && *iptr<='Z') ||
+	    (*iptr >= '0' && *iptr<='9') || (*iptr & 0x80)) {
+		*optr++ = *iptr++;
+	}
+	*optr = 0;
+	return iptr;
+}
+
 /*
  * Parse single instruction (half word).
  * Allow mnemonics or octal code.
@@ -239,7 +250,7 @@ char *parse_instruction (char *cptr, uint32 *val)
 		}
 	} else {
 		/* Мнемоническое представление команды. */
-		cptr = get_glyph (cptr, gbuf, 0);	/* get opcode */
+		cptr = get_alnum (cptr, gbuf);		/* get opcode */
 		opcode = besm6_opcode (gbuf);
 		if (opcode < 0) {
 			/*printf ("Bad opname: %s\n", gbuf);*/
@@ -261,9 +272,13 @@ char *parse_instruction (char *cptr, uint32 *val)
 			}
 			if (negate)
 				addr = (- addr) & BITS15;
-			if (opcode <= 077 && addr > BITS12 && addr < 070000) {
-				/*printf ("Bad short address: %o\n", addr);*/
-				return 0;
+			if (opcode <= 077 && addr > BITS12) {
+				if (addr < 070000) {
+					/*printf ("Bad short address: %o\n", addr);*/
+					return 0;
+				}
+				opcode |= 0100;
+				addr &= BITS12;
 			}
 		}
 		reg = 0;

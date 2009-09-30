@@ -151,7 +151,7 @@ void mmu_protection_check (int addr)
 	/* Защита не заблокирована, а лист закрыт */
 	if (! tmp_prot_disabled && (RZ & (1 << (addr >> 10)))) {
 		iintr_data = addr >> 10;
-		besm6_debug ("??? %05o: защита числа", addr);
+		besm6_debug ("--- %05o: защита числа", addr);
 		longjmp (cpu_halt, STOP_OPERAND_PROT);
 	}
 }
@@ -167,6 +167,8 @@ void mmu_store (int addr, t_value val)
 	addr &= BITS15;
 	if (addr == 0)
 		return;
+	if (sim_log && mmu_dev.dctrl)
+		fprintf (sim_log, "--- %05o: запись %016llo\n", addr, val);
 
 	mmu_protection_check (addr);
 
@@ -234,17 +236,23 @@ t_value mmu_load (int addr)
 			/* С тумблерных регистров */
 			val = pult[addr];
 		}
+		if (sim_log && mmu_dev.dctrl)
+			fprintf (sim_log, "--- %05o: чтение %016llo\n",
+				addr & BITS15, val & WORD);
 
 		if (! IS_NUMBER (val)) {
 			iintr_data = addr & 7;
-			besm6_debug ("??? %05o: контроль числа", addr);
+			besm6_debug ("--- %05o: контроль числа", addr);
 			longjmp (cpu_halt, STOP_RAM_CHECK);
 		}
 	} else {
 		val = BRZ[matching];
+		if (sim_log && mmu_dev.dctrl)
+			fprintf (sim_log, "--- %05o: чтение %016llo из БРЗ\n",
+				addr & BITS15, val & WORD);
 		if (! IS_NUMBER (val)) {
 			iintr_data = matching;
-			besm6_debug ("??? %05o: контроль числа БРЗ", addr);
+			besm6_debug ("--- %05o: контроль числа БРЗ", addr);
 			longjmp (cpu_halt, STOP_CACHE_CHECK);
 		}
 	}
@@ -264,7 +272,7 @@ t_value mmu_fetch (int addr)
 		 */
 		if (IS_SUPERVISOR (RUU))
 			return 0;
-		besm6_debug ("??? передача управления на 0");
+		besm6_debug ("--- передача управления на 0");
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 
@@ -282,7 +290,7 @@ t_value mmu_fetch (int addr)
 		 */
 		if (page == 0) {
 			iintr_data = addr >> 10;
-			besm6_debug ("??? %05o: защита команды", addr);
+			besm6_debug ("--- %05o: защита команды", addr);
 			longjmp (cpu_halt, STOP_INSN_PROT);
 		}
 
@@ -291,9 +299,12 @@ t_value mmu_fetch (int addr)
 
 		val = memory[addr];
 	}
+	if (sim_log && mmu_dev.dctrl)
+		fprintf (sim_log, "--- %05o: выборка %016llo\n",
+			addr, val & WORD);
 
 	if (! IS_INSN (val)) {
-		besm6_debug ("??? %05o: контроль команды", addr);
+		besm6_debug ("--- %05o: контроль команды", addr);
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 	return val & WORD;
