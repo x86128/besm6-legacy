@@ -378,6 +378,239 @@ utf8_putc (unsigned ch, FILE *fout)
 	putc ((ch & 0x3f) | 0x80, fout);
 }
 
+static void cmd_002 ()
+{
+	uint32 n;
+
+	n = Aex & 0377;
+	switch (n) {
+	case 0 ... 7:
+		mmu_setcache (n, ACC);
+		break;
+	case 020 ... 027:
+		/* Запись в регистры приписки */
+		mmu_setrp (n & 7, ACC);
+		break;
+	case 030 ... 033:
+		/* Запись в регистры защиты */
+		mmu_setprotection (n & 3, ACC);
+		break;
+	case 036:
+		/* Запись в маску главного регистра прерываний */
+		MGRP = ACC;
+		break;
+	case 037:
+		/* Гашение главного регистра прерываний */
+		/* нехранящие биты невозможно погасить */
+		GRP &= ACC | GRP_WIRED_BITS;
+		break;
+	case 0100 ... 0137:
+		/* Бит 1: управление блокировкой режима останова БРО.
+		 * Биты 2 и 3 - признаки формирования контрольных
+		 * разрядов (ПКП и ПКЛ). */
+		if (n & 1)
+			RUU |= RUU_AVOST_DISABLE;
+		else
+			RUU &= ~RUU_AVOST_DISABLE;
+		if (n & 2)
+			RUU |= RUU_CONVOL_RIGHT;
+		else
+			RUU &= ~RUU_CONVOL_RIGHT;
+		if (n & 4)
+			RUU |= RUU_CONVOL_LEFT;
+		else
+			RUU &= ~RUU_CONVOL_LEFT;
+		break;
+	case 0140 ... 0177:
+		/* TODO: управление блокировкой схемы
+		 * автоматического запуска */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0200 ... 0207:
+		/* Чтение БРЗ */
+		ACC = mmu_getcache (n & 7);
+		acc = toalu (ACC);
+		break;
+	case 0237:
+		/* Чтение главного регистра прерываний */
+		acc = toalu (GRP);
+		break;
+	default:
+		/* Неиспользуемые адреса */
+		besm6_debug ("*** %05o%s: РЕГ %o - неправильный адрес спец.регистра",
+			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", n);
+		break;
+	}
+}
+
+static void cmd_033 ()
+{
+	uint32 n;
+
+	n = Aex & 04177;
+	switch (n) {
+	case 1 ... 2:
+		/* TODO: управление обменом с магнитными барабанами */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 3 ... 7:
+		/* TODO: управление обменом с магнитными лентами */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 010 ... 013:
+		/* TODO: управление устройствами ввода с перфоленты */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 014 ... 015:
+		/* TODO: управление АЦПУ */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 030:
+		/* гашение ПРП */
+		PRP &= ACC | PRP_WIRED_BITS;
+		PRP2GRP;
+		break;
+	case 031:
+		/* TODO: имитация сигналов прерывания ГРП */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 032 ... 033:
+		/* TODO: имитация сигналов из КМБ в КВУ */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 034:
+		/* запись в МПРП */
+		MPRP = ACC & 077777777;
+		PRP2GRP;
+		break;
+	case 035:
+		/* TODO: управление режимом имитации обмена
+		 * с МБ и МЛ, имитация обмена */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 040 ... 057:
+		/* TODO: управление молоточками АЦПУ */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0100 ... 0137:
+		/* TODO: управление лентопротяжными механизмами
+		 * и гашение разрядов регистров признаков
+		 * окончания подвода зоны */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0140:
+		/* TODO: запись в регистр телеграфных каналов */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0141:
+		/* TODO: управление разметкой магнитной ленты */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0142:
+		/* TODO: имитация сигналов прерывания ПРП */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0147:
+		/* TODO: запись в регистр управления электропитанием */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0150 ... 0151:
+		/* TODO: управление вводом с перфокарт */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0154 ... 0155:
+		/* TODO: управление выводом на перфокарты */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0160 ... 0167:
+		/* TODO: управление электромагнитами пробивки перфокарт */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0170 ... 0171:
+		/* TODO: пробивка строки на перфоленте */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 0174:
+		/* TODO: выдача кода в пульт оператора */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04001 ... 04003:
+		/* TODO: считывание слога в режиме имитации обмена */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04006:
+		/* TODO: считывание строки с устройства ввода
+		 * с перфоленты в запаянной программе */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04007:
+		/* TODO: опрос синхроимпульса ненулевой строки
+		 * в запаянной программе ввода с перфоленты */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04014 ... 04017:
+		/* TODO: считывание строки с устройства
+		 * ввода с перфоленты */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04020 ... 04023:
+		/* TODO: считывание слога в режиме имитации
+		 * внешнего обмена */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04030:
+		/* чтение старшей половины ПРП */
+		acc = toalu (PRP & 077770000);
+		break;
+	case 04031:
+		/* TODO: опрос сигналов готовности (АЦПУ и пр.) */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04034:
+		/* чтение младшей половины ПРП */
+		acc = toalu (PRP & 07777 | 0377);
+		break;
+	case 04035:
+		/* TODO: опрос схем контроля внешнего обмена */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04100:
+		/* TODO: опрос телеграфных каналов связи */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04102:
+		/* TODO: опрос сигналов готовности
+		 * перфокарт и перфолент */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04103 ... 04106:
+		/* TODO: опрос состояния лентопротяжных механизмов */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04107:
+		/* TODO: опрос схемы контроля записи на МЛ */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04140 ... 04157:
+		/* TODO: считывание строки перфокарты */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04160 ... 04167:
+		/* TODO: контрольное считывание строки перфокарты */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04170 ... 04173:
+		/* TODO: считывание контрольного кода
+		 * строки перфоленты */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	case 04174:
+		/* TODO: считывание кода с пульта оператора */
+		longjmp (cpu_halt, STOP_BADCMD);
+		break;
+	}
+}
+
 uinstr_t unpack (t_value rk)
 {
 	uinstr_t ui;
@@ -407,6 +640,212 @@ alureg_t toalu (t_value val)
 t_value fromalu (alureg_t reg)
 {
         return (t_value) reg.l << 24 | reg.r;
+}
+
+static void normalize_and_round ()
+{
+	uint32 rr = 0;
+	int i, r;
+
+	switch ((acc.ml >> 16) & 3) {
+	case 2:
+	case 1:
+		rnd_rq |= acc.mr & 1;
+		accex.mr = (accex.mr >> 1) | (accex.ml << 23);
+		accex.ml = (accex.ml >> 1) | (acc.mr << 15);
+		acc.mr = (acc.mr >> 1) | (acc.ml << 23);
+		acc.ml >>= 1;
+		++acc.o;
+		goto chk_rnd;
+	}
+
+	if (RAU & RAU_NORM_DISABLE)
+		goto chk_rnd;
+	i = (acc.ml >> 15) & 3;
+	if (i == 0) {
+		if ((r = acc.ml & 0xffff)) {
+			int cnt;
+			for (cnt = 0; (r & 0x8000) == 0;
+						++cnt, r <<= 1);
+			acc.ml = (r & 0xffff) |
+					(acc.mr >> (24 - cnt));
+			acc.mr = (acc.mr << cnt) |
+					(rr = accex.ml >> (16 - cnt));
+			accex.ml = (accex.ml << cnt) |
+					(accex.mr >> (24 - cnt));
+			accex.mr <<= cnt;
+			acc.o -= cnt;
+			goto chk_zero;
+		}
+		if ((r = acc.mr >> 16)) {
+			int     cnt, fcnt;
+			for (cnt = 0; (r & 0x80) == 0;
+						++cnt, r <<= 1);
+			acc.ml = acc.mr >> (8 - cnt);
+			acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
+					(accex.ml << cnt) |
+					(accex.mr >> (24 - cnt));
+			accex.mr <<= fcnt;
+			acc.o -= fcnt;
+			rr = acc.r & ((1l << fcnt) - 1);
+			goto chk_zero;
+		}
+		if ((r = acc.mr & 0xffff)) {
+			int cnt;
+			for (cnt = 0; (r & 0x8000) == 0;
+						++cnt, r <<= 1);
+			acc.ml = (r & 0xffff) |
+					(accex.ml >> (16 - cnt));
+			acc.mr = (accex.ml << (8 + cnt)) |
+					(accex.mr >> (16 - cnt));
+			accex.ml = accex.mr << cnt;
+			accex.mr = 0;
+			acc.o -= 24 + cnt;
+			rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
+			goto chk_zero;
+		}
+		if ((r = accex.ml & 0xffff)) {
+			int cnt;
+			rr = accex.ml | accex.mr;
+			for (cnt = 0; (r & 0x8000) == 0;
+						++cnt, r <<= 1);
+			acc.ml = (r & 0xffff) |
+					(accex.mr >> (24 - cnt));
+			acc.mr = (accex.mr << cnt);
+			accex.ml = accex.mr = 0;
+			acc.o -= 40 + cnt;
+			goto chk_zero;
+		}
+		if ((r = accex.mr >> 16)) {
+			int cnt;
+			rr = accex.ml | accex.mr;
+			for (cnt = 0; (r & 0x80) == 0;
+						++cnt, r <<= 1);
+			acc.ml = accex.mr >> (8 - cnt);
+			acc.mr = accex.mr << (16 + cnt);
+			accex.ml = accex.mr = 0;
+			acc.o -= 56 + cnt;
+			goto chk_zero;
+		}
+		if ((r = accex.mr & 0xffff)) {
+			int cnt;
+			rr = accex.ml | accex.mr;
+			for (cnt = 0; (r & 0x8000) == 0;
+						++cnt, r <<= 1);
+			acc.ml = (r & 0xffff);
+			acc.mr = accex.ml = accex.mr = 0;
+			acc.o -= 64 + cnt;
+			goto chk_zero;
+		}
+		goto zero;
+	} else if (i == 3) {
+		if ((r = ~acc.ml & 0xffff)) {
+			int cnt;
+			for (cnt = 0; (r & 0x8000) == 0;
+						++cnt, r = (r << 1) | 1);
+			acc.ml = 0x10000 | (~r & 0xffff) |
+					(acc.mr >> (24 - cnt));
+			acc.mr = (acc.mr << cnt) |
+					(rr = accex.ml >> (16 - cnt));
+			accex.ml = ((accex.ml << cnt) |
+					(accex.mr >> (24 - cnt)))
+					& 0xffff;
+			accex.mr <<= cnt;
+			acc.o -= cnt;
+			goto chk_zero;
+		}
+		if ((r = (~acc.mr >> 16) & 0xff)) {
+			int     cnt, fcnt;
+			for (cnt = 0; (r & 0x80) == 0;
+						++cnt, r = (r << 1) | 1);
+			acc.ml = 0x10000 | (acc.mr >> (8 - cnt));
+			acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
+					(accex.ml << cnt) |
+					(accex.mr >> (24 - cnt));
+			accex.ml = ((accex.ml << fcnt) |
+					(accex.mr >> (8 - cnt)))
+					& 0xffff;
+			accex.mr <<= fcnt;
+			acc.o -= fcnt;
+			rr = acc.r & ((1l << fcnt) - 1);
+			goto chk_zero;
+		}
+		if ((r = ~acc.mr & 0xffff)) {
+			int cnt;
+			for (cnt = 0; (r & 0x8000) == 0;
+						++cnt, r = (r << 1) | 1);
+			acc.ml = 0x10000 | (~r & 0xffff) |
+					(accex.ml >> (16 - cnt));
+			acc.mr = (accex.ml << (8 + cnt)) |
+					(accex.mr >> (16 - cnt));
+			accex.ml = (accex.mr << cnt) & 0xffff;
+			accex.mr = 0;
+			acc.o -= 24 + cnt;
+			rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
+			goto chk_zero;
+		}
+		if ((r = ~accex.ml & 0xffff)) {
+			int cnt;
+			rr = accex.ml | accex.mr;
+			for (cnt = 0; (r & 0x8000) == 0;
+						++cnt, r = (r << 1) | 1);
+			acc.ml = 0x10000 | (~r & 0xffff) |
+					(accex.mr >> (24 - cnt));
+			acc.mr = (accex.mr << cnt);
+			accex.ml = accex.mr = 0;
+			acc.o -= 40 + cnt;
+			goto chk_zero;
+		}
+		if ((r = (~accex.mr >> 16) & 0xff)) {
+			int cnt;
+			rr = accex.ml | accex.mr;
+			for (cnt = 0; (r & 0x80) == 0;
+						++cnt, r = (r << 1) | 1);
+			acc.ml = 0x10000 | (accex.mr >> (8 - cnt));
+			acc.mr = accex.mr << (16 + cnt);
+			accex.ml = accex.mr = 0;
+			acc.o -= 56 + cnt;
+			goto chk_zero;
+		}
+		if ((r = ~accex.mr & 0xffff)) {
+			int cnt;
+			rr = accex.ml | accex.mr;
+			for (cnt = 0; (r & 0x8000) == 0;
+						++cnt, r = (r << 1) | 1);
+			acc.ml = 0x10000 | (~r & 0xffff);
+			acc.mr = accex.ml = accex.mr = 0;
+			acc.o -= 64 + cnt;
+			goto chk_zero;
+		} else {
+			rr = 1;
+			acc.ml = 0x10000;
+			acc.mr = accex.ml = accex.mr = 0;
+			acc.o -= 80;
+			goto chk_zero;
+		}
+	}
+chk_zero:
+	rnd_rq = rnd_rq && !rr;
+chk_rnd:
+	if (acc.o & 0x8000)
+		goto zero;
+	if (acc.o & 0x80) {
+		acc.o = 0;
+		if (! (RAU & RAU_OVF_DISABLE))
+			longjmp (cpu_halt, STOP_OVFL);
+	}
+	if (! (RAU & RAU_ROUND_DISABLE) && rnd_rq)
+		acc.mr |= 1;
+
+	if (!acc.ml && !acc.mr && ! (RAU & RAU_NORM_DISABLE)) {
+zero:		acc.l = acc.r = accex.l = accex.r = 0;
+		return;
+	}
+	acc.l = ((uint32) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
+	acc.r = acc.mr & 0xffffff;
+
+	accex.l = ((uint32) (accex.o & 0x7f) << 17) | (accex.ml & 0x1ffff);
+	accex.r = accex.mr & 0xffffff;
 }
 
 /*
@@ -737,67 +1176,9 @@ mtj:			M[addr & 0x1f] = M[reg];
 		Aex = ADDR (addr + M[reg]);
 		if (! IS_SUPERVISOR (RUU))
 			longjmp (cpu_halt, STOP_BADCMD);
-		n = Aex & 0377;
-		switch (n) {
-		case 0 ... 7:
-			mmu_setcache (n, ACC);
-			break;
-		case 020 ... 027:
-			/* Запись в регистры приписки */
-			mmu_setrp (n & 7, ACC);
-			break;
-		case 030 ... 033:
-			/* Запись в регистры защиты */
-			mmu_setprotection (n & 3, ACC);
-			break;
-		case 036:
-			/* Запись в маску главного регистра прерываний */
-			MGRP = ACC;
-			break;
-		case 037:
-			/* Гашение главного регистра прерываний */
-			/* нехранящие биты невозможно погасить */
-			GRP &= ACC | GRP_WIRED_BITS;
-			break;
-		case 0100 ... 0137:
-			/* Бит 1: управление блокировкой режима останова БРО.
-			 * Биты 2 и 3 - признаки формирования контрольных
-			 * разрядов (ПКП и ПКЛ). */
-			if (n & 1)
-				RUU |= RUU_AVOST_DISABLE;
-			else
-				RUU &= ~RUU_AVOST_DISABLE;
-			if (n & 2)
-				RUU |= RUU_CONVOL_RIGHT;
-			else
-				RUU &= ~RUU_CONVOL_RIGHT;
-			if (n & 4)
-				RUU |= RUU_CONVOL_LEFT;
-			else
-				RUU &= ~RUU_CONVOL_LEFT;
-			break;
-		case 0140 ... 0177:
-			/* TODO: управление блокировкой схемы
-			 * автоматического запуска */
-			longjmp (cpu_halt, STOP_BADCMD);
-			break;
-		case 0200 ... 0207:
-			/* Чтение БРЗ */
-			ACC = mmu_getcache (n & 7);
-			acc=toalu(ACC);
-			break;
-		case 0237:
-			/* Чтение главного регистра прерываний */
-			acc=toalu(GRP);
-			break;
-		default:
-			/* Неиспользуемые адреса */
-			besm6_debug ("*** %05o%s: РЕГ %o - неправильный адрес спец.регистра",
-				PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", n);
-			break;
-		}
+		cmd_002 ();
 		/* Режим АУ - логический, если операция была "чтение" */
-		if (n & 0200)
+		if (Aex & 0200)
 			RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (3, 3);
 		break;
@@ -805,29 +1186,9 @@ mtj:			M[addr & 0x1f] = M[reg];
 		Aex = ADDR (addr + M[reg]);
 		if (! IS_SUPERVISOR (RUU))
 			longjmp (cpu_halt, STOP_BADCMD);
-		n = Aex & 07777;
-		switch (n) {
-			case 0030:
-				/* гашение ПРП */
-				PRP &= ACC | PRP_WIRED_BITS;
-				PRP2GRP;
-				break;
-			case 0034:
-				/* запись в МПРП */
-				MPRP = ACC & 077777777;
-				PRP2GRP;
-				break;
-			case 04030:
-				/* чтение старшей половины ПРП */
-				acc = toalu(PRP & 077770000);
-				break;
-			case 04034:
-				/* чтение младшей половины ПРП */
-				acc = toalu(PRP & 07777 | 0377);
-				break;
-		}
+		cmd_033 ();
 		/* Режим АУ - логический, если операция была "чтение" */
-		if (n & 04000)
+		if (Aex & 04000)
 			RAU = SET_LOGICAL (RAU);
 		break;
 	default:
@@ -851,207 +1212,7 @@ mtj:			M[addr & 0x1f] = M[reg];
 		RAU = SET_MODE (RAU, 1<<(i+1));
 
 	if (op.o_flags & F_AR) {
-		uint32 rr = 0;
-		switch ((acc.ml >> 16) & 3) {
-		case 2:
-		case 1:
-			rnd_rq |= acc.mr & 1;
-			accex.mr = (accex.mr >> 1) | (accex.ml << 23);
-			accex.ml = (accex.ml >> 1) | (acc.mr << 15);
-			acc.mr = (acc.mr >> 1) | (acc.ml << 23);
-			acc.ml >>= 1;
-			++acc.o;
-			goto chk_rnd;
-		}
-
-		if (RAU & RAU_NORM_DISABLE)
-			goto chk_rnd;
-		if (!(i = (acc.ml >> 15) & 3)) {
-			if ((r = acc.ml & 0xffff)) {
-				int cnt;
-				for (cnt = 0; (r & 0x8000) == 0;
-							++cnt, r <<= 1);
-				acc.ml = (r & 0xffff) |
-						(acc.mr >> (24 - cnt));
-				acc.mr = (acc.mr << cnt) |
-						(rr = accex.ml >> (16 - cnt));
-				accex.ml = (accex.ml << cnt) |
-						(accex.mr >> (24 - cnt));
-				accex.mr <<= cnt;
-				acc.o -= cnt;
-				goto chk_zero;
-			}
-			if ((r = acc.mr >> 16)) {
-				int     cnt, fcnt;
-				for (cnt = 0; (r & 0x80) == 0;
-							++cnt, r <<= 1);
-				acc.ml = acc.mr >> (8 - cnt);
-				acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
-						(accex.ml << cnt) |
-						(accex.mr >> (24 - cnt));
-				accex.mr <<= fcnt;
-				acc.o -= fcnt;
-				rr = acc.r & ((1l << fcnt) - 1);
-				goto chk_zero;
-			}
-			if ((r = acc.mr & 0xffff)) {
-				int cnt;
-				for (cnt = 0; (r & 0x8000) == 0;
-							++cnt, r <<= 1);
-				acc.ml = (r & 0xffff) |
-						(accex.ml >> (16 - cnt));
-				acc.mr = (accex.ml << (8 + cnt)) |
-						(accex.mr >> (16 - cnt));
-				accex.ml = accex.mr << cnt;
-				accex.mr = 0;
-				acc.o -= 24 + cnt;
-				rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
-				goto chk_zero;
-			}
-			if ((r = accex.ml & 0xffff)) {
-				int cnt;
-				rr = accex.ml | accex.mr;
-				for (cnt = 0; (r & 0x8000) == 0;
-							++cnt, r <<= 1);
-				acc.ml = (r & 0xffff) |
-						(accex.mr >> (24 - cnt));
-				acc.mr = (accex.mr << cnt);
-				accex.ml = accex.mr = 0;
-				acc.o -= 40 + cnt;
-				goto chk_zero;
-			}
-			if ((r = accex.mr >> 16)) {
-				int cnt;
-				rr = accex.ml | accex.mr;
-				for (cnt = 0; (r & 0x80) == 0;
-							++cnt, r <<= 1);
-				acc.ml = accex.mr >> (8 - cnt);
-				acc.mr = accex.mr << (16 + cnt);
-				accex.ml = accex.mr = 0;
-				acc.o -= 56 + cnt;
-				goto chk_zero;
-			}
-			if ((r = accex.mr & 0xffff)) {
-				int cnt;
-				rr = accex.ml | accex.mr;
-				for (cnt = 0; (r & 0x8000) == 0;
-							++cnt, r <<= 1);
-				acc.ml = (r & 0xffff);
-				acc.mr = accex.ml = accex.mr = 0;
-				acc.o -= 64 + cnt;
-				goto chk_zero;
-			}
-			goto zero;
-		} else if (i == 3) {
-			if ((r = ~acc.ml & 0xffff)) {
-				int cnt;
-				for (cnt = 0; (r & 0x8000) == 0;
-							++cnt, r = (r << 1) | 1);
-				acc.ml = 0x10000 | (~r & 0xffff) |
-						(acc.mr >> (24 - cnt));
-				acc.mr = (acc.mr << cnt) |
-						(rr = accex.ml >> (16 - cnt));
-				accex.ml = ((accex.ml << cnt) |
-						(accex.mr >> (24 - cnt)))
-						& 0xffff;
-				accex.mr <<= cnt;
-				acc.o -= cnt;
-				goto chk_zero;
-			}
-			if ((r = (~acc.mr >> 16) & 0xff)) {
-				int     cnt, fcnt;
-				for (cnt = 0; (r & 0x80) == 0;
-							++cnt, r = (r << 1) | 1);
-				acc.ml = 0x10000 | (acc.mr >> (8 - cnt));
-				acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
-						(accex.ml << cnt) |
-						(accex.mr >> (24 - cnt));
-				accex.ml = ((accex.ml << fcnt) |
-						(accex.mr >> (8 - cnt)))
-						& 0xffff;
-				accex.mr <<= fcnt;
-				acc.o -= fcnt;
-				rr = acc.r & ((1l << fcnt) - 1);
-				goto chk_zero;
-			}
-			if ((r = ~acc.mr & 0xffff)) {
-				int cnt;
-				for (cnt = 0; (r & 0x8000) == 0;
-							++cnt, r = (r << 1) | 1);
-				acc.ml = 0x10000 | (~r & 0xffff) |
-						(accex.ml >> (16 - cnt));
-				acc.mr = (accex.ml << (8 + cnt)) |
-						(accex.mr >> (16 - cnt));
-				accex.ml = (accex.mr << cnt) & 0xffff;
-				accex.mr = 0;
-				acc.o -= 24 + cnt;
-				rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
-				goto chk_zero;
-			}
-			if ((r = ~accex.ml & 0xffff)) {
-				int cnt;
-				rr = accex.ml | accex.mr;
-				for (cnt = 0; (r & 0x8000) == 0;
-							++cnt, r = (r << 1) | 1);
-				acc.ml = 0x10000 | (~r & 0xffff) |
-						(accex.mr >> (24 - cnt));
-				acc.mr = (accex.mr << cnt);
-				accex.ml = accex.mr = 0;
-				acc.o -= 40 + cnt;
-				goto chk_zero;
-			}
-			if ((r = (~accex.mr >> 16) & 0xff)) {
-				int cnt;
-				rr = accex.ml | accex.mr;
-				for (cnt = 0; (r & 0x80) == 0;
-							++cnt, r = (r << 1) | 1);
-				acc.ml = 0x10000 | (accex.mr >> (8 - cnt));
-				acc.mr = accex.mr << (16 + cnt);
-				accex.ml = accex.mr = 0;
-				acc.o -= 56 + cnt;
-				goto chk_zero;
-			}
-			if ((r = ~accex.mr & 0xffff)) {
-				int cnt;
-				rr = accex.ml | accex.mr;
-				for (cnt = 0; (r & 0x8000) == 0;
-							++cnt, r = (r << 1) | 1);
-				acc.ml = 0x10000 | (~r & 0xffff);
-				acc.mr = accex.ml = accex.mr = 0;
-				acc.o -= 64 + cnt;
-				goto chk_zero;
-			} else {
-				rr = 1;
-				acc.ml = 0x10000;
-				acc.mr = accex.ml = accex.mr = 0;
-				acc.o -= 80;
-				goto chk_zero;
-			}
-		}
-chk_zero:
-		rnd_rq = rnd_rq && !rr;
-chk_rnd:
-		if (acc.o & 0x8000)
-			goto zero;
-		if (acc.o & 0x80) {
-			acc.o = 0;
-			if (! (RAU & RAU_OVF_DISABLE))
-				longjmp (cpu_halt, STOP_OVFL);
-		}
-		if (! (RAU & RAU_ROUND_DISABLE) && rnd_rq)
-			acc.mr |= 1;
-
-		if (!acc.ml && !acc.mr && ! (RAU & RAU_NORM_DISABLE)) {
-zero:
-			acc.l = acc.r = accex.l = accex.r = 0;
-			goto done;
-		}
-		acc.l = ((uint32) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
-		acc.r = acc.mr & 0xffffff;
-
-		accex.l = ((uint32) (accex.o & 0x7f) << 17) | (accex.ml & 0x1ffff);
-		accex.r = accex.mr & 0xffffff;
-done:
+		normalize_and_round ();
 		if (op.o_inline == I_YTA)
 			accex = enreg;
 		rnd_rq = 0;
@@ -1191,18 +1352,20 @@ t_stat sim_instr (void)
 	}
 }
 
-t_stat slow_clk(UNIT * this) {
+t_stat slow_clk (UNIT * this)
+{
 	GRP |= GRP_WATCHDOG;
-	sim_activate(this, 80000);
+	sim_activate (this, 80000);
 }
 
 /*
  * В 9-й части частота таймера 250 Гц (4 мс),
  * в жизни - 50 Гц (20 мс).
  */
-t_stat fast_clk(UNIT * this) {
+t_stat fast_clk (UNIT * this)
+{
 	GRP |= GRP_TIMER;
-	sim_activate(this, 20000);
+	sim_activate (this, 20000);
 }
 
 
@@ -1211,12 +1374,11 @@ UNIT clocks[] = {
 	{ UDATA(fast_clk, UNIT_FIX, 0) }
 };
 
-t_stat clk_reset(DEVICE * dev) {
-/*
-	Схема автозапуска включается по нереализованной кнопке "МР"
-	sim_activate(&clocks[0], 80000);
-*/
-	sim_activate(&clocks[1], 20000);
+t_stat clk_reset(DEVICE * dev)
+{
+	/* Схема автозапуска включается по нереализованной кнопке "МР" */
+	/*sim_activate (&clocks[0], 80000);*/
+	sim_activate (&clocks[1], 20000);
 }
 
 DEVICE clock_dev = {
