@@ -1,7 +1,7 @@
 /* sim_readline.c: libreadline wrapper
 
    Written by Philipp Hachtmann
-   
+
    12-MAR-09    PH     Completely rebuilt readline integration
    11-MAR-09    PH     Some corrections to double entry detection
    01-OCT-08    PH     Include stdio.h
@@ -45,8 +45,13 @@ extern char sim_name[];
 static char hist_path_buf[HIST_PATH_BUF_LEN];
 #endif
 
+#ifdef __APPLE__
+#define LIBREADLINE_SO "libreadline.dylib"
+#define LIBHISTORY_SO  "libhistory.dylib"
+#else
 #define LIBREADLINE_SO "libreadline.so.5"
 #define LIBHISTORY_SO  "libhistory.so.5"
+#endif
 
 /* Function pointers to readline and history functions */
 static char *        (*p_readline)       (const char *);
@@ -68,14 +73,14 @@ int sim_readline_start(){
 #endif
 
   initialized=1;
-  
+
   /* Now open the library (history lib comes in trailing readline)  */
   readline_handle=dlopen(LIBREADLINE_SO,RTLD_NOW|RTLD_GLOBAL);
   if (!readline_handle) {
     fprintf(stderr, "Error while loading library: %s\n",dlerror());
     initialized=0;
     return initialized;
-  } 
+  }
 
   p_readline=dlsym(readline_handle,"readline");
   if (!p_readline) {
@@ -137,7 +142,7 @@ int sim_readline_start(){
   for (c=0;c<strlen(fname);c++)
     fname[c]=tolower(fname[c]);
   strcat(fname,"_history");
-  
+
   char * tmp=getenv("HOME");
   hist_path_buf[0]=hist_path_buf[HIST_PATH_BUF_LEN-1]=0;
 
@@ -145,7 +150,7 @@ int sim_readline_start(){
     strncat(hist_path_buf,tmp,HIST_PATH_BUF_LEN-1);
     strncat(hist_path_buf,"/",HIST_PATH_BUF_LEN-1);
   }
-  
+
   strncat(hist_path_buf,fname,HIST_PATH_BUF_LEN-1);
   p_read_history(hist_path_buf);
 
@@ -180,32 +185,32 @@ int sim_readline_stop(){
 char * sim_readline_readline(char *buffer, int32 buffer_size, const char * prompt){
 
    char * newline=NULL;
-   
+
    if (!initialized) return NULL;
- 
+
    newline=p_readline(prompt);
-   
+
    /* Action for EOF */
    if (newline==NULL) return NULL;
-  
+
    /* For security reasons */
-   buffer[buffer_size-1]=0; 
+   buffer[buffer_size-1]=0;
 
    /* Copy the line data to the user-provided buffer */
    strncpy(buffer,newline,buffer_size-1);
-   
+
    free(newline);
- 
+
    /* Add current line to history - And don't add repetitions! */
    if ((strlen(buffer))&&(strncmp("quit",buffer,strlen(buffer))!=0)){
-    
+
      HIST_ENTRY ** the_list=p_history_list();
      int i;
-    
+
      if (the_list) for (i = 0; the_list[i]; i++){
        if (strcmp(buffer,the_list[i]->line)==0){
 	 HIST_ENTRY * entry=p_remove_history(i);
-	 free(entry->line);
+	 free((void*)entry->line);
 	 free(entry);
 	 i--;
 	 the_list = p_history_list();
@@ -216,11 +221,11 @@ char * sim_readline_readline(char *buffer, int32 buffer_size, const char * promp
    }
 
    /* Skip leading whitespace */
-   while(isspace(*buffer)) buffer++;
-  
+   while(*buffer==' ' || *buffer=='\t') buffer++;
+
    /* Make a comment line an empty line */
    if (*buffer == ';') *buffer=0;
-  
+
    /* We're finished here */
    return buffer;
 }
