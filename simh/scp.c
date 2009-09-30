@@ -183,6 +183,10 @@
 #include <signal.h>
 #include <ctype.h>
 
+#ifdef HAVE_READLINE
+#include <sim_readline.h>
+#endif
+
 #define EX_D            0                               /* deposit */
 #define EX_E            1                               /* examine */
 #define EX_I            2                               /* interactive */
@@ -586,6 +590,10 @@ t_bool lookswitch;
 t_stat stat;
 CTAB *cmdp;
 
+#ifdef HAVE_READLINE
+ sim_readline_start();
+#endif
+
 #if defined (__MWERKS__) && defined (macintosh)
 argc = ccommand (&argv);
 #endif
@@ -669,37 +677,53 @@ else if (*argv[0]) {                                    /* sim name arg? */
     }
 
 while (stat != SCPE_EXIT) {                             /* in case exit */
-    printf ("sim> ");                                   /* prompt */
-    if (cptr = sim_brk_getact (cbuf, CBUFSIZE))         /* pending action? */
-        printf ("%s\n", cptr);                          /* echo */
-    else if (sim_vm_read != NULL)                       /* sim routine? */
-        cptr = (*sim_vm_read) (cbuf, CBUFSIZE, stdin);
-    else cptr = read_line (cbuf, CBUFSIZE, stdin);      /* read command line */
-    if (cptr == NULL)                                   /* ignore EOF */
-        continue;
-    if (*cptr == 0)                                     /* ignore blank */
-        continue;
-    if (sim_log)                                        /* log cmd */
-        fprintf (sim_log, "sim> %s\n", cptr);
-    cptr = get_glyph (cptr, gbuf, 0);                   /* get command glyph */
-    sim_switches = 0;                                   /* init switches */
-    if (cmdp = find_cmd (gbuf))                         /* lookup command */
-        stat = cmdp->action (cmdp->arg, cptr);          /* if found, exec */
-    else stat = SCPE_UNK;
-    if (stat >= SCPE_BASE) {                            /* error? */
-        printf ("%s\n", scp_error_messages[stat - SCPE_BASE]);
-        if (sim_log)
-            fprintf (sim_log, "%s\n", scp_error_messages[stat - SCPE_BASE]);
-        }
-    if (sim_vm_post != NULL)
-        (*sim_vm_post) (TRUE);
-    }                                                   /* end while */
+  if (cptr = sim_brk_getact (cbuf, CBUFSIZE))         /* pending action? */
+    printf ("sim> getact  %s\n", cptr);                           /* echo */
+  else if (sim_vm_read != NULL)                       /* sim routine? */
+    cptr = (*sim_vm_read) (cbuf, CBUFSIZE, stdin);
+  else {
 
-detach_all (0, TRUE);                                   /* close files */
-sim_set_deboff (0, NULL);                               /* close debug */
-sim_set_logoff (0, NULL);                               /* close log */
-sim_set_notelnet (0, NULL);                             /* close Telnet */
-sim_ttclose ();                                         /* close console */
+#ifdef HAVE_READLINE
+    cptr = sim_readline_readline(cbuf,CBUFSIZE,"sim>");
+#else
+    printf("sim>");
+    cptr = read_line (cbuf, CBUFSIZE, stdin);          /* read command line */
+#endif
+    if (cptr == NULL){                                 /* ignore EOF */
+      printf("\r");
+      continue;
+    }
+
+    if (*cptr == 0)                                     /* ignore blank */
+      continue;
+  }
+  if (sim_log)                                        /* log cmd */
+    fprintf (sim_log, "sim> %s\n", cptr);
+  cptr = get_glyph (cptr, gbuf, 0);                   /* get command glyph */
+  sim_switches = 0;                                   /* init switches */
+  if (cmdp = find_cmd (gbuf))                         /* lookup command */
+    stat = cmdp->action (cmdp->arg, cptr);          /* if found, exec */
+  else stat = SCPE_UNK;
+  if (stat >= SCPE_BASE) {                            /* error? */
+    printf ("%s\n", scp_error_messages[stat - SCPE_BASE]);
+    if (sim_log)
+      fprintf (sim_log, "%s\n", scp_error_messages[stat - SCPE_BASE]);
+  }
+  if (sim_vm_post != NULL)
+    (*sim_vm_post) (TRUE);
+ }                                                   /* end while */
+
+ detach_all (0, TRUE);                                   /* close files */
+ sim_set_deboff (0, NULL);                               /* close debug */
+ sim_set_logoff (0, NULL);                               /* close log */
+ sim_set_notelnet (0, NULL);                             /* close Telnet */
+ sim_ttclose ();                                         /* close console */
+
+/* Write command history back to file */
+#ifdef HAVE_READLINE
+ sim_readline_stop();
+#endif
+
 return 0;
 }
 
@@ -3374,10 +3398,6 @@ while (isspace (*cptr))                                 /* trim leading spc */
     cptr++;
 if (*cptr == ';') *cptr = 0;                            /* ignore comment */
 
-#if defined (HAVE_READLINE)
-add_history (cptr);
-
-#endif
 return cptr;
 }
 
