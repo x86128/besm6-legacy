@@ -240,7 +240,8 @@ t_value mmu_load (int addr)
 			fprintf (sim_log, "--- %05o: чтение %016llo\n",
 				addr & BITS15, val & WORD);
 
-		if (! IS_NUMBER (val)) {
+		/* На тумблерных регистрах контроля числа не бывает */
+		if (addr >= 010 && ! IS_NUMBER (val)) {
 			iintr_data = addr & 7;
 			besm6_debug ("--- %05o: контроль числа", addr);
 			longjmp (cpu_halt, STOP_RAM_CHECK);
@@ -303,7 +304,8 @@ t_value mmu_fetch (int addr)
 		fprintf (sim_log, "--- %05o: выборка %016llo\n",
 			addr, val & WORD);
 
-	if (! IS_INSN (val)) {
+	/* Тумблерные регистры пока только с командной сверткой */
+	if (addr >= 010 && ! IS_INSN (val)) {
 		besm6_debug ("--- %05o: контроль команды", addr);
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
@@ -317,10 +319,10 @@ void mmu_setrp (int idx, t_value val)
 	/* Младшие 5 разрядов 4-х регистров приписки упакованы
 	 * по 5 в 1-20 рр, 6-е разряды - в 29-32 рр, 7-е разряды - в 33-36 рр
 	 */
-	p0 = val & 037 | (val>>28)&1<<5 | (val>>32)&1<<6;
-	p1 = (val>>5) & 037 | (val>>29)&1<<5 | (val>>33)&1<<6;
-	p2 = (val>>10) & 037 | (val>>30)&1<<5 | (val>>34)&1<<6;
-	p3 = (val>>15) & 037 | (val>>31)&1<<5 | (val>>35)&1<<6;
+	p0 = val & 037 | ((val>>28)&1)<<5 | ((val>>32)&1)<<6;
+	p1 = (val>>5) & 037 | ((val>>29)&1)<<5 | ((val>>33)&1)<<6;
+	p2 = (val>>10) & 037 | ((val>>30)&1)<<5 | ((val>>34)&1)<<6;
+	p3 = (val>>15) & 037 | ((val>>31)&1)<<5 | ((val>>35)&1)<<6;
 	RP[idx] = p0 | p1 << 12 | p2 << 24 | (t_value) p3 << 36;
 	TLB[idx*4] = p0;
 	TLB[idx*4+1] = p1;

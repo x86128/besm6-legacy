@@ -250,36 +250,14 @@ const char *sim_stop_messages[] = {
 	"Точка останова",				/* Breakpoint */
 	"Выход за пределы памяти",			/* Run out end of memory */
 	"Неверный код команды",				/* Invalid instruction */
-	"Контроль команды",
-        "Команда в чужом листе",
-        "Число в чужом листе",
-        "КЧ МОЗУ",
-        "КЧ БРЗ",
-
-/*TODO*/
-	"Переполнение при сложении",			/* Addition overflow */
-	"Переполнение при сложении порядков",		/* Exponent overflow */
-	"Переполнение при умножении",			/* Multiplication overflow */
-	"Переполнение при делении",			/* Division overflow */
-	"Переполнение мантиссы при делении",		/* Division mantissa overflow */
-	"Корень из отрицательного числа",		/* SQRT from negative number */
-	"Ошибка вычисления корня",			/* SQRT error */
-	"Ошибка чтения барабана",			/* Drum read error */
-	"Неверная длина чтения барабана",		/* Invalid drum read length */
-	"Неверная длина записи барабана",		/* Invalid drum write length */
-	"Ошибка записи барабана",			/* Drum write error */
-	"Неверное УЧ для обращения к барабану", 	/* Invalid drum control word */
-	"Чтение неинициализированного барабана", 	/* Reading uninialized drum data */
-	"Неверное УЧ для обращения к ленте",		/* Invalid tape control word */
-	"Неверное УЧ для разметки ленты",		/* Invalid tape format word */
-	"Обмен с магнитной лентой не реализован",	/* Tape not implemented */
-	"Разметка магнитной ленты не реализована",	/* Tape formatting not implemented */
-	"Вывод на перфокарты не реализован",		/* Punch not implemented */
-	"Ввод с перфокарт не реализован",		/* Punch reader not implemented */
-	"Неверное УЧ",					/* Invalid control word */
-	"Неверный аргумент команды",			/* Invalid argument of instruction */
-	"Останов по несовпадению",			/* Assertion failed */
-	"Команда МБ не работает без МА",		/* MB instruction without MA */
+	"Контроль команды",				/* A data-tagged word fetched */
+        "Команда в чужом листе",			/* Paging error during fetch */
+        "Число в чужом листе",				/* Paging error during load/store */
+        "КЧ МОЗУ",					/* RAM parity error */
+        "КЧ БРЗ",					/* Write cache parity error */
+	"Переполнение АУ",				/* Arith. overflow */
+	"Деление на нуль",				/* Division by zero or denorm */
+	"Двойное внутреннее прерывание",		/* SIMH: Double internal interrupt */
 };
 
 /*
@@ -1332,8 +1310,11 @@ t_stat sim_instr (void)
 			GRP = GRP_SET_BLOCK(GRP, iintr_data);
 			break;
 		}
-		iintr = 1;
+		++iintr;
 	}
+
+	if (iintr > 1)
+		return STOP_DOUBLE_INTR;
 
 	/* Main instruction fetch/decode loop */
 	for (;;) {
@@ -1358,6 +1339,8 @@ t_stat sim_instr (void)
 			OpInt2();
 		}
 		cpu_one_inst ();			/* one instr */
+		iintr = 0;
+
 		if (delay < 1)
 			delay = 1;
 		sim_interval -= delay;			/* count down delay */
