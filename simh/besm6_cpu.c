@@ -28,7 +28,7 @@
  */
 #include "besm6_defs.h"
 #include "besm6_optab.h"
-#include "legacy.h"
+#include "besm6_legacy.h"
 #include <math.h>
 #include <float.h>
 #include <unistd.h>
@@ -1292,7 +1292,7 @@ t_stat sim_instr (void)
 		case STOP_OPERAND_PROT:
 			OpInt1();
 			// SPSW_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
-			// The offending virtual page is in bits 5-9 
+			// The offending virtual page is in bits 5-9
 			GRP |= GRP_OPRND_PROT;
 			GRP = GRP_SET_PAGE(GRP, iintr_data);
 			break;

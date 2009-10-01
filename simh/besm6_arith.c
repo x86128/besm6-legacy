@@ -13,7 +13,7 @@
 #include <math.h>
 #include "besm6_defs.h"
 #include "besm6_optab.h"
-#include "legacy.h"
+#include "besm6_legacy.h"
 
 /*
  * 64-bit floating-point value in format of standard IEEE 754.
