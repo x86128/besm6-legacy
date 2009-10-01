@@ -1314,7 +1314,22 @@ t_stat sim_instr (void)
 		case STOP_OPERAND_PROT:
 			OpInt1();
 			// SPSW_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
+			// The offending virtual page is in bits 5-9 
 			GRP |= GRP_OPRND_PROT;
+			GRP = GRP_SET_PAGE(GRP, iintr_data);
+			break;
+		case STOP_RAM_CHECK:
+			OpInt1();
+			// The offending interleaved block # is in bits 1-3.
+			GRP |= GRP_CHECK|GRP_RAM_CHECK;
+			GRP = GRP_SET_BLOCK(GRP, iintr_data);
+			break;
+		case STOP_CACHE_CHECK:
+			OpInt1();
+			// The offending BRZ # is in bits 1-3.
+			GRP |= GRP_CHECK;
+			GRP &= ~GRP_RAM_CHECK;
+			GRP = GRP_SET_BLOCK(GRP, iintr_data);
 			break;
 		}
 		iintr = 1;
