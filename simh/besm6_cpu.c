@@ -253,11 +253,12 @@ const char *sim_stop_messages[] = {
 	"Контроль команды",				/* A data-tagged word fetched */
         "Команда в чужом листе",			/* Paging error during fetch */
         "Число в чужом листе",				/* Paging error during load/store */
-        "КЧ МОЗУ",					/* RAM parity error */
-        "КЧ БРЗ",					/* Write cache parity error */
+        "Контроль числа МОЗУ",				/* RAM parity error */
+        "Контроль числа БРЗ",				/* Write cache parity error */
 	"Переполнение АУ",				/* Arith. overflow */
 	"Деление на нуль",				/* Division by zero or denorm */
 	"Двойное внутреннее прерывание",		/* SIMH: Double internal interrupt */
+	"Чтение неформатированного барабана",		/* Reading unformatted drum */
 };
 
 /*
@@ -358,20 +359,17 @@ utf8_putc (unsigned ch, FILE *fout)
 
 static void cmd_002 ()
 {
-	uint32 n;
-
-	n = Aex & 0377;
-	switch (n) {
+	switch (Aex & 0377) {
 	case 0 ... 7:
-		mmu_setcache (n, ACC);
+		mmu_setcache (Aex, ACC);
 		break;
 	case 020 ... 027:
 		/* Запись в регистры приписки */
-		mmu_setrp (n & 7, ACC);
+		mmu_setrp (Aex & 7, ACC);
 		break;
 	case 030 ... 033:
 		/* Запись в регистры защиты */
-		mmu_setprotection (n & 3, ACC);
+		mmu_setprotection (Aex & 3, ACC);
 		break;
 	case 036:
 		/* Запись в маску главного регистра прерываний */
@@ -386,15 +384,15 @@ static void cmd_002 ()
 		/* Бит 1: управление блокировкой режима останова БРО.
 		 * Биты 2 и 3 - признаки формирования контрольных
 		 * разрядов (ПКП и ПКЛ). */
-		if (n & 1)
+		if (Aex & 1)
 			RUU |= RUU_AVOST_DISABLE;
 		else
 			RUU &= ~RUU_AVOST_DISABLE;
-		if (n & 2)
+		if (Aex & 2)
 			RUU |= RUU_CONVOL_RIGHT;
 		else
 			RUU &= ~RUU_CONVOL_RIGHT;
-		if (n & 4)
+		if (Aex & 4)
 			RUU |= RUU_CONVOL_LEFT;
 		else
 			RUU &= ~RUU_CONVOL_LEFT;
@@ -406,7 +404,7 @@ static void cmd_002 ()
 		break;
 	case 0200 ... 0207:
 		/* Чтение БРЗ */
-		ACC = mmu_getcache (n & 7);
+		ACC = mmu_getcache (Aex & 7);
 		acc = toalu (ACC);
 		break;
 	case 0237:
@@ -416,20 +414,17 @@ static void cmd_002 ()
 	default:
 		/* Неиспользуемые адреса */
 		besm6_debug ("*** %05o%s: РЕГ %o - неправильный адрес спец.регистра",
-			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", n);
+			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", Aex);
 		break;
 	}
 }
 
 static void cmd_033 ()
 {
-	uint32 n;
-
-	n = Aex & 04177;
-	switch (n) {
+	switch (Aex & 04177) {
 	case 1 ... 2:
-		/* TODO: управление обменом с магнитными барабанами */
-		longjmp (cpu_halt, STOP_BADCMD);
+		/* Управление обменом с магнитными барабанами */
+		drum (Aex - 1, (uint32) (ACC & BITS24));
 		break;
 	case 3 ... 7:
 		/* TODO: управление обменом с магнитными лентами */
