@@ -32,10 +32,13 @@
 /*
  * Параметры обмена с внешним устройством.
  */
-int drum_op;			/* УЧ - условное число */
-int drum_sector;		/* А_МЗУ - начальный адрес на барабане */
-int drum_memory;		/* α_МОЗУ - начальный адрес памяти */
-int drum_nwords;		/* ω_МОЗУ - конечный адрес памяти */
+int drum_op;			/* Условное слово обмена */
+int drum_zone;			/* Номер зоны на барабане */
+int drum_sector;		/* Начальный номер сектора на барабане */
+int drum_memory;		/* Начальный адрес памяти */
+int drum_nwords;		/* Количество слов обмена */
+
+t_stat drum_event (UNIT *u);
 
 /*
  * DRUM data structures
@@ -44,15 +47,17 @@ int drum_nwords;		/* ω_МОЗУ - конечный адрес памяти */
  * drum_unit	DRUM unit descriptor
  * drum_reg	DRUM register list
  */
-UNIT drum_unit = {
-	UDATA (NULL, UNIT_FIX+UNIT_ATTABLE, DRUM_SIZE)
+UNIT drum_unit [] = {
+	{ UDATA (drum_event, UNIT_FIX+UNIT_ATTABLE, DRUM_SIZE) },
+	{ UDATA (drum_event, UNIT_FIX+UNIT_ATTABLE, DRUM_SIZE) },
 };
 
 REG drum_reg[] = {
 { "УС",     &drum_op,		8, 24, 0, 1 },
-{ "СЕКТОР", &drum_sector,	8, 12, 0, 1 },
+{ "ЗОНА",   &drum_zone,		8, 10, 0, 1 },
+{ "СЕКТОР", &drum_sector,	8, 2,  0, 1 },
 { "МОЗУ",   &drum_memory,	8, 15, 0, 1 },
-{ "СЧСЛОВ", &drum_nwords,	8, 12, 0, 1 },
+{ "СЧСЛОВ", &drum_nwords,	8, 11, 0, 1 },
 { 0 }
 };
 
@@ -63,8 +68,8 @@ MTAB drum_mod[] = {
 t_stat drum_reset (DEVICE *dptr);
 
 DEVICE drum_dev = {
-	"DRUM", &drum_unit, drum_reg, drum_mod,
-	1, 8, 19, 1, 8, 50,
+	"DRUM", drum_unit, drum_reg, drum_mod,
+	2, 8, 19, 1, 8, 50,
 	NULL, NULL, &drum_reset,
 	NULL, NULL, NULL, NULL,
 	DEV_DISABLE | DEV_DEBUG
@@ -76,44 +81,75 @@ DEVICE drum_dev = {
 t_stat drum_reset (DEVICE *dptr)
 {
 	drum_op = 0;
+	drum_zone = 0;
 	drum_sector = 0;
 	drum_memory = 0;
 	drum_nwords = 0;
-	sim_cancel (&drum_unit);
+	sim_cancel (&drum_unit[0]);
+	sim_cancel (&drum_unit[1]);
 	return SCPE_OK;
 }
 
 /*
  * Запись на барабан.
  */
-void drum_write (int addr, int first, int nwords, int invert_parity)
+void drum_write (UNIT *u)
 {
-	int i;
-
-	fseek (drum_unit.fileref, addr*8, SEEK_SET);
-	fxwrite (&memory[first], 8, nwords, drum_unit.fileref);
-	if (ferror (drum_unit.fileref))
+	fseek (u->fileref, ZONE_SIZE * drum_zone, SEEK_SET);
+	fxwrite (&memory [020], 8, 8, u->fileref);
+	fxwrite (&memory [drum_memory], 8, 1024, u->fileref);
+	if (ferror (u->fileref))
 		longjmp (cpu_halt, SCPE_IOERR);
-	/* TODO: запись служебных слов */
+}
+
+void drum_write_sector (UNIT *u)
+{
+	fseek (u->fileref, ZONE_SIZE * drum_zone + drum_sector * 2,
+		SEEK_SET);
+	fxwrite (&memory [020 + drum_sector * 2], 8, 2, u->fileref);
+	fseek (u->fileref, ZONE_SIZE * drum_zone + drum_sector * 256,
+		SEEK_SET);
+	fxwrite (&memory [drum_memory], 8, 256, u->fileref);
+	if (ferror (u->fileref))
+		longjmp (cpu_halt, SCPE_IOERR);
 }
 
 /*
  * Чтение с барабана.
  */
-void drum_read (int addr, int first, int nwords, int sysdata_only)
+void drum_read (UNIT *u)
 {
-	int i;
-	t_value old_sum;
-
-	fseek (drum_unit.fileref, addr*8, SEEK_SET);
-	i = fxread (&memory[first], 8, nwords, drum_unit.fileref);
-	if (ferror (drum_unit.fileref))
-		longjmp (cpu_halt, SCPE_IOERR);
-	if (i != nwords) {
+	fseek (u->fileref, ZONE_SIZE * drum_zone, SEEK_SET);
+	if (fxread (&memory [020], 8, 8, u->fileref) != 8) {
 		/* Чтение неинициализированного барабана */
 		longjmp (cpu_halt, STOP_DRUMINVDATA);
 	}
-	/* TODO: чтение служебных слов */
+	if (! (drum_op & DRUM_READ_SYSDATA) &&
+	    fxread (&memory[drum_memory], 8, 1024, u->fileref) != 1024) {
+		/* Чтение неинициализированного барабана */
+		longjmp (cpu_halt, STOP_DRUMINVDATA);
+	}
+	if (ferror (u->fileref))
+		longjmp (cpu_halt, SCPE_IOERR);
+}
+
+void drum_read_sector (UNIT *u)
+{
+	fseek (u->fileref, ZONE_SIZE * drum_zone, SEEK_SET);
+	if (fxread (&memory [020 + drum_sector * 2], 8, 2, u->fileref) != 2) {
+		/* Чтение неинициализированного барабана */
+		longjmp (cpu_halt, STOP_DRUMINVDATA);
+	}
+	if (! (drum_op & DRUM_READ_SYSDATA)) {
+		fseek (u->fileref, ZONE_SIZE * drum_zone + drum_sector * 256,
+			SEEK_SET);
+		if (fxread (&memory[drum_memory], 8, 256, u->fileref) != 256) {
+			/* Чтение неинициализированного барабана */
+			longjmp (cpu_halt, STOP_DRUMINVDATA);
+		}
+	}
+	if (ferror (u->fileref))
+		longjmp (cpu_halt, SCPE_IOERR);
 }
 
 /*
@@ -121,42 +157,66 @@ void drum_read (int addr, int first, int nwords, int sysdata_only)
  */
 void drum (int ctlr, uint32 cmd)
 {
+	UNIT *u = &drum_unit[ctlr];
+
 	drum_op = cmd;
 	if (drum_op & DRUM_PAGE_MODE) {
 		/* Обмен страницей */
 		drum_nwords = 1024;
-		drum_sector = (ctlr << 10) |
-			(cmd & (DRUM_UNIT | DRUM_CYLINDER));
+		drum_zone = (cmd & (DRUM_UNIT | DRUM_CYLINDER)) >> 2;
+		drum_sector = 0;
 		drum_memory = (cmd & DRUM_PAGE) >> 2;
+		if (drum_dev.dctrl)
+			besm6_debug ("*** %s МБ %c%d зона %02o память %05o-%05o",
+				(drum_op & DRUM_READ) ? "чтение" : "запись",
+				ctlr + '1', (drum_sector >> 7 & 7),
+				drum_sector >> 2 & 037,
+				drum_memory, drum_memory + drum_nwords - 1);
 	} else {
 		/* Обмен сектором */
 		drum_nwords = 256;
-		drum_sector = (ctlr << 10) |
-			(cmd & (DRUM_UNIT | DRUM_CYLINDER | DRUM_SECTOR));
+		drum_zone = (cmd & (DRUM_UNIT | DRUM_CYLINDER)) >> 2;
+		drum_sector = cmd & DRUM_SECTOR;
 		drum_memory = (cmd & (DRUM_PAGE | DRUM_PARAGRAF)) >> 2;
-	}
-	if (drum_dev.dctrl) {
-		if ((drum_sector & 3) == 0 && drum_nwords == 1024)
-			besm6_debug ("*** %s МБ %02o зона %02o память %05o-%05o",
+		if (drum_dev.dctrl)
+			besm6_debug ("*** %s МБ %c%d зона %02o сектор %d память %05o-%05o",
 				(drum_op & DRUM_READ) ? "чтение" : "запись",
-				(drum_sector >> 7 & 017) + 010,
-				drum_sector >> 2 & 037,
-				drum_memory, drum_memory + drum_nwords - 1);
-		else
-			besm6_debug ("*** %s МБ %02o зона %02o сектор %d память %05o-%05o",
-				(drum_op & DRUM_READ) ? "чтение" : "запись",
-				(drum_sector >> 7 & 017) + 010,
+				ctlr + '1', (drum_sector >> 7 & 7),
 				drum_sector >> 2 & 037, drum_sector & 3,
 				drum_memory, drum_memory + drum_nwords - 1);
 	}
-	if ((drum_dev.flags & DEV_DIS) || ! drum_unit.fileref) {
+	if ((drum_dev.flags & DEV_DIS) || ! u->fileref) {
 		/* Device not attached. */
 		longjmp (cpu_halt, SCPE_UNATT);
 	}
-	if (drum_op & DRUM_READ)
-		drum_read (drum_sector, drum_memory, drum_nwords,
-			drum_op & DRUM_READ_SYSDATA);
+	if (drum_op & (DRUM_PARITY_FLAG | DRUM_READ_OVERLAY)) {
+		/* Not implemented. */
+		longjmp (cpu_halt, SCPE_NOFNC);
+	}
+	if (drum_op & DRUM_READ) {
+		if (drum_op & DRUM_PAGE_MODE)
+			drum_read (u);
+		else
+			drum_read_sector (u);
+	} else {
+		if (drum_op & DRUM_PAGE_MODE)
+			drum_write (u);
+		else
+			drum_write_sector (u);
+	}
+
+	/* Ждём события от устройства. */
+	sim_activate (u, 20000);
+}
+
+/*
+ * Событие: закончен обмен с МБ.
+ * Устанавливаем флаг прерывания.
+ */
+t_stat drum_event (UNIT *u)
+{
+	if (u == &drum_unit[0])
+		GRP |= GRP_DRUM1_FREE;
 	else
-		drum_write (drum_sector, drum_memory, drum_nwords,
-			drum_op & DRUM_PARITY_FLAG);
+		GRP |= GRP_DRUM2_FREE;
 }
