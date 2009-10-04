@@ -1215,9 +1215,10 @@ mtj:			M[addr & 0x1f] = M[reg];
 }
 
 /*
- * ОпПр1, ТО ч.9, стр. 119
+ * Операция прерывания 1: внутреннее прерывание.
+ * Описана в 9-м томе технического описания БЭСМ-6, страница 119.
  */
-void OpInt1 ()
+void op_int_1 ()
 {
 	M[SPSW] = (M[PSW] & (PSW_INTR_DISABLE | PSW_MMAP_DISABLE |
 		PSW_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
@@ -1235,9 +1236,10 @@ void OpInt1 ()
 }
 
 /*
- * ОпПр1, ТО ч.9, стр. 119
+ * Операция прерывания 2: внешнее прерывание.
+ * Описана в 9-м томе технического описания БЭСМ-6, страница 129.
  */
-void OpInt2 ()
+void op_int_2 ()
 {
 	M[SPSW] = (M[PSW] & (PSW_INTR_DISABLE | PSW_MMAP_DISABLE |
 		PSW_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
@@ -1278,36 +1280,36 @@ t_stat sim_instr (void)
 		default:
 			return r;
 		case STOP_BADCMD:
-			OpInt1();
+			op_int_1();
 			// SPSW_NEXT_RK is not important for this interrupt
 			GRP |= GRP_ILL_INSN;
 			break;
 		case STOP_INSN_CHECK:
-			OpInt1();
+			op_int_1();
 			// SPSW_NEXT_RK must be 0 for this interrupt; it is already
 			GRP |= GRP_INSN_CHECK;
 			break;
 		case STOP_INSN_PROT:
-			OpInt1();
+			op_int_1();
 			// SPSW_NEXT_RK must be 1 for this interrupt
 			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_INSN_PROT;
 			break;
 		case STOP_OPERAND_PROT:
-			OpInt1();
+			op_int_1();
 			// SPSW_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
 			// The offending virtual page is in bits 5-9
 			GRP |= GRP_OPRND_PROT;
 			GRP = GRP_SET_PAGE(GRP, iintr_data);
 			break;
 		case STOP_RAM_CHECK:
-			OpInt1();
+			op_int_1();
 			// The offending interleaved block # is in bits 1-3.
 			GRP |= GRP_CHECK|GRP_RAM_CHECK;
 			GRP = GRP_SET_BLOCK(GRP, iintr_data);
 			break;
 		case STOP_CACHE_CHECK:
-			OpInt1();
+			op_int_1();
 			// The offending BRZ # is in bits 1-3.
 			GRP |= GRP_CHECK;
 			GRP &= ~GRP_RAM_CHECK;
@@ -1340,7 +1342,7 @@ t_stat sim_instr (void)
 		if (! iintr && ! (RUU & RUU_RIGHT_INSTR) &&
 		    ! (M[PSW] & PSW_INTR_DISABLE) && (GRP & MGRP)) {
 			/* external interrupt */
-			OpInt2();
+			op_int_2();
 		}
 		cpu_one_inst ();			/* one instr */
 		iintr = 0;
