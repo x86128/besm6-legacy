@@ -2,6 +2,15 @@
  * besm6_drum.c: BESM-6 magnetic drum device
  *
  * Copyright (c) 2009, Serge Vakulenko
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * You can redistribute this program and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your discretion) any later version.
+ * See the accompanying file "COPYING" for more details.
  */
 #include "besm6_defs.h"
 
@@ -24,8 +33,8 @@
  * Параметры обмена с внешним устройством.
  */
 int drum_op;			/* УЧ - условное число */
-int drum_sector_start;		/* А_МЗУ - начальный адрес на барабане */
-int drum_memory_start;		/* α_МОЗУ - начальный адрес памяти */
+int drum_sector;		/* А_МЗУ - начальный адрес на барабане */
+int drum_memory;		/* α_МОЗУ - начальный адрес памяти */
 int drum_nwords;		/* ω_МОЗУ - конечный адрес памяти */
 
 /*
@@ -40,10 +49,10 @@ UNIT drum_unit = {
 };
 
 REG drum_reg[] = {
-{ "УС",     &drum_op,            8, 24, 0, 1 },
-{ "СЕКТОР", &drum_sector_start,  8, 12, 0, 1 },
-{ "МОЗУ",   &drum_memory_start,  8, 15, 0, 1 },
-{ "СЧСЛОВ", &drum_nwords,        8, 12, 0, 1 },
+{ "УС",     &drum_op,		8, 24, 0, 1 },
+{ "СЕКТОР", &drum_sector,	8, 12, 0, 1 },
+{ "МОЗУ",   &drum_memory,	8, 15, 0, 1 },
+{ "СЧСЛОВ", &drum_nwords,	8, 12, 0, 1 },
 { 0 }
 };
 
@@ -67,8 +76,8 @@ DEVICE drum_dev = {
 t_stat drum_reset (DEVICE *dptr)
 {
 	drum_op = 0;
-	drum_sector_start = 0;
-	drum_memory_start = 0;
+	drum_sector = 0;
+	drum_memory = 0;
 	drum_nwords = 0;
 	sim_cancel (&drum_unit);
 	return SCPE_OK;
@@ -81,9 +90,6 @@ void drum_write (int addr, int first, int nwords, int invert_parity)
 {
 	int i;
 
-	if (sim_deb && drum_dev.dctrl)
-		fprintf (sim_deb, "*** запись МБ %04o память %05o-%05o\n",
-			addr, first, first+nwords-1);
 	fseek (drum_unit.fileref, addr*8, SEEK_SET);
 	fxwrite (&memory[first], 8, nwords, drum_unit.fileref);
 	if (ferror (drum_unit.fileref))
@@ -99,9 +105,6 @@ void drum_read (int addr, int first, int nwords, int sysdata_only)
 	int i;
 	t_value old_sum;
 
-	if (sim_deb && drum_dev.dctrl)
-		fprintf (sim_deb, "*** чтение МБ %04o память %05o-%05o\n",
-			addr, first, first+nwords-1);
 	fseek (drum_unit.fileref, addr*8, SEEK_SET);
 	i = fxread (&memory[first], 8, nwords, drum_unit.fileref);
 	if (ferror (drum_unit.fileref))
@@ -118,28 +121,42 @@ void drum_read (int addr, int first, int nwords, int sysdata_only)
  */
 void drum (int ctlr, uint32 cmd)
 {
-	if (drum_dev.flags & DEV_DIS) {
-		/* Device not attached. */
-		longjmp (cpu_halt, SCPE_UNATT);
-	}
 	drum_op = cmd;
 	if (drum_op & DRUM_PAGE_MODE) {
 		/* Обмен страницей */
 		drum_nwords = 1024;
-		drum_sector_start = (ctlr << 10) |
+		drum_sector = (ctlr << 10) |
 			(cmd & (DRUM_UNIT | DRUM_CYLINDER));
-		drum_memory_start = (cmd & DRUM_PAGE) >> 2;
+		drum_memory = (cmd & DRUM_PAGE) >> 2;
 	} else {
 		/* Обмен сектором */
 		drum_nwords = 256;
-		drum_sector_start = (ctlr << 10) |
+		drum_sector = (ctlr << 10) |
 			(cmd & (DRUM_UNIT | DRUM_CYLINDER | DRUM_SECTOR));
-		drum_memory_start = (cmd & (DRUM_PAGE | DRUM_PARAGRAF)) >> 2;
+		drum_memory = (cmd & (DRUM_PAGE | DRUM_PARAGRAF)) >> 2;
+	}
+	if (drum_dev.dctrl) {
+		if ((drum_sector & 3) == 0 && drum_nwords == 1024)
+			besm6_debug ("*** %s МБ %02o зона %02o память %05o-%05o",
+				(drum_op & DRUM_READ) ? "чтение" : "запись",
+				(drum_sector >> 7 & 017) + 010,
+				drum_sector >> 2 & 037,
+				drum_memory, drum_memory + drum_nwords - 1);
+		else
+			besm6_debug ("*** %s МБ %02o зона %02o сектор %d память %05o-%05o",
+				(drum_op & DRUM_READ) ? "чтение" : "запись",
+				(drum_sector >> 7 & 017) + 010,
+				drum_sector >> 2 & 037, drum_sector & 3,
+				drum_memory, drum_memory + drum_nwords - 1);
+	}
+	if ((drum_dev.flags & DEV_DIS) || ! drum_unit.fileref) {
+		/* Device not attached. */
+		longjmp (cpu_halt, SCPE_UNATT);
 	}
 	if (drum_op & DRUM_READ)
-		drum_read (drum_sector_start, drum_memory_start, drum_nwords,
+		drum_read (drum_sector, drum_memory, drum_nwords,
 			drum_op & DRUM_READ_SYSDATA);
 	else
-		drum_write (drum_sector_start, drum_memory_start, drum_nwords,
+		drum_write (drum_sector, drum_memory, drum_nwords,
 			drum_op & DRUM_PARITY_FLAG);
 }

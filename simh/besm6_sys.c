@@ -2,6 +2,16 @@
  * besm6_sys.c: BESM-6 simulator interface
  *
  * Copyright (c) 2009, Serge Vakulenko
+ * Copyright (c) 2009, Leonid Broukhis
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * You can redistribute this program and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your discretion) any later version.
+ * See the accompanying file "COPYING" for more details.
  *
  * This file implements three essential functions:
  *
@@ -14,6 +24,7 @@
  */
 #include "besm6_defs.h"
 #include <math.h>
+#include <unistd.h>
 
 const char *opname_short [64] = {
 	"зп",	"зпм",	"рег",	"счм",	"сл",	"вч",	"вчоб",	"вчаб",
@@ -71,6 +82,8 @@ void besm6_log (const char *fmt, ...)
 	printf ("\r\n");
 	if (sim_log) {
 		vfprintf (sim_log, fmt, args);
+		if (sim_log == stdout)
+			fprintf (sim_log, "\r");
 		fprintf (sim_log, "\n");
 	}
 	va_end (args);
@@ -98,12 +111,10 @@ void besm6_debug (const char *fmt, ...)
 {
 	va_list args;
 
-	if (! cpu_dev.dctrl)
-		return;
 	va_start (args, fmt);
 	vprintf (fmt, args);
 	printf ("\r\n");
-	if (sim_deb) {
+	if (sim_deb && sim_deb != stdout) {
 		vfprintf (sim_deb, fmt, args);
 		fprintf (sim_deb, "\n");
 	}

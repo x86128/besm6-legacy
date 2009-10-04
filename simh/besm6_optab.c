@@ -1,6 +1,6 @@
 /*
  * Table of instruction codes.
- *
+ * To be deleted after code refactoring.
  */
 #include "besm6_defs.h"
 #include "besm6_optab.h"
