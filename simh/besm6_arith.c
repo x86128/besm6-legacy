@@ -1,6 +1,8 @@
 /*
  * BESM-6 arithmetic instructions.
  *
+ * Copyright (c) 1997-2009, Leonid Broukhis
+ *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.
@@ -75,7 +77,7 @@ int add()
 	} else if (diff <= 40) {
 		diff -= 16;
 		rnd_rq = (accex.mr = (a1.mr << (24 - diff)) & 0xffffff) != 0;
-/* было                rnd_rq |= (accex.ml = (((a1.mr & 0xff0000) >> diff) |   */
+/* было         rnd_rq |= (accex.ml = (((a1.mr & 0xff0000) >> diff) |   */
 		rnd_rq |= (accex.ml = ((a1.mr >> diff) |
 			(a1.ml << (24 - diff))) & 0xffff) != 0;
 		a1.mr = ((((a1.mr >> 16) | (a1.ml << 8)) >> diff) |

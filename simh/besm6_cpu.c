@@ -1,7 +1,17 @@
 /*
  * besm6_cpu.c: BESM-6 CPU simulator
  *
+ * Copyright (c) 1997-2009, Leonid Broukhis
  * Copyright (c) 2009, Serge Vakulenko
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * You can redistribute this program and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your discretion) any later version.
+ * See the accompanying file "COPYING" for more details.
  *
  * For more information about BESM-6 computer, visit sites:
  *  - http://www.computer-museum.ru/english/besm6.htm
@@ -1258,15 +1268,14 @@ t_stat sim_instr (void)
 	/* An internal interrupt or user intervention */
 	r = setjmp (cpu_halt);
 	if (r) {
-		besm6_debug ("/// %05o%s: %s", PC,
-			(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
-			sim_stop_messages [r]);
+		if (cpu_dev.dctrl)
+			besm6_debug ("/// %05o%s: %s", PC,
+				(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
+				sim_stop_messages [r]);
 
 		M[017] += corr_stack;
 		switch (r) {
-		case STOP_STOP:				/* STOP insn */
-		case STOP_IBKPT:			/* breakpoint req */
-		case STOP_RUNOUT:			/* must not happen */
+		default:
 			return r;
 		case STOP_BADCMD:
 			OpInt1();

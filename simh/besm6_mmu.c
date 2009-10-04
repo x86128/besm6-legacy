@@ -3,6 +3,15 @@
  *（стойка БРУС)
  *
  * Copyright (c) 2009, Leonid Broukhis
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * You can redistribute this program and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation;
+ * either version 2 of the License, or (at your discretion) any later version.
+ * See the accompanying file "COPYING" for more details.
  */
 #include "besm6_defs.h"
 
@@ -151,7 +160,8 @@ void mmu_protection_check (int addr)
 	/* Защита не заблокирована, а лист закрыт */
 	if (! tmp_prot_disabled && (RZ & (1 << (addr >> 10)))) {
 		iintr_data = addr >> 10;
-		besm6_debug ("--- %05o: защита числа", addr);
+		if (mmu_dev.dctrl)
+			besm6_debug ("--- %05o: защита числа", addr);
 		longjmp (cpu_halt, STOP_OPERAND_PROT);
 	}
 }
@@ -273,7 +283,8 @@ t_value mmu_fetch (int addr)
 		 */
 		if (IS_SUPERVISOR (RUU))
 			return 0;
-		besm6_debug ("--- передача управления на 0");
+		if (mmu_dev.dctrl)
+			besm6_debug ("--- передача управления на 0");
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 
@@ -291,7 +302,8 @@ t_value mmu_fetch (int addr)
 		 */
 		if (page == 0) {
 			iintr_data = addr >> 10;
-			besm6_debug ("--- %05o: защита команды", addr);
+			if (mmu_dev.dctrl)
+				besm6_debug ("--- %05o: защита команды", addr);
 			longjmp (cpu_halt, STOP_INSN_PROT);
 		}
 
