@@ -80,14 +80,16 @@ void besm6_log (const char *fmt, ...)
 	va_start (args, fmt);
 	vprintf (fmt, args);
 	printf ("\r\n");
+	va_end (args);
 	if (sim_log) {
+		va_start (args, fmt);
 		vfprintf (sim_log, fmt, args);
 		if (sim_log == stdout)
 			fprintf (sim_log, "\r");
 		fprintf (sim_log, "\n");
 		fflush (sim_log);
+		va_end (args);
 	}
-	va_end (args);
 }
 
 /*

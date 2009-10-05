@@ -185,6 +185,11 @@ void mmu_store (int addr, t_value val)
 	/* Различаем адреса с припиской и без */
 	if (M[PSW] & PSW_MMAP_DISABLE)
 		addr |= 0100000;
+
+	/* ЗПСЧ: ЗП */
+	if (M[DWP] == addr && (M[PSW] & PSW_WRITE_WATCH))
+		longjmp(cpu_halt, STOP_STORE_ADDR_MATCH);
+
 	for (i = 0; i < 8; ++i) {
 		if (loses_to_all (i)) oldest = i;
 		if (addr == BAZ[i]) {
@@ -229,6 +234,11 @@ t_value mmu_load (int addr)
 	/* Различаем адреса с припиской и без */
 	if (M[PSW] & PSW_MMAP_DISABLE)
 		addr |= 0100000;
+
+	/* ЗПСЧ: СЧ */
+	if (M[DWP] == addr && !(M[PSW] & PSW_WRITE_WATCH))
+		longjmp(cpu_halt, STOP_LOAD_ADDR_MATCH);
+
 	for (i = 0; i < 8; ++i) {
 		if (addr == BAZ[i]) {
 			matching = i;
@@ -287,6 +297,10 @@ t_value mmu_fetch (int addr)
 			besm6_debug ("--- передача управления на 0");
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
+
+	/* КРА */
+	if (M[IBP] == (addr | (IS_SUPERVISOR(RUU) ? 0100000 : 0)))
+		longjmp(cpu_halt, STOP_INSN_ADDR_MATCH);
 
 	/* В режиме супервизора защиты нет */
 	if (IS_SUPERVISOR (RUU)) {
