@@ -129,8 +129,8 @@ REG cpu_reg[] = {
 { "М27",   &M[027],	8, 15, 0, 1 },		/* SPSW - упрятывание режимов УУ */
 { "М32",   &M[032],	8, 15, 0, 1 },		/* ERET - адрес возврата из экстракода */
 { "М33",   &M[033],	8, 15, 0, 1 },		/* IRET - адрес возврата из прерывания */
-{ "М34",   &M[034],	8, 15, 0, 1 },		/* IBP - адрес прерывания по выполнению */
-{ "М35",   &M[035],	8, 15, 0, 1 },		/* DWP - адрес прерывания по чтению/записи */
+{ "М34",   &M[034],	8, 16, 0, 1 },		/* IBP - адрес прерывания по выполнению */
+{ "М35",   &M[035],	8, 16, 0, 1 },		/* DWP - адрес прерывания по чтению/записи */
 { "РУУ",   &RUU,	2, 9,  0, 1 },		/* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
 { "ГРП",   &GRP,	8, 48, 0, 1, REG_VMIO},	/* главный регистр прерываний */
 { "МГРП",  &MGRP,	8, 48, 0, 1, REG_VMIO},	/* маска ГРП */
@@ -179,8 +179,8 @@ REG reg_reg[] = {
 { "M27",   &M[027],	8, 15, 0, 1 },		/* SPSW - упрятывание режимов УУ */
 { "M32",   &M[032],	8, 15, 0, 1 },		/* ERET - адрес возврата из экстракода */
 { "M33",   &M[033],	8, 15, 0, 1 },		/* IRET - адрес возврата из прерывания */
-{ "M34",   &M[034],	8, 15, 0, 1 },		/* IBP - адрес прерывания по выполнению */
-{ "M35",   &M[035],	8, 15, 0, 1 },		/* DWP - адрес прерывания по чтению/записи */
+{ "M34",   &M[034],	8, 16, 0, 1 },		/* IBP - адрес прерывания по выполнению */
+{ "M35",   &M[035],	8, 16, 0, 1 },		/* DWP - адрес прерывания по чтению/записи */
 { "RUU",   &RUU,        2, 9,  0, 1 },		/* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
 { "GRP",   &GRP,	8, 48, 0, 1, REG_VMIO},	/* главный регистр прерываний */
 { "MGRP",  &MGRP,	8, 48, 0, 1, REG_VMIO},	/* маска ГРП */
@@ -259,7 +259,7 @@ DEVICE *sim_devices[] = {
 const char *sim_stop_messages[] = {
 	"Неизвестная ошибка",				/* Unknown error */
 	"Останов",					/* STOP */
-	"Точка останова",				/* Breakpoint */
+	"Точка останова",				/* Emulator breakpoint */
 	"Выход за пределы памяти",			/* Run out end of memory */
 	"Неверный код команды",				/* Invalid instruction */
 	"Контроль команды",				/* A data-tagged word fetched */
@@ -271,6 +271,9 @@ const char *sim_stop_messages[] = {
 	"Деление на нуль",				/* Division by zero or denorm */
 	"Двойное внутреннее прерывание",		/* SIMH: Double internal interrupt */
 	"Чтение неформатированного барабана",		/* Reading unformatted drum */
+	"Останов по КРА",				/* Hardware breakpoint */
+	"Останов по считыванию",			/* Load watchpoint */
+	"Останов по записи",				/* Store watchpoint */
 };
 
 /*
@@ -746,7 +749,7 @@ void cpu_one_inst ()
 	case I_ITA:
 		Aex = ADDR (addr + M[reg]);
 		acc.l = 0;
-		acc.r = M[Aex & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf)];
+		acc.r = ADDR(M[Aex & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf)]);
 		break;
 	case I_XTR:
 		CHK_STACK;
@@ -880,7 +883,16 @@ common_add:
 	case I_ATI:
 		Aex = ADDR (addr + M[reg]);
 		if (IS_SUPERVISOR (RUU)) {
-			M[Aex & 0x1f] = ADDR (acc.r);
+			int reg = Aex & 0x1f;
+			M[reg] = ADDR (acc.r);
+			/* breakpoint/watchpoint regs will match physical
+			 * or virtual addresses depending on the current
+			 * mapping mode.
+			 */
+			if ((M[PSW] & PSW_MMAP_DISABLE) &&
+				 (reg == IBP || reg == DWP))
+				M[reg] |= 0100000;
+				
 		} else
 			M[Aex & 0xf] = ADDR (acc.r);
 		M[0] = 0;
@@ -892,6 +904,9 @@ common_add:
 		rg = Aex & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf);
 		ad = ADDR (acc.r);
 		M[rg] = ad;
+		if ((M[PSW] & PSW_MMAP_DISABLE) &&
+                                 (rg == IBP || rg == DWP))
+                                M[rg] |= 0100000;
 		M[0] = 0;
 		if (rg != 017)
 			M[017] = ADDR (M[017] - 1);
@@ -902,6 +917,10 @@ common_add:
 		Aex = addr;
 		if (IS_SUPERVISOR (RUU)) {
 mtj:			M[addr & 0x1f] = M[reg];
+			if ((M[PSW] & PSW_MMAP_DISABLE) &&
+                                 ((addr & 0x1f) == IBP || (addr & 0x1f) == DWP))
+                                M[addr & 0x1f] |= 0100000;
+
 		} else
 			M[addr & 0xf] = M[reg];
 		M[0] = 0;
@@ -1114,6 +1133,18 @@ t_stat sim_instr (void)
 			GRP |= GRP_CHECK;
 			GRP &= ~GRP_RAM_CHECK;
 			GRP = GRP_SET_BLOCK(GRP, iintr_data);
+			break;
+		case STOP_INSN_ADDR_MATCH:
+			op_int_1();
+			GRP |= GRP_BREAKPOINT;
+			break;
+		case STOP_LOAD_ADDR_MATCH:
+			op_int_1();
+			GRP |= GRP_WATCHPT_R;
+			break;
+		case STOP_STORE_ADDR_MATCH:
+			op_int_1();
+			GRP |= GRP_WATCHPT_W;
 			break;
 		}
 		++iintr;
