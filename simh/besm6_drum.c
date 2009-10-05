@@ -48,8 +48,8 @@ t_stat drum_event (UNIT *u);
  * drum_reg	DRUM register list
  */
 UNIT drum_unit [] = {
-	{ UDATA (drum_event, UNIT_FIX+UNIT_ATTABLE, DRUM_SIZE) },
-	{ UDATA (drum_event, UNIT_FIX+UNIT_ATTABLE, DRUM_SIZE) },
+	{ UDATA (drum_event, UNIT_FIX+UNIT_ATTABLE+UNIT_ROABLE, DRUM_SIZE) },
+	{ UDATA (drum_event, UNIT_FIX+UNIT_ATTABLE+UNIT_ROABLE, DRUM_SIZE) },
 };
 
 REG drum_reg[] = {
@@ -95,7 +95,7 @@ t_stat drum_reset (DEVICE *dptr)
  */
 void drum_write (UNIT *u)
 {
-	fseek (u->fileref, ZONE_SIZE * drum_zone, SEEK_SET);
+	fseek (u->fileref, ZONE_SIZE * drum_zone * 8, SEEK_SET);
 	fxwrite (&memory [020], 8, 8, u->fileref);
 	fxwrite (&memory [drum_memory], 8, 1024, u->fileref);
 	if (ferror (u->fileref))
@@ -104,10 +104,10 @@ void drum_write (UNIT *u)
 
 void drum_write_sector (UNIT *u)
 {
-	fseek (u->fileref, ZONE_SIZE * drum_zone + drum_sector * 2,
+	fseek (u->fileref, (ZONE_SIZE * drum_zone + drum_sector * 2) * 8,
 		SEEK_SET);
 	fxwrite (&memory [020 + drum_sector * 2], 8, 2, u->fileref);
-	fseek (u->fileref, ZONE_SIZE * drum_zone + drum_sector * 256,
+	fseek (u->fileref, (ZONE_SIZE * drum_zone + drum_sector * 256) * 8,
 		SEEK_SET);
 	fxwrite (&memory [drum_memory], 8, 256, u->fileref);
 	if (ferror (u->fileref))
@@ -119,7 +119,7 @@ void drum_write_sector (UNIT *u)
  */
 void drum_read (UNIT *u)
 {
-	fseek (u->fileref, ZONE_SIZE * drum_zone, SEEK_SET);
+	fseek (u->fileref, ZONE_SIZE * drum_zone * 8, SEEK_SET);
 	if (fxread (&memory [020], 8, 8, u->fileref) != 8) {
 		/* Чтение неинициализированного барабана */
 		longjmp (cpu_halt, STOP_DRUMINVDATA);
@@ -135,13 +135,13 @@ void drum_read (UNIT *u)
 
 void drum_read_sector (UNIT *u)
 {
-	fseek (u->fileref, ZONE_SIZE * drum_zone, SEEK_SET);
+	fseek (u->fileref, ZONE_SIZE * drum_zone * 8, SEEK_SET);
 	if (fxread (&memory [020 + drum_sector * 2], 8, 2, u->fileref) != 2) {
 		/* Чтение неинициализированного барабана */
 		longjmp (cpu_halt, STOP_DRUMINVDATA);
 	}
 	if (! (drum_op & DRUM_READ_SYSDATA)) {
-		fseek (u->fileref, ZONE_SIZE * drum_zone + drum_sector * 256,
+		fseek (u->fileref, (ZONE_SIZE * drum_zone + drum_sector * 256) * 8,
 			SEEK_SET);
 		if (fxread (&memory[drum_memory], 8, 256, u->fileref) != 256) {
 			/* Чтение неинициализированного барабана */
@@ -169,8 +169,7 @@ void drum (int ctlr, uint32 cmd)
 		if (drum_dev.dctrl)
 			besm6_debug ("*** %s МБ %c%d зона %02o память %05o-%05o",
 				(drum_op & DRUM_READ) ? "чтение" : "запись",
-				ctlr + '1', (drum_sector >> 7 & 7),
-				drum_sector >> 2 & 037,
+				ctlr + '1', (drum_zone >> 5 & 7), drum_zone & 037,
 				drum_memory, drum_memory + drum_nwords - 1);
 	} else {
 		/* Обмен сектором */
@@ -181,8 +180,8 @@ void drum (int ctlr, uint32 cmd)
 		if (drum_dev.dctrl)
 			besm6_debug ("*** %s МБ %c%d зона %02o сектор %d память %05o-%05o",
 				(drum_op & DRUM_READ) ? "чтение" : "запись",
-				ctlr + '1', (drum_sector >> 7 & 7),
-				drum_sector >> 2 & 037, drum_sector & 3,
+				ctlr + '1', (drum_zone >> 5 & 7), drum_zone & 037,
+				drum_sector & 3,
 				drum_memory, drum_memory + drum_nwords - 1);
 	}
 	if ((drum_dev.flags & DEV_DIS) || ! u->fileref) {

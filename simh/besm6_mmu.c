@@ -377,7 +377,7 @@ void mmu_print_brz ()
 {
 	int i, k;
 
-	for (i=0; i<8; ++i) {
+	for (i=7; i>=0; --i) {
 		besm6_log_cont ("БРЗ [%d] = '", i);
 		for (k=47; k>=0; --k)
 			besm6_log_cont ("%c", (BRZ[i] >> k & 1) ? '*' : ' ');
