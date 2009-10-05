@@ -99,11 +99,13 @@ void besm6_log_cont (const char *fmt, ...)
 
 	va_start (args, fmt);
 	vprintf (fmt, args);
+	va_end (args);
 	if (sim_log) {
+		va_start (args, fmt);
 		vfprintf (sim_log, fmt, args);
 		fflush (sim_log);
+		va_end (args);
 	}
-	va_end (args);
 }
 
 /*
@@ -588,16 +590,16 @@ t_stat besm6_load (FILE *input)
 			break;
 		case '=':		/* word */
 			if (addr < 010)
-				pult [addr] = CONVOL_NUMBER (word, RUU);
+				pult [addr] = SET_CONVOL (word, CONVOL_NUMBER);
 			else
-				memory [addr] = CONVOL_NUMBER (word, RUU);
+				memory [addr] = SET_CONVOL (word, CONVOL_NUMBER);
 			++addr;
 			break;
 		case '*':		/* instruction */
 			if (addr < 010)
-				pult [addr] = CONVOL_INSN (word, RUU);
+				pult [addr] = SET_CONVOL (word, CONVOL_INSN);
 			else
-				memory [addr] = CONVOL_INSN (word, RUU);
+				memory [addr] = SET_CONVOL (word, CONVOL_INSN);
 			++addr;
 			break;
 		case '@':		/* start address */
