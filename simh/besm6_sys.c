@@ -85,6 +85,7 @@ void besm6_log (const char *fmt, ...)
 		if (sim_log == stdout)
 			fprintf (sim_log, "\r");
 		fprintf (sim_log, "\n");
+		fflush (sim_log);
 	}
 	va_end (args);
 }
@@ -98,8 +99,10 @@ void besm6_log_cont (const char *fmt, ...)
 
 	va_start (args, fmt);
 	vprintf (fmt, args);
-	if (sim_log)
+	if (sim_log) {
 		vfprintf (sim_log, fmt, args);
+		fflush (sim_log);
+	}
 	va_end (args);
 }
 
@@ -117,6 +120,7 @@ void besm6_debug (const char *fmt, ...)
 	if (sim_deb && sim_deb != stdout) {
 		vfprintf (sim_deb, fmt, args);
 		fprintf (sim_deb, "\n");
+		fflush (sim_deb);
 	}
 	va_end (args);
 }
