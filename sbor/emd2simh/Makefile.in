@@ -34,8 +34,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = besmtool$(EXEEXT)
-subdir = besmtool
+bin_PROGRAMS = emd2simh$(EXEEXT)
+subdir = sbor/emd2simh
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -47,11 +47,9 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_besmtool_OBJECTS = besmtool.$(OBJEXT) write.$(OBJEXT) \
-	dump.$(OBJEXT) list.$(OBJEXT) erase.$(OBJEXT) \
-	passports.$(OBJEXT) disk.$(OBJEXT) encoding.$(OBJEXT)
-besmtool_OBJECTS = $(am_besmtool_OBJECTS)
-besmtool_LDADD = $(LDADD)
+am_emd2simh_OBJECTS = emd2simh.$(OBJEXT)
+emd2simh_OBJECTS = $(am_emd2simh_OBJECTS)
+emd2simh_LDADD = $(LDADD)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -60,8 +58,8 @@ COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-SOURCES = $(besmtool_SOURCES)
-DIST_SOURCES = $(besmtool_SOURCES)
+SOURCES = $(emd2simh_SOURCES)
+DIST_SOURCES = $(emd2simh_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -177,11 +175,9 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-besmtool_SOURCES = besmtool.c write.c dump.c list.c erase.c passports.c \
-	../emulator/disk.c ../emulator/encoding.c
-
+emd2simh_SOURCES = emd2simh.c
 AM_CFLAGS = -Wall -g -O2
-AM_CPPFLAGS = -I../emulator
+AM_CPPFLAGS = 
 all: all-am
 
 .SUFFIXES:
@@ -195,9 +191,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu besmtool/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu sbor/emd2simh/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu besmtool/Makefile
+	  $(AUTOMAKE) --gnu sbor/emd2simh/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
@@ -253,9 +249,9 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
-besmtool$(EXEEXT): $(besmtool_OBJECTS) $(besmtool_DEPENDENCIES) 
-	@rm -f besmtool$(EXEEXT)
-	$(LINK) $(besmtool_OBJECTS) $(besmtool_LDADD) $(LIBS)
+emd2simh$(EXEEXT): $(emd2simh_OBJECTS) $(emd2simh_DEPENDENCIES) 
+	@rm -f emd2simh$(EXEEXT)
+	$(LINK) $(emd2simh_OBJECTS) $(emd2simh_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -263,14 +259,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/besmtool.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/disk.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dump.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/encoding.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/erase.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/list.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/passports.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/write.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/emd2simh.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -285,34 +274,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
-
-disk.o: ../emulator/disk.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT disk.o -MD -MP -MF $(DEPDIR)/disk.Tpo -c -o disk.o `test -f '../emulator/disk.c' || echo '$(srcdir)/'`../emulator/disk.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/disk.Tpo $(DEPDIR)/disk.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../emulator/disk.c' object='disk.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o disk.o `test -f '../emulator/disk.c' || echo '$(srcdir)/'`../emulator/disk.c
-
-disk.obj: ../emulator/disk.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT disk.obj -MD -MP -MF $(DEPDIR)/disk.Tpo -c -o disk.obj `if test -f '../emulator/disk.c'; then $(CYGPATH_W) '../emulator/disk.c'; else $(CYGPATH_W) '$(srcdir)/../emulator/disk.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/disk.Tpo $(DEPDIR)/disk.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../emulator/disk.c' object='disk.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o disk.obj `if test -f '../emulator/disk.c'; then $(CYGPATH_W) '../emulator/disk.c'; else $(CYGPATH_W) '$(srcdir)/../emulator/disk.c'; fi`
-
-encoding.o: ../emulator/encoding.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT encoding.o -MD -MP -MF $(DEPDIR)/encoding.Tpo -c -o encoding.o `test -f '../emulator/encoding.c' || echo '$(srcdir)/'`../emulator/encoding.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/encoding.Tpo $(DEPDIR)/encoding.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../emulator/encoding.c' object='encoding.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o encoding.o `test -f '../emulator/encoding.c' || echo '$(srcdir)/'`../emulator/encoding.c
-
-encoding.obj: ../emulator/encoding.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT encoding.obj -MD -MP -MF $(DEPDIR)/encoding.Tpo -c -o encoding.obj `if test -f '../emulator/encoding.c'; then $(CYGPATH_W) '../emulator/encoding.c'; else $(CYGPATH_W) '$(srcdir)/../emulator/encoding.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/encoding.Tpo $(DEPDIR)/encoding.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='../emulator/encoding.c' object='encoding.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o encoding.obj `if test -f '../emulator/encoding.c'; then $(CYGPATH_W) '../emulator/encoding.c'; else $(CYGPATH_W) '$(srcdir)/../emulator/encoding.c'; fi`
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
