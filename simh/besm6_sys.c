@@ -434,6 +434,8 @@ t_stat fprint_sym (FILE *of, t_addr addr, t_value *val,
 			(int) (cmd >> 16) & 0377,
 			(int) (cmd >> 8) & 0377,
 			(int) cmd & 0377);
+	} else if (sw & SWMASK ('X')) {
+		fprintf (of, "%013llx", cmd);
 	} else
 		fprintf (of, "%04o %04o %04o %04o",
 			(int) (cmd >> 36) & 07777,
