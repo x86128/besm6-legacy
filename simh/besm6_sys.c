@@ -117,12 +117,14 @@ void besm6_debug (const char *fmt, ...)
 	va_start (args, fmt);
 	vprintf (fmt, args);
 	printf ("\r\n");
+	va_end (args);
 	if (sim_deb && sim_deb != stdout) {
+		va_start (args, fmt);
 		vfprintf (sim_deb, fmt, args);
 		fprintf (sim_deb, "\n");
 		fflush (sim_deb);
+		va_end(args);
 	}
-	va_end (args);
 }
 
 /*
@@ -426,7 +428,7 @@ t_stat fprint_sym (FILE *of, t_addr addr, t_value *val,
 		besm6_fprint_cmd (of, cmd & BITS24);
 
 	} else if (sw & SWMASK ('I')) {
-		besm6_fprint_insn (of, cmd >> 24);
+		besm6_fprint_insn (of, (cmd >> 24) & BITS24);
 		besm6_fprint_insn (of, cmd & BITS24);
 	} else if (sw & SWMASK ('F')) {
 		fprintf (of, "%#.2g", besm6_to_ieee(cmd));
