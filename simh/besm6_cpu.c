@@ -297,9 +297,9 @@ t_stat cpu_deposit (t_value val, t_addr addr, UNIT *uptr, int32 sw)
 	if (addr >= MEMSIZE)
 		return SCPE_NXM;
 	if (addr < 010)
-		pult [addr] = CONVOL_INSN (val, RUU);
+		pult [addr] = SET_CONVOL (val, CONVOL_INSN);
 	else
-		memory [addr] = CONVOL_INSN (val, RUU);
+		memory [addr] = SET_CONVOL (val, CONVOL_INSN);
 	return SCPE_OK;
 }
 
@@ -656,7 +656,7 @@ void cpu_one_inst ()
 		besm6_fprint_cmd (sim_deb, RK);
 		fprintf (sim_deb, "\n");
 	}
-	nextpc = PC + 1;
+	nextpc = ADDR(PC + 1);
 	if (RUU & RUU_RIGHT_INSTR) {
 		PC += 1;			/* increment PC */
 		RUU &= ~RUU_RIGHT_INSTR;

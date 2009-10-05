@@ -208,7 +208,7 @@ void mmu_store (int addr, t_value val)
 		matching = oldest;
 		BAZ[oldest] = addr;
 	}
-	BRZ[matching] = CONVOL_NUMBER (val, RUU);
+	BRZ[matching] = SET_CONVOL (val, RUU);
 	set_wins (matching);
 }
 
@@ -365,7 +365,7 @@ void mmu_setprotection (int idx, t_value val)
 
 void mmu_setcache (int idx, t_value val)
 {
-	BRZ[idx] = CONVOL_NUMBER (val, RUU);
+	BRZ[idx] = SET_CONVOL (val, RUU);
 }
 
 t_value mmu_getcache (int idx)
