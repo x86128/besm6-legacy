@@ -70,6 +70,8 @@ uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
 t_value ACC, RMR, GRP, MGRP;
 uint32 PRP, MPRP;
 
+extern const char *scp_error_messages[];
+
 /* нехранящие биты ГРП должны сбрасываться путем обнуления тех регистров,
  * сборкой которых они являются
  */
@@ -371,7 +373,7 @@ static void cmd_002 ()
 {
 	switch (Aex & 0377) {
 	case 0 ... 7:
-		mmu_setcache (Aex, ACC);
+		mmu_setcache (Aex & 7, ACC);
 		break;
 	case 020 ... 027:
 		/* Запись в регистры приписки */
@@ -1270,10 +1272,14 @@ t_stat sim_instr (void)
 	/* An internal interrupt or user intervention */
 	r = setjmp (cpu_halt);
 	if (r) {
-		if (cpu_dev.dctrl)
+		if (cpu_dev.dctrl) {
+			const char *message = (r >= SCPE_BASE) ?
+				scp_error_messages [r - SCPE_BASE] :
+				sim_stop_messages [r];
 			besm6_debug ("/// %05o%s: %s", PC,
 				(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
-				sim_stop_messages [r]);
+				message);
+		}
 
 		M[017] += corr_stack;
 		switch (r) {
