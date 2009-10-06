@@ -242,6 +242,7 @@ t_value mmu_load (int addr)
 	for (i = 0; i < 8; ++i) {
 		if (addr == BAZ[i]) {
 			matching = i;
+			break;
 		}
 	}
 
@@ -267,6 +268,7 @@ t_value mmu_load (int addr)
 			longjmp (cpu_halt, STOP_RAM_CHECK);
 		}
 	} else {
+		set_wins (matching);
 		val = BRZ[matching];
 		if (sim_log && mmu_dev.dctrl)
 			fprintf (sim_log, "--- %05o: чтение %016llo из БРЗ\n",
