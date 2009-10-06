@@ -499,8 +499,8 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_BADCMD);
 		break;
 	case 0147:
-		/* TODO: запись в регистр управления электропитанием */
-		longjmp (cpu_halt, STOP_BADCMD);
+		/* запись в регистр управления электропитанием */
+		/* не оказывает видимого эффекта на выполнение */
 		break;
 	case 0150 ... 0151:
 		/* TODO: управление вводом с перфокарт */
@@ -1145,6 +1145,14 @@ t_stat sim_instr (void)
 		case STOP_STORE_ADDR_MATCH:
 			op_int_1();
 			GRP |= GRP_WATCHPT_W;
+			break;
+		case STOP_OVFL:
+			op_int_1();
+			GRP |= GRP_OVERFLOW;
+			break;
+		case STOP_DIVZERO:
+			op_int_1();
+			GRP |= GRP_DIVZERO;
 			break;
 		}
 		++iintr;
