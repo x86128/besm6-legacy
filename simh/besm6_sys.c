@@ -26,7 +26,7 @@
 #include <math.h>
 #include <unistd.h>
 
-const char *opname_short [64] = {
+const char *opname_short_bemsh [64] = {
 	"зп",	"зпм",	"рег",	"счм",	"сл",	"вч",	"вчоб",	"вчаб",
 	"сч",	"и",	"нтж",	"слц",	"знак",	"или",	"дел",	"умн",
 	"сбр",	"рзб",	"чед",	"нед",  "слп",  "вчп",  "сд",	"рж",
@@ -37,9 +37,25 @@ const char *opname_short [64] = {
 	"э70",	"э71",	"э72",	"э73",	"э74",	"э75",	"э76",	"э77",
 };
 
-static const char *opname_long [16] = {
+static const char *opname_long_bemsh [16] = {
 	"э20",	"э21",	"мода",	"мод",	"уиа",	"слиа",	"по",	"пе",
 	"пб",	"пв",	"выпр",	"стоп",	"пио",	"пино",	"э36",	"цикл",
+};
+
+const char *opname_short_madlen [64] = {
+	"atx",	"stx",	"mod",	"xts",	"a+x",	"a-x",	"x-a",	"amx",
+	"xta",	"aax",	"aex",	"arx",	"avx",	"aox",	"a/x",	"a*x",
+	"apx",	"aux",	"acx",	"anx",	"e+x",	"e-x",	"asx",	"xtr",
+	"rte",	"yta",	"*32",	"ext", 	"e+n", 	"e-n", 	"asn", 	"ntr",
+	"ati", 	"sti", 	"ita", 	"its", 	"mtj", 	"j+m",	"*46", 	"*47",
+	"*50", 	"*51", 	"*52", 	"*53", 	"*54", 	"*55", 	"*56", 	"*57",
+	"*60", 	"*61", 	"*62", 	"*63", 	"*64", 	"*65", 	"*66", 	"*67",
+	"*70", 	"*71", 	"*72", 	"*73", 	"*74", 	"*75", 	"*76", 	"*77",
+};
+
+static const char *opname_long_madlen [16] = {
+	"*20",	"*21",	"utc", 	"wtc", 	"vtm", 	"utm", 	"uza", 	"u1a",
+	"uj",	"vjm",	"ij",	"stop",	"vzm",	"v1m",	"*36",	"vlm",
 };
 
 /*
@@ -48,9 +64,15 @@ static const char *opname_long [16] = {
  */
 const char *besm6_opname (int opcode)
 {
+	if (sim_switches & SWMASK ('L')) {
+		/* Latin mnemonics. */
+		if (opcode & 0200)
+			return opname_long_madlen [(opcode >> 3) & 017];
+		return opname_short_madlen [opcode];
+	}
 	if (opcode & 0200)
-		return opname_long [(opcode >> 3) & 017];
-	return opname_short [opcode];
+		return opname_long_bemsh [(opcode >> 3) & 017];
+	return opname_short_bemsh [opcode];
 };
 
 /*
@@ -61,10 +83,12 @@ int besm6_opcode (char *instr)
 	int i;
 
 	for (i=0; i<64; ++i)
-		if (strcmp (opname_short[i], instr) == 0)
+		if (strcmp (opname_short_bemsh[i], instr) == 0 ||
+		    strcmp (opname_short_madlen[i], instr) == 0)
 			return i;
 	for (i=0; i<16; ++i)
-		if (strcmp (opname_long[i], instr) == 0)
+		if (strcmp (opname_long_bemsh[i], instr) == 0 ||
+		    strcmp (opname_long_madlen[i], instr) == 0)
 			return (i << 3) | 0200;
 	return -1;
 }
