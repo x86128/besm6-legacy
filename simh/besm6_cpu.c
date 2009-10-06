@@ -892,7 +892,7 @@ common_add:
 			if ((M[PSW] & PSW_MMAP_DISABLE) &&
 				 (reg == IBP || reg == DWP))
 				M[reg] |= 0100000;
-				
+
 		} else
 			M[Aex & 0xf] = ADDR (acc.r);
 		M[0] = 0;
@@ -1119,20 +1119,20 @@ t_stat sim_instr (void)
 			// SPSW_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
 			// The offending virtual page is in bits 5-9
 			GRP |= GRP_OPRND_PROT;
-			GRP = GRP_SET_PAGE(GRP, iintr_data);
+			GRP = GRP_SET_PAGE (GRP, iintr_data);
 			break;
 		case STOP_RAM_CHECK:
 			op_int_1();
 			// The offending interleaved block # is in bits 1-3.
-			GRP |= GRP_CHECK|GRP_RAM_CHECK;
-			GRP = GRP_SET_BLOCK(GRP, iintr_data);
+			GRP |= GRP_CHECK | GRP_RAM_CHECK;
+			GRP = GRP_SET_BLOCK (GRP, iintr_data);
 			break;
 		case STOP_CACHE_CHECK:
 			op_int_1();
 			// The offending BRZ # is in bits 1-3.
 			GRP |= GRP_CHECK;
 			GRP &= ~GRP_RAM_CHECK;
-			GRP = GRP_SET_BLOCK(GRP, iintr_data);
+			GRP = GRP_SET_BLOCK (GRP, iintr_data);
 			break;
 		case STOP_INSN_ADDR_MATCH:
 			op_int_1();
