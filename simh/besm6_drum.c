@@ -66,13 +66,14 @@ MTAB drum_mod[] = {
 };
 
 t_stat drum_reset (DEVICE *dptr);
+t_stat drum_attach (UNIT *uptr, char *cptr);
+t_stat drum_detach (UNIT *uptr);
 
 DEVICE drum_dev = {
 	"DRUM", drum_unit, drum_reg, drum_mod,
 	2, 8, 19, 1, 8, 50,
-	NULL, NULL, &drum_reset,
-	NULL, NULL, NULL, NULL,
-	DEV_DISABLE | DEV_DEBUG
+	NULL, NULL, &drum_reset, NULL, &drum_attach, &drum_detach,
+	NULL, DEV_DISABLE | DEV_DEBUG
 };
 
 /*
@@ -88,6 +89,28 @@ t_stat drum_reset (DEVICE *dptr)
 	sim_cancel (&drum_unit[0]);
 	sim_cancel (&drum_unit[1]);
 	return SCPE_OK;
+}
+
+t_stat drum_attach (UNIT *u, char *cptr)
+{
+	t_stat s;
+
+	s = attach_unit (u, cptr);
+	if (s != SCPE_OK)
+		return s;
+	if (u == &drum_unit[0])
+		GRP |= GRP_DRUM1_FREE;
+	else
+		GRP |= GRP_DRUM2_FREE;
+}
+
+t_stat drum_detach (UNIT *u)
+{
+	if (u == &drum_unit[0])
+		GRP &= ~GRP_DRUM1_FREE;
+	else
+		GRP &= ~GRP_DRUM2_FREE;
+	return detach_unit (u);
 }
 
 /*
@@ -211,7 +234,10 @@ void drum (int ctlr, uint32 cmd)
 	/* Ждём события от устройства.
 	 * Согласно данным из книжки Мазного Г.Л.,
 	 * даём 20 мсек на обмен, или 200 тыс.тактов. */
-	sim_activate (u, 200000);
+/*	sim_activate (u, 200000);*/
+
+	/* Ускорим для отладки. */
+	sim_activate (u, 2000);
 }
 
 /*
