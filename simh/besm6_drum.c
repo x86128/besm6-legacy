@@ -102,6 +102,7 @@ t_stat drum_attach (UNIT *u, char *cptr)
 		GRP |= GRP_DRUM1_FREE;
 	else
 		GRP |= GRP_DRUM2_FREE;
+	return SCPE_OK;
 }
 
 t_stat drum_detach (UNIT *u)
