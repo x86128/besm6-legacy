@@ -1084,6 +1084,7 @@ t_stat sim_instr (void)
 	/* An internal interrupt or user intervention */
 	r = setjmp (cpu_halt);
 	if (r) {
+		M[017] += corr_stack;
 		if (cpu_dev.dctrl) {
 			const char *message = (r >= SCPE_BASE) ?
 				scp_error_messages [r - SCPE_BASE] :
@@ -1093,27 +1094,42 @@ t_stat sim_instr (void)
 				message);
 		}
 
-		M[017] += corr_stack;
+		/*
+		 * ПоП и ПоК вызывают останов при любом внутреннем прерывании
+		 * или прерывании по контролю, соответственно.
+		 * Если произошёл останов по ПоП или ПоК,
+		 * то продолжение выполнения начнётся с команды, следующей
+		 * за вызвавшей прерывание. Как если бы кнопка "ТП" (тип
+		 * перехода) была включена. Подробнее на странице 119 ТО9.
+		 */
 		switch (r) {
 		default:
 			return r;
 		case STOP_BADCMD:
+			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
+				return r;
 			op_int_1();
 			// SPSW_NEXT_RK is not important for this interrupt
 			GRP |= GRP_ILL_INSN;
 			break;
 		case STOP_INSN_CHECK:
+			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
+				return r;
 			op_int_1();
 			// SPSW_NEXT_RK must be 0 for this interrupt; it is already
 			GRP |= GRP_INSN_CHECK;
 			break;
 		case STOP_INSN_PROT:
+			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
+				return r;
 			op_int_1();
 			// SPSW_NEXT_RK must be 1 for this interrupt
 			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_INSN_PROT;
 			break;
 		case STOP_OPERAND_PROT:
+			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
+				return r;
 			op_int_1();
 			// SPSW_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
 			// The offending virtual page is in bits 5-9
@@ -1121,12 +1137,16 @@ t_stat sim_instr (void)
 			GRP = GRP_SET_PAGE (GRP, iintr_data);
 			break;
 		case STOP_RAM_CHECK:
+			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
+				return r;
 			op_int_1();
 			// The offending interleaved block # is in bits 1-3.
 			GRP |= GRP_CHECK | GRP_RAM_CHECK;
 			GRP = GRP_SET_BLOCK (GRP, iintr_data);
 			break;
 		case STOP_CACHE_CHECK:
+			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
+				return r;
 			op_int_1();
 			// The offending BRZ # is in bits 1-3.
 			GRP |= GRP_CHECK;
@@ -1134,22 +1154,37 @@ t_stat sim_instr (void)
 			GRP = GRP_SET_BLOCK (GRP, iintr_data);
 			break;
 		case STOP_INSN_ADDR_MATCH:
+			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
+				return r;
 			op_int_1();
 			GRP |= GRP_BREAKPOINT;
 			break;
 		case STOP_LOAD_ADDR_MATCH:
+			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
+				return r;
 			op_int_1();
 			GRP |= GRP_WATCHPT_R;
 			break;
 		case STOP_STORE_ADDR_MATCH:
+			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
+				return r;
 			op_int_1();
 			GRP |= GRP_WATCHPT_W;
 			break;
 		case STOP_OVFL:
+			/* Прерывание по АУ вызывает останов, если БРО=0
+			 * и установлен ПоП или ПоК.
+			 * Страница 118 ТО9.*/
+			if (! (RUU & RUU_AVOST_DISABLE) &&	/* ! БРО */
+			    ((M[PSW] & PSW_INTR_HALT) ||	/* ПоП */
+			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
 			op_int_1();
 			GRP |= GRP_OVERFLOW;
 			break;
 		case STOP_DIVZERO:
+			if (! (RUU & RUU_AVOST_DISABLE) &&	/* ! БРО */
+			    ((M[PSW] & PSW_INTR_HALT) ||	/* ПоП */
+			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
 			op_int_1();
 			GRP |= GRP_DIVZERO;
 			break;
