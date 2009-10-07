@@ -1208,6 +1208,7 @@ t_stat sim_instr (void)
 			if (! (RUU & RUU_AVOST_DISABLE) &&	/* ! БРО */
 			    ((M[PSW] & PSW_INTR_HALT) ||	/* ПоП */
 			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
+				return r;
 			op_int_1();
 			GRP |= GRP_OVERFLOW;
 			break;
@@ -1215,6 +1216,7 @@ t_stat sim_instr (void)
 			if (! (RUU & RUU_AVOST_DISABLE) &&	/* ! БРО */
 			    ((M[PSW] & PSW_INTR_HALT) ||	/* ПоП */
 			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
+				return r;
 			op_int_1();
 			GRP |= GRP_DIVZERO;
 			break;
