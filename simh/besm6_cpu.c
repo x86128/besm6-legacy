@@ -598,24 +598,6 @@ static void cmd_033 ()
 	}
 }
 
-uinstr_t unpack (t_value rk)
-{
-	uinstr_t ui;
-
-	ui.i_reg = rk >> 20;
-	if (rk & BIT20) {
-		ui.i_opcode = (rk >> 15) & 037;
-		ui.i_opcode += 060;
-		ui.i_addr = rk & BITS15;
-	} else {
-		ui.i_opcode = (rk >> 12) & 077;
-		ui.i_addr = rk & 07777;
-		if (rk & BIT19)
-			ui.i_addr |= 070000;
-	}
-	return ui;
-}
-
 alureg_t toalu (t_value val)
 {
         alureg_t ret;
@@ -637,7 +619,6 @@ t_value fromalu (alureg_t reg)
 void cpu_one_inst ()
 {
 	int reg, opcode, addr, n, i, r, nextpc, nextaddrmod = 0;
-	uinstr_t ui;
 	optab_t op;
 
 	t_value word = mmu_fetch (PC);
@@ -648,9 +629,18 @@ void cpu_one_inst ()
 
 	RK &= BITS24;
 
-	ui = unpack (RK);
-	op = optab[ui.i_opcode];
-	reg = ui.i_reg;
+	reg = RK >> 20;
+	if (RK & BIT20) {
+		opcode = (RK >> 12) & 0370;
+		addr = RK & BITS15;
+		op = optab [(opcode >> 3) + 060];
+	} else {
+		opcode = (RK >> 12) & 077;
+		addr = RK & BITS12;
+		if (RK & BIT19)
+			addr |= 070000;
+		op = optab [opcode];
+	}
 
 	if (sim_deb && cpu_dev.dctrl) {
 		fprintf (sim_deb, "*** %05o%s: ", PC,
@@ -667,9 +657,8 @@ void cpu_one_inst ()
 	}
 
 	if (RUU & RUU_MOD_RK) {
-                addr = ADDR (ui.i_addr + M[MOD]);
-        } else
-                addr = ui.i_addr;
+                addr = ADDR (addr + M[MOD]);
+        }
 
 	delay = 0;
 	corr_stack = 0;
@@ -836,10 +825,11 @@ common_add:
 		acc.r = accex.r;
 		acc.ml = accex.ml & BITS16;
 		acc.o += (Aex & 0177) - 64;
-		op.o_flags |= F_AR;
 		enreg = accex;
-		accex = zeroword;
 		enreg.l = ((long) enreg.o << 17) | enreg.ml;
+		accex = zeroword;
+		normalize_and_round ();
+		accex = enreg;
 		break;
 	case I_UZA:
 		Aex = ADDR (addr + M[reg]);
@@ -891,7 +881,7 @@ common_add:
 		break;
 	case I_VZM:
 		Aex = addr;
-		if (ui.i_opcode & 1) {
+		if (opcode & 010) {
 			if (M[reg]) {
 				PC = addr;
 				RUU &= ~RUU_RIGHT_INSTR;
@@ -995,7 +985,7 @@ mtj:			M[Aex & 037] = M[reg];
 		M[14] = Aex;
 		RUU = SET_SUPERVISOR (RUU, SPSW_EXTRACODE);
 
-		PC = 0500 + ui.i_opcode;	// E20? E21?
+		PC = 0500 + opcode;	// E20? E21?
 		RUU &= ~RUU_RIGHT_INSTR;
 		break;
 	case I_MOD:
@@ -1054,9 +1044,6 @@ mtj:			M[Aex & 037] = M[reg];
 
 	if (op.o_flags & F_AR) {
 		normalize_and_round ();
-		if (op.o_inline == I_YTA)
-			accex = enreg;
-		rnd_rq = 0;
 	}
 	ACC = fromalu (acc);
 	RMR = fromalu (accex);

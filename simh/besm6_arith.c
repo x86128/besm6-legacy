@@ -130,6 +130,8 @@ typedef union {
 #define E_SUCCESS 0
 
 alureg_t acc, accex, enreg, zeroword;
+
+/* Требуется округление. */
 int rnd_rq;
 
 alureg_t negate (alureg_t word)
@@ -857,6 +859,7 @@ chk_rnd:
 
 	if (!acc.ml && !acc.r && ! (RAU & RAU_NORM_DISABLE)) {
 zero:		acc.l = acc.r = accex.l = accex.r = 0;
+		rnd_rq = 0;
 		return;
 	}
 	acc.l = ((uint32) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
@@ -864,4 +867,5 @@ zero:		acc.l = acc.r = accex.l = accex.r = 0;
 
 	accex.l = ((uint32) (accex.o & 0x7f) << 17) | (accex.ml & 0x1ffff);
 	accex.r = accex.r & 0xffffff;
+	rnd_rq = 0;
 }
