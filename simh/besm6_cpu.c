@@ -1025,7 +1025,6 @@ mtj:			M[addr & 0x1f] = M[reg];
 		RUU |= RUU_MOD_RK;
 	else {
 		RUU &= ~RUU_MOD_RK;
-		M[MOD] = 0;
 	}
 }
 
