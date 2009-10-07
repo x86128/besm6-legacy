@@ -27,7 +27,11 @@ UNIT mmu_unit = {
 };
 
 t_value BRZ[8];
-uint32 BAZ[8], TABST, RZ;
+uint32 BAZ[8], TABST, RZ, OLDEST;
+
+t_value BRS[4];
+uint32 BAS[4];
+uint32 BRSLRU;
 
 /*
  * 64-битные регистры RP0-RP7 - для отображения регистров приписки,
@@ -59,7 +63,8 @@ REG mmu_reg[] = {
 { "БАЗ5",  &BAZ[5],	8, 16, 0, 1 },
 { "БАЗ6",  &BAZ[6],	8, 16, 0, 1 },
 { "БАЗ7",  &BAZ[7],	8, 16, 0, 1 },
-{ "ТАБСТ", &TABST,	8, 28, 0, 1 },		/* Таблица старшинства БРЗ */
+{ "ТАБСТ", &TABST,	8, 28, 0, 1, REG_HIDDEN },/* Таблица старшинства БРЗ */
+{ "Старш", &OLDEST,	8,  3, 0, 1 },		/* Номер вытолкнутого БРЗ */
 { "РП0",   &RP[0],	8, 48, 0, 1, REG_VMIO},	/* Регистры приписки, по 12 бит */
 { "РП1",   &RP[1],	8, 48, 0, 1, REG_VMIO},
 { "РП2",   &RP[2],	8, 48, 0, 1, REG_VMIO},
@@ -76,6 +81,15 @@ REG mmu_reg[] = {
 { "ТР5",   &pult[5],	8, 50, 0, 1, REG_VMIO},
 { "ТР6",   &pult[6],	8, 50, 0, 1, REG_VMIO},
 { "ТР7",   &pult[7],	8, 50, 0, 1, REG_VMIO},
+{ "БРС0",  &BRS[0],	8, 50, 0, 1, REG_VMIO}, /* Буферные регистры слов */
+{ "БРС1",  &BRS[1],	8, 50, 0, 1, REG_VMIO},
+{ "БРС2",  &BRS[2],	8, 50, 0, 1, REG_VMIO},
+{ "БРС3",  &BRS[3],	8, 50, 0, 1, REG_VMIO},
+{ "БАС0",  &BAS[0],	8, 16, 0, 1 },		/* Буферные адреса слов */
+{ "БАС1",  &BAS[1],	8, 16, 0, 1 },
+{ "БАС2",  &BAS[2],	8, 16, 0, 1 },
+{ "БАС3",  &BAS[3],	8, 16, 0, 1 },
+{ "БРСст", &BRSLRU,	8,  6, 0, 1, REG_HIDDEN},
 { 0 }
 };
 
@@ -103,6 +117,7 @@ t_stat mmu_reset (DEVICE *dptr)
 		BRZ[i] = BAZ[i] = RP[i] = 0;
 	}
 	TABST = 0;
+	OLDEST = 0;
 	RZ = 0;
 	/*
 	 * Front panel switches survive the reset
@@ -172,7 +187,7 @@ void mmu_protection_check (int addr)
 void mmu_store (int addr, t_value val)
 {
 	int i;
-	int oldest = -1, matching = -1;
+	int matching = OLDEST;
 
 	addr &= BITS15;
 	if (addr == 0)
@@ -191,7 +206,6 @@ void mmu_store (int addr, t_value val)
 		longjmp(cpu_halt, STOP_STORE_ADDR_MATCH);
 
 	for (i = 0; i < 8; ++i) {
-		if (loses_to_all (i)) oldest = i;
 		if (addr == BAZ[i]) {
 			matching = i;
 		}
@@ -199,22 +213,28 @@ void mmu_store (int addr, t_value val)
 
 	/* Совпадение адресов не фиксируется для тумблерных регистров */
 	if (addr > 0100000 && addr < 0100010)
-		matching = -1;
+		matching = OLDEST;
 
-	if (matching < 0) {
+	BRZ[matching] = SET_CONVOL (val, RUU ^ CONVOL_INSN);
+	BAZ[matching] = addr;
+	set_wins (matching);
+
+	if (matching == OLDEST) {
+		for (i = 0; i < 8; ++i) {
+			if (loses_to_all(i)) {
+				OLDEST = i;
+				break;
+			}
+		}
 		/* Вычисляем физический адрес выталкиваемого БРЗ */
-		int waddr = BAZ[oldest];
+		int waddr = BAZ[OLDEST];
 		waddr = waddr > 0100000 ? waddr - 0100000 :
 		waddr & 01777 | TLB[waddr >> 10] << 10;
 		if (waddr >= 010) {
 			/* В ноль и тумблерные регистры не пишем */
-			memory[waddr] = BRZ[oldest];
+			memory[waddr] = BRZ[OLDEST];
 		}
-		matching = oldest;
-		BAZ[oldest] = addr;
 	}
-	BRZ[matching] = SET_CONVOL (val, RUU ^ CONVOL_INSN);
-	set_wins (matching);
 }
 
 /*
@@ -282,12 +302,106 @@ t_value mmu_load (int addr)
 	return val & WORD;
 }
 
+/* A little BRS LRU table */
+#define brs_loses_to_all(i) ((BRSLRU & brs_win_mask[i]) == 0 && \
+			(BRSLRU & brs_lose_mask[i]) == brs_lose_mask[i])
+
+/*
+ * N wins over M if the bit is set
+ *  M=1   2   3 
+ * N  ---------
+ * 0| 0   1   2   
+ * 1|     3   4   
+ * 2|         5
+ */
+
+static unsigned brs_win_mask[4] = {
+	07,
+	03 << 3,
+	01 << 5,
+	0
+};
+
+static unsigned brs_lose_mask[8] = {
+	0,
+	1<<0,
+	1<<1|1<<3,
+	1<<2|1<<4|1<<5
+};
+
+#define brs_set_wins(i) BRSLRU = (BRSLRU & ~brs_lose_mask[i]) | brs_win_mask[i]
+
+void mmu_fetch_check(int addr) {
+	/* В режиме супервизора защиты нет */
+	if (! IS_SUPERVISOR(RUU)) {
+		int page = TLB[addr >> 10];
+		/*
+		 * Для команд в режиме пользователя признак защиты -
+		 * 0 в регистре приписки.
+		 */
+		if (page == 0) {
+			iintr_data = addr >> 10;
+			if (mmu_dev.dctrl)
+				besm6_debug ("--- %05o: защита команды", addr);
+			longjmp (cpu_halt, STOP_INSN_PROT);
+		}
+	}
+}
+
+/*
+ * Предвыборка команды на БРС
+ */
+t_value mmu_prefetch (int addr, int actual) {
+	t_value val;
+	int i, matching = -1;
+
+	for (i = 0; i < 4; ++i) {
+		if (BAS[i] == addr) {
+			if (actual) {
+				brs_set_wins (i);
+			}
+			val = BRS[i];
+			matching = i;
+			break;
+		}
+	}
+
+	if (matching != -1)
+		return val;
+
+	for (i = 0; i < 4; ++i) {
+		if (brs_loses_to_all (i)) {
+			matching = i;
+			BAS[i] = addr;
+			if (actual) {
+				brs_set_wins (i);
+			}
+			break;
+		}
+	}
+	if (addr < 0100000) {
+		int page = TLB[addr >> 10];
+
+		/* Вычисляем физический адрес слова */
+		addr = addr & 01777 | page << 10;
+	} else {
+		addr = addr & BITS15;
+	}
+	if (addr < 010)
+		val = pult[addr];
+	else
+    		val = memory[addr];
+	BRS[matching] = val;
+	return val;
+}
+
 /*
  * Выборка команды
  */
 t_value mmu_fetch (int addr)
 {
 	t_value val;
+	int i, matching = -1;
 
 	if (addr == 0) {
 		/* В режиме супервизора слово 0 - команда,
@@ -300,34 +414,18 @@ t_value mmu_fetch (int addr)
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 
+	mmu_fetch_check(addr);
+
+	/* Различаем адреса с припиской и без */
+	if (IS_SUPERVISOR (RUU))
+		addr |= 0100000;
+
 	/* КРА */
-	if (M[IBP] == (addr | (IS_SUPERVISOR(RUU) ? 0100000 : 0)))
+	if (M[IBP] == addr)
 		longjmp(cpu_halt, STOP_INSN_ADDR_MATCH);
 
-	/* В режиме супервизора защиты нет */
-	if (IS_SUPERVISOR (RUU)) {
-		if (addr < 010)
-			val = pult [addr];
-		else
-			val = memory [addr];
-	} else {
-		int page = TLB[addr >> 10];
-		/*
-		 * Для команд в режиме пользователя признак защиты -
-		 * 0 в регистре приписки.
-		 */
-		if (page == 0) {
-			iintr_data = addr >> 10;
-			if (mmu_dev.dctrl)
-				besm6_debug ("--- %05o: защита команды", addr);
-			longjmp (cpu_halt, STOP_INSN_PROT);
-		}
+	val = mmu_prefetch(addr, 1);
 
-		/* Вычисляем физический адрес слова */
-		addr = addr & 01777 | page << 10;
-
-		val = memory[addr];
-	}
 	if (sim_log && mmu_dev.dctrl)
 		fprintf (sim_log, "--- %05o: выборка %016llo\n",
 			addr, val & WORD);
@@ -337,6 +435,8 @@ t_value mmu_fetch (int addr)
 		besm6_debug ("--- %05o: контроль команды", addr);
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
+	/* Предвыборка следующего слова */
+	mmu_prefetch(((addr + 1) & BITS15) | (addr & 0100000), 0);
 	return val & WORD;
 }
 
