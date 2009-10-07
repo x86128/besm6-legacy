@@ -37,7 +37,6 @@
  * 13) A lot of comments in Russian (UTF-8).
  */
 #include "besm6_defs.h"
-#include "besm6_optab.h"
 #include "besm6_legacy.h"
 #include <math.h>
 #include <float.h>
@@ -682,26 +681,30 @@ void cpu_one_inst ()
 	case I_ATX:
 		Aex = ADDR (addr + M[reg]);
 		mmu_store (Aex, ACC);
-		if (!addr && (reg == 017))
+		if (! addr && reg == 017)
 			M[017] = ADDR (M[017] + 1);
 		break;
 	case I_STX:
 		Aex = ADDR (addr + M[reg]);
 		mmu_store (Aex, ACC);
-		STK_POP;
+		M[017] = ADDR (M[017] - 1);
+		corr_stack = 1;
+		acc = toalu (mmu_load (M[017]));
 		break;
 	case I_XTS:
-		STK_PUSH;
+		mmu_store (M[017], fromalu (acc));
+		M[017] = ADDR (M[017] + 1);
 		corr_stack = -1;
 		Aex = ADDR (addr + M[reg]);
-		GET_OP;
-		acc = enreg;
+		acc = toalu (mmu_load (Aex));
 		break;
 	case I_XTA:
-		CHK_STACK;
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
 		Aex = ADDR (addr + M[reg]);
-		GET_OP;
-		acc = enreg;
+		acc = toalu (mmu_load (Aex));
 		break;
 	case I_VTM:
 		Aex = addr;
@@ -744,56 +747,81 @@ void cpu_one_inst ()
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case I_ITS:
-		STK_PUSH;
-		/*      fall    thru    */
+		mmu_store (M[017], fromalu (acc));
+		M[017] = ADDR (M[017] + 1);
+		/* fall thru... */
 	case I_ITA:
 		Aex = ADDR (addr + M[reg]);
 		acc.l = 0;
-		acc.r = ADDR(M[Aex & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf)]);
+		acc.r = ADDR(M[Aex & (IS_SUPERVISOR (RUU) ? 037 : 017)]);
 		break;
 	case I_XTR:
-		CHK_STACK;
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
 		Aex = ADDR (addr + M[reg]);
-		GET_OP;
-set_mode:
-		RAU = enreg.o & 077;
+		RAU = (mmu_load (Aex) >> 41) & 077;
 		break;
 	case I_NTR:
 		Aex = ADDR (addr + M[reg]);
-		GET_NAI_OP;
-		goto set_mode;
+		RAU = Aex & 077;
+		break;
 	case I_RTE:
 		Aex = ADDR (addr + M[reg]);
-		GET_NAI_OP;
 		acc.o = RAU;
-		acc.l = (long) (acc.o & enreg.o) << 17;
+		acc.l = (long) (acc.o & Aex & 0177) << 17;
 		acc.r = 0;
 		break;
 	case I_ASUB:
-		CHK_STACK;
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
 		Aex = ADDR (addr + M[reg]);
-		GET_OP;
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
 		if (NEGATIVE (acc))
-			NEGATE (acc);
-		if (!NEGATIVE (enreg))
-			NEGATE (enreg);
+			acc = negate (acc);
+		if (! NEGATIVE (enreg))
+			enreg = negate (enreg);
 		goto common_add;
 	case I_RSUB:
-		CHK_STACK;
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
 		Aex = ADDR (addr + M[reg]);
-		GET_OP;
-		NEGATE (acc);
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
+		acc = negate (acc);
 		goto common_add;
 	case I_SUB:
-		CHK_STACK;
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
 		Aex = ADDR (addr + M[reg]);
-		GET_OP;
-		NEGATE (enreg);
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
+		enreg = negate (enreg);
 		goto common_add;
 	case I_ADD:
-		CHK_STACK;
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
 		Aex = ADDR (addr + M[reg]);
-		GET_OP;
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
 common_add:
 		add();
 		break;
@@ -805,22 +833,22 @@ common_add:
 		}
 		UNPCK (accex);
 		UNPCK (acc);
-		acc.mr = accex.mr;
-		acc.ml = accex.ml & 0xffff;
-		acc.o += (Aex & 0x7f) - 64;
+		acc.r = accex.r;
+		acc.ml = accex.ml & BITS16;
+		acc.o += (Aex & 0177) - 64;
 		op.o_flags |= F_AR;
 		enreg = accex;
 		accex = zeroword;
-		PACK (enreg);
+		enreg.l = ((long) enreg.o << 17) | enreg.ml;
 		break;
 	case I_UZA:
 		Aex = ADDR (addr + M[reg]);
 		accex = acc;
 		if (IS_ADDITIVE (RAU)) {
-			if (acc.l & 0x10000)
+			if (acc.l & BIT17)
 				break;
 		} else if (IS_MULTIPLICATIVE (RAU)) {
-			if (! (acc.l & 0x800000))
+			if (! (acc.l & BIT24))
 				break;
 		} else if (IS_LOGICAL (RAU)) {
 			if (acc.l | acc.r)
@@ -834,10 +862,10 @@ common_add:
 		Aex = ADDR (addr + M[reg]);
 		accex = acc;
 		if (IS_ADDITIVE (RAU)) {
-			if (! (acc.l & 0x10000))
+			if (! (acc.l & BIT17))
 				break;
 		} else if (IS_MULTIPLICATIVE (RAU)) {
-			if (acc.l & 0x800000)
+			if (acc.l & BIT24)
 				break;
 		} else if (IS_LOGICAL (RAU)) {
 			if (! (acc.l | acc.r))
@@ -853,10 +881,12 @@ common_add:
 		nextaddrmod = 1;
 		break;
 	case I_WTC:
-		CHK_STACK;
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
 		Aex = ADDR (addr + M[reg]);
-		GET_OP;
-		M[MOD] = ADDR (enreg.r);
+		M[MOD] = ADDR (mmu_load (Aex));
 		nextaddrmod = 1;
 		break;
 	case I_VZM:
@@ -883,7 +913,7 @@ common_add:
 	case I_ATI:
 		Aex = ADDR (addr + M[reg]);
 		if (IS_SUPERVISOR (RUU)) {
-			int reg = Aex & 0x1f;
+			int reg = Aex & 037;
 			M[reg] = ADDR (acc.r);
 			/* breakpoint/watchpoint regs will match physical
 			 * or virtual addresses depending on the current
@@ -891,49 +921,47 @@ common_add:
 			 */
 			if ((M[PSW] & PSW_MMAP_DISABLE) &&
 				 (reg == IBP || reg == DWP))
-				M[reg] |= 0100000;
+				M[reg] |= BIT16;
 
 		} else
-			M[Aex & 0xf] = ADDR (acc.r);
+			M[Aex & 017] = ADDR (acc.r);
 		M[0] = 0;
 		break;
 	case I_STI: {
 		unsigned rg, ad;
 
 		Aex = ADDR (addr + M[reg]);
-		rg = Aex & (IS_SUPERVISOR (RUU) ? 0x1f : 0xf);
+		rg = Aex & (IS_SUPERVISOR (RUU) ? 037 : 017);
 		ad = ADDR (acc.r);
 		M[rg] = ad;
 		if ((M[PSW] & PSW_MMAP_DISABLE) &&
                                  (rg == IBP || rg == DWP))
-                                M[rg] |= 0100000;
+                                M[rg] |= BIT16;
 		M[0] = 0;
 		if (rg != 017)
 			M[017] = ADDR (M[017] - 1);
-		LOAD (acc, M[017]);
+		acc = toalu (mmu_load (M[017]));
 		break;
 	}
 	case I_MTJ:
 		Aex = addr;
 		if (IS_SUPERVISOR (RUU)) {
-mtj:			M[addr & 0x1f] = M[reg];
+mtj:			M[Aex & 037] = M[reg];
 			if ((M[PSW] & PSW_MMAP_DISABLE) &&
-                                 ((addr & 0x1f) == IBP || (addr & 0x1f) == DWP))
-                                M[addr & 0x1f] |= 0100000;
+			    ((Aex & 037) == IBP || (Aex & 037) == DWP))
+                                M[Aex & 037] |= BIT16;
 
 		} else
-			M[addr & 0xf] = M[reg];
+			M[Aex & 017] = M[reg];
 		M[0] = 0;
 		break;
-	case I_MPJ: {
-		uint8 rg = addr & 0xf;
+	case I_MPJ:
 		Aex = addr;
-		if (rg & 020 && IS_SUPERVISOR (RUU))
+		if ((Aex & 020) && IS_SUPERVISOR (RUU))
 			goto mtj;
-		M[rg] = ADDR (M[rg] + M[reg]);
+		M[Aex & 017] = ADDR (M[Aex & 017] + M[reg]);
 		M[0] = 0;
 		break;
-	}
 	case I_IRET:
 		Aex = addr;
 		if (! IS_SUPERVISOR (RUU)) {
@@ -990,24 +1018,39 @@ mtj:			M[addr & 0x1f] = M[reg];
 			RAU = SET_LOGICAL (RAU);
 		break;
 	default:
-		if (op.o_flags & F_STACK) {
-			CHK_STACK;
+		if ((op.o_flags & F_STACK) && ! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
 		if (op.o_flags & F_OP) {
-			GET_OP;
-		} else if (op.o_flags & F_NAI)
-			GET_NAI_OP;
+			enreg = toalu (mmu_load (Aex));
+			if (op.o_flags & F_AR) {
+				accex = zeroword;
+				UNPCK (enreg);
+				UNPCK (acc);
+			} else if (op.o_flags & F_AROP) {
+				UNPCK (enreg);
+			}
+		} else if (op.o_flags & F_NAI) {
+			enreg.o = Aex & 0177;
+			enreg.ml = enreg.r = 0;
+			if (op.o_flags & F_AR) {
+				accex = zeroword;
+				UNPCK (acc);
+			}
+		}
 
-		if (! IS_SUPERVISOR (RUU) && op.o_flags & F_PRIV)
+		if (! IS_SUPERVISOR (RUU) && (op.o_flags & F_PRIV))
 			longjmp (cpu_halt, STOP_BADCMD);
 		else
 			(*op.o_impl)();
 		break;
 	}
 
-	if ((i = op.o_flags & F_GRP))
-		RAU = SET_MODE (RAU, 1<<(i+1));
+	i = op.o_flags & F_GRP;
+	if (i)
+		RAU = SET_MODE (RAU, 2 << i);
 
 	if (op.o_flags & F_AR) {
 		normalize_and_round ();
@@ -1203,7 +1246,7 @@ t_stat sim_instr (void)
 				return r;
 		}
 
-		if (PC >= 0100000) {			/* выход за пределы памяти */
+		if (PC > BITS15) {			/* выход за пределы памяти */
 			return STOP_RUNOUT;		/* stop simulation */
 		}
 
