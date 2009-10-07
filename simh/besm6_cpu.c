@@ -1210,7 +1210,7 @@ t_stat sim_instr (void)
 			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
 				return r;
 			op_int_1();
-			GRP |= GRP_OVERFLOW;
+			GRP |= GRP_OVERFLOW|GRP_RAM_CHECK;
 			break;
 		case STOP_DIVZERO:
 			if (! (RUU & RUU_AVOST_DISABLE) &&	/* ! БРО */
@@ -1218,7 +1218,7 @@ t_stat sim_instr (void)
 			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
 				return r;
 			op_int_1();
-			GRP |= GRP_DIVZERO;
+			GRP |= GRP_DIVZERO|GRP_RAM_CHECK;
 			break;
 		}
 		++iintr;
