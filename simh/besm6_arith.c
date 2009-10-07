@@ -14,8 +14,94 @@
  */
 #include <math.h>
 #include "besm6_defs.h"
-#include "besm6_optab.h"
 #include "besm6_legacy.h"
+
+/*
+ * Table of instruction codes.
+ * To be deleted after code refactoring.
+ */
+optab_t optab[] = {
+	{"atx", 0,      I_ATX,  0, },                           /* 000 */
+	{"stx", 0,      I_STX,  F_LG, },			/* 001 */
+	{"mod", 0,	I_MOD,	F_PRIV, },                      /* 002 */
+	{"xts", 0,      I_XTS,  F_OP | F_LG, },			/* 003 */
+	{"a+x", 0,      I_ADD,  F_STACK | F_OP | F_AR | F_AG, },/* 004 */
+	{"a-x", 0,      I_SUB,  F_STACK | F_OP | F_AR | F_AG, },/* 005 */
+	{"x-a", 0,      I_RSUB, F_STACK | F_OP | F_AR | F_AG, },/* 006 */
+	{"amx", 0,      I_ASUB, F_STACK | F_OP | F_AR | F_AG, },/* 007 */
+	{"xta", 0,      I_XTA,  F_STACK | F_OP | F_LG, },       /* 010 */
+	{"aax", aax,    0,      F_STACK | F_OP | F_LG, },       /* 011 */
+	{"aex", aex,    0,      F_STACK | F_OP | F_LG, },       /* 012 */
+	{"arx", arx,    0,      F_STACK | F_OP | F_MG, },       /* 013 */
+	{"avx", avx,    0,      F_STACK | F_OP | F_AR | F_AG, },/* 014 */
+	{"aox", aox,    0,      F_STACK | F_OP | F_LG, },       /* 015 */
+	{"a/x", b6div,  0,      F_STACK | F_OP | F_AR | F_MG, },/* 016 */
+	{"a*x", mul,    0,      F_STACK | F_OP | F_AR | F_MG, },/* 017 */
+	{"apx", apx,    0,      F_STACK | F_OP | F_LG, },       /* 020 */
+	{"aux", aux,    0,      F_STACK | F_OP | F_LG, },       /* 021 */
+	{"acx", acx,    0,      F_STACK | F_OP | F_LG, },       /* 022 */
+	{"anx", anx,    0,      F_STACK | F_OP | F_LG, },       /* 023 */
+	{"e+x", epx,    0,      F_STACK | F_OP | F_AR | F_MG, },/* 024 */
+	{"e-x", emx,    0,      F_STACK | F_OP | F_AR | F_MG, },/* 025 */
+	{"asx", asx,    0,      F_STACK | F_OP | F_LG | F_AROP, }, /* 026 */
+	{"xtr", 0,      I_XTR,  F_STACK | F_OP | F_AROP, },     /* 027 */
+	{"rte", 0,      I_RTE,  F_NAI | F_LG, },                /* 030 */
+	{"yta", 0,      I_YTA,  F_NAI },                        /* 031 */
+	{"ext", 0,      I_EXT,  F_PRIV, },                      /* 032 */
+	{"ext", 0,      I_EXT,  F_PRIV, },                      /* 033 */
+	{"e+n", epx,    0,      F_NAI | F_AR| F_MG, },          /* 034 */
+	{"e-n", emx,    0,      F_NAI | F_AR| F_MG, },          /* 035 */
+	{"asn", asx,    0,      F_NAI | F_LG, },                /* 036 */
+	{"ntr", 0,      I_NTR,  F_NAI, },                       /* 037 */
+	{"ati", 0,      I_ATI,  0, },                           /* 040 */
+	{"sti", 0,      I_STI,  F_LG, },			/* 041 */
+	{"ita", 0,      I_ITA,  F_LG, },                        /* 042 */
+	{"its", 0,      I_ITS,  F_LG, },			/* 043 */
+	{"mtj", 0,      I_MTJ,  0, },				/* 044 */
+	{"m+j", 0,      I_MPJ,  0, },				/* 045 */
+	{"x46", 0,	I_MTJ,  F_PRIV, },			/* 046 */
+	{"x47", 0,	I_MPJ,  F_PRIV, },			/* 047 */
+	{"*50", 0,      I_TRAP, 0, },				/* 050 */
+	{"*51", 0,      I_TRAP, 0, },				/* 051 */
+	{"*52", 0,      I_TRAP, 0, },				/* 052 */
+	{"*53", 0,      I_TRAP, 0, },				/* 053 */
+	{"*54", 0,      I_TRAP, 0, },				/* 054 */
+	{"*55", 0,      I_TRAP, 0, },				/* 055 */
+	{"*56", 0,      I_TRAP, 0, },				/* 056 */
+	{"*57", 0,      I_TRAP, 0, },				/* 057 */
+	{"*60", 0,      I_TRAP, 0, },				/* 060 */
+	{"*61", 0,      I_TRAP, 0, },				/* 061 */
+	{"*62", 0,      I_TRAP, 0, },				/* 062 */
+	{"*63", 0,      I_TRAP, 0, },				/* 063 */
+	{"*64", 0,      I_TRAP, 0, },				/* 064 */
+	{"*65", 0,      I_TRAP, 0, },				/* 065 */
+	{"*66", 0,      I_TRAP, 0, },				/* 066 */
+	{"*67", 0,      I_TRAP, 0, },				/* 067 */
+	{"*70", 0,      I_TRAP, 0, },				/* 070 */
+	{"*71", 0,      I_TRAP, 0, },				/* 071 */
+	{"*72", 0,      I_TRAP, 0, },				/* 072 */
+	{"*73", 0,      I_TRAP, 0, },				/* 073 */
+	{"*74", 0,      I_TRAP, 0, },				/* 074 */
+	{"*75", 0,      I_TRAP, 0, },				/* 075 */
+	{"*76", 0,      I_TRAP, 0, },				/* 076 */
+	{"*77", 0,      I_TRAP, 0, },				/* 077 */
+	{"*20", 0,      I_TRAP, 0, },				/*  20 */
+	{"*21", 0,      I_TRAP, 0, },				/*  21 */
+	{"utc", 0,      I_UTC,  0, },                           /*  22 */
+	{"wtc", 0,      I_WTC,  F_STACK | F_OP, },              /*  23 */
+	{"vtm", 0,      I_VTM,  0, },				/*  24 */
+	{"utm", 0,      I_UTM,  0, },                           /*  25 */
+	{"uza", 0,      I_UZA,  0, },                           /*  26 */
+	{"u1a", 0,      I_UIA,  0, },                           /*  27 */
+	{"uj ", 0,      I_UJ,   0, },                           /*  30 */
+	{"vjm", 0,      I_VJM,  0, },				/*  31 */
+	{"iret",0,      I_IRET, F_PRIV, },			/*  32 */
+	{"stop",0,      I_STOP, 0, },                           /*  33 */
+	{"vzm", 0,      I_VZM,  0, },				/*  34 */
+	{"v1m", 0,      I_VZM,  0, },				/*  35 */
+	{"X36", 0,      I_VZM,  0, },				/*  36 */
+	{"vlm", 0,      I_VLM,  0, },				/*  37 */
+};
 
 /*
  * 64-bit floating-point value in format of standard IEEE 754.
@@ -37,14 +123,31 @@ typedef union {
 #define BESM_TO_IEEE(from,to) {\
 	to.u.left32 = ((from.o - 64 + 1022) << 20) |\
 			((from.ml << 5) & 0xfffff) |\
-			(from.mr >> 19);\
-	to.u.right32 = (from.mr & 0x7ffff) << 13;\
+			(from.r >> 19);\
+	to.u.right32 = (from.r & 0x7ffff) << 13;\
 }
 
 #define E_SUCCESS 0
 
 alureg_t acc, accex, enreg, zeroword;
 int rnd_rq;
+
+alureg_t negate (alureg_t word)
+{
+	if (NEGATIVE (word))
+		word.ml |= 0x20000;
+	word.r = (~word.r & 0xffffff) + 1;
+	word.ml = (~word.ml + (word.r >> 24)) & 0x3ffff;
+	word.r &= 0xffffff;
+	if (((word.ml >> 1) ^ word.ml) & 0x10000) {
+		word.r = ((word.r >> 1) | (word.ml << 23)) & 0xffffff;
+		word.ml >>= 1;
+		++word.o;
+	}
+	if (NEGATIVE (word))
+		word.ml |= 0x20000;
+	return word;
+}
 
 int add()
 {
@@ -63,61 +166,61 @@ int add()
 	neg = NEGATIVE (a1);
 	if (!diff)
 		/*
-		accex.o = accex.ml = accex.mr = 0;
+		accex.o = accex.ml = accex.r = 0;
 		*/      ;
 	else if (diff <= 16) {
 		int rdiff = 16 - diff;
 		/*
-		accex.mr = 0;
-		*/      ;
-		rnd_rq = (accex.ml = (a1.mr << rdiff) & 0xffff) != 0;
-		a1.mr = ((a1.mr >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
+		accex.r = 0;
+		*/
+		rnd_rq = (accex.ml = (a1.r << rdiff) & 0xffff) != 0;
+		a1.r = ((a1.r >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
 		a1.ml = ((a1.ml >> diff) |
 			(neg ? ~0 << rdiff : 0)) & 0x3ffff;
 	} else if (diff <= 40) {
 		diff -= 16;
-		rnd_rq = (accex.mr = (a1.mr << (24 - diff)) & 0xffffff) != 0;
-/* было         rnd_rq |= (accex.ml = (((a1.mr & 0xff0000) >> diff) |   */
-		rnd_rq |= (accex.ml = ((a1.mr >> diff) |
+		rnd_rq = (accex.r = (a1.r << (24 - diff)) & 0xffffff) != 0;
+/* было         rnd_rq |= (accex.ml = (((a1.r & 0xff0000) >> diff) |   */
+		rnd_rq |= (accex.ml = ((a1.r >> diff) |
 			(a1.ml << (24 - diff))) & 0xffff) != 0;
-		a1.mr = ((((a1.mr >> 16) | (a1.ml << 8)) >> diff) |
+		a1.r = ((((a1.r >> 16) | (a1.ml << 8)) >> diff) |
 				(neg ? (~0l << (24 - diff)) : 0)) & 0xffffff;
 		a1.ml = neg ? 0x3ffff : 0;
 	} else if (diff <= 56) {
 		int rdiff = 16 - (diff -= 40);
-		rnd_rq = a1.ml || a1.mr;
-		accex.mr = ((a1.mr >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
+		rnd_rq = a1.ml || a1.r;
+		accex.r = ((a1.r >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
 		accex.ml = ((a1.ml >> diff) |
 			(neg ? ~0 << rdiff : 0)) & 0xffff;
 		if (neg) {
-			a1.mr = 0xffffff;
+			a1.r = 0xffffff;
 			a1.ml = 0x3ffff;
 		} else
-			a1.ml = a1.mr = 0;
+			a1.ml = a1.r = 0;
 	} else if (diff <= 80) {
 		diff -= 56;
-		rnd_rq = a1.ml || a1.mr;
-		accex.mr = ((((a1.mr >> 16) | (a1.ml << 8)) >> diff) |
+		rnd_rq = a1.ml || a1.r;
+		accex.r = ((((a1.r >> 16) | (a1.ml << 8)) >> diff) |
 				(neg ? (~0l << (24 - diff)) : 0)) & 0xffffff;
 		accex.ml = neg ? 0x3ffff : 0;
 		if (neg) {
-			a1.mr = 0xffffff;
+			a1.r = 0xffffff;
 			accex.ml = a1.ml = 0x3ffff;
 		} else
-			accex.ml = a1.ml = a1.mr = 0;
+			accex.ml = a1.ml = a1.r = 0;
 	} else {
-		rnd_rq = a1.ml || a1.mr;
+		rnd_rq = a1.ml || a1.r;
 		if (neg) {
 			accex.ml = 0xffff;
-			a1.mr = accex.mr = 0xffffff;
+			a1.r = accex.r = 0xffffff;
 			a1.ml = 0x3ffff;
 		} else
-			accex.ml = accex.mr = a1.ml = a1.mr = 0;
+			accex.ml = accex.r = a1.ml = a1.r = 0;
 	}
 	acc.o = a2.o;
-	acc.mr = a1.mr + a2.mr;
-	acc.ml = a1.ml + a2.ml + (acc.mr >> 24);
-	acc.mr &= 0xffffff;
+	acc.r = a1.r + a2.r;
+	acc.ml = a1.ml + a2.ml + (acc.r >> 24);
+	acc.r &= 0xffffff;
 	return E_SUCCESS;
 }
 
@@ -156,7 +259,7 @@ int arx()
 int avx()
 {
 	if (NEGATIVE (enreg))
-		NEGATE (acc);
+		acc = negate (acc);
 	return E_SUCCESS;
 }
 
@@ -211,33 +314,33 @@ int b6div ()
 	unsigned long   i, c, bias = 0;
 	math_t          dividend, divisor, quotient;
 
-	accex.o = accex.ml = accex.mr = 0;
+	accex.o = accex.ml = accex.r = 0;
 	neg = NEGATIVE (acc) != NEGATIVE (enreg);
 	if (NEGATIVE (acc))
-		NEGATE (acc);
+		acc = negate (acc);
 	if (NEGATIVE (enreg))
-		NEGATE (enreg);
+		enreg = negate (enreg);
 	if ((enreg.ml & 0x8000) == 0)
 		longjmp (cpu_halt, STOP_DIVZERO);
 
-	if ((acc.ml == 0) && (acc.mr == 0)) {
+	if ((acc.ml == 0) && (acc.r == 0)) {
 qzero:
 		acc = zeroword;
 		return E_SUCCESS;
 	}
 	if ((acc.ml & 0x8000) == 0) {   /* normalize */
 		while (acc.ml == 0) {
-			if (!acc.mr)
+			if (!acc.r)
 				goto qzero;
 			bias += 16;
-			acc.ml = acc.mr >> 8;
-			acc.mr = (acc.mr & 0xff) << 16;
+			acc.ml = acc.r >> 8;
+			acc.r = (acc.r & 0xff) << 16;
 		}
 		for (i = 0x8000, c = 0; (i & acc.ml) == 0; ++c)
 			i >>= 1;
 		bias += c;
-		acc.ml = ((acc.ml << c) | (acc.mr >> (24 - c))) & 0xffff;
-		acc.mr = (acc.mr << c) & 0xffffff;
+		acc.ml = ((acc.ml << c) | (acc.r >> (24 - c))) & 0xffff;
+		acc.r = (acc.r << c) & 0xffffff;
 	}
 
 	BESM_TO_IEEE (acc, dividend);
@@ -253,10 +356,10 @@ qzero:
 		goto qzero;
 	acc.o = o & 0x7f;
 	acc.ml = ((quotient.u.left32 & 0xfffff) | 0x100000) >> 5;
-	acc.mr = ((quotient.u.left32 & 0x1f) << 19) |
+	acc.r = ((quotient.u.left32 & 0x1f) << 19) |
 			(quotient.u.right32 >> 13);
 	if (neg)
-		NEGATE (acc);
+		acc = negate (acc);
 	if ((o > 0x7f) && ! (RAU & RAU_OVF_DISABLE))
 		longjmp (cpu_halt, STOP_OVFL);
 
@@ -283,60 +386,60 @@ int mul()
 
 	if (NEGATIVE (a)) {
 		neg = 1;
-		NEGATE (a);
+		a = negate (a);
 	}
 	if (NEGATIVE (b)) {
 		neg ^= 1;
-		NEGATE (b);
+		b = negate (b);
 	}
 	acc.o = a.o + b.o - 64;
 
-	a3 = a.mr & 0xfff;
-	a2 = a.mr >> 12;
+	a3 = a.r & 0xfff;
+	a2 = a.r >> 12;
 	a1 = a.ml;
 
-	b3 = b.mr & 0xfff;
-	b2 = b.mr >> 12;
+	b3 = b.r & 0xfff;
+	b2 = b.r >> 12;
 	b1 = b.ml;
 
-	accex.mr = (uint32) a3 * b3;
+	accex.r = (uint32) a3 * b3;
 
 	l = (uint32) a2 * b3 + (uint32) a3 * b2;
-	accex.mr += (l << 12) & 0xfff000;
+	accex.r += (l << 12) & 0xfff000;
 	accex.ml = l >> 12;
 
 	l = (uint32) a1 * b3 + (uint32) a2 * b2 + (uint32) a3 * b1;
 	accex.ml += l & 0xffff;
-	acc.mr = l >> 16;
+	acc.r = l >> 16;
 
 	l = (uint32) a1 * b2 + (uint32) a2 * b1;
 	accex.ml += (l & 0xf) << 12;
-	acc.mr += (l >> 4) & 0xffffff;
+	acc.r += (l >> 4) & 0xffffff;
 	acc.ml = l >> 28;
 
 	l = (uint32) a1 * b1;
-	acc.mr += (l & 0xffff) << 8;
+	acc.r += (l & 0xffff) << 8;
 	acc.ml += l >> 16;
 
-	accex.ml += accex.mr >> 24;
-	acc.mr += accex.ml >> 16;
-	acc.ml += acc.mr >> 24;
-	accex.mr &= 0xffffff;
+	accex.ml += accex.r >> 24;
+	acc.r += accex.ml >> 16;
+	acc.ml += acc.r >> 24;
+	accex.r &= 0xffffff;
 	accex.ml &= 0xffff;
-	acc.mr &= 0xffffff;
+	acc.r &= 0xffffff;
 	acc.ml &= 0xffff;
 
 	if (neg) {
-		accex.mr = (~accex.mr & 0xffffff) + 1;
-		accex.ml = (~accex.ml & 0xffff) + (accex.mr >> 24);
-		accex.mr &= 0xffffff;
-		acc.mr = (~acc.mr & 0xffffff) + (accex.ml >> 16);
+		accex.r = (~accex.r & 0xffffff) + 1;
+		accex.ml = (~accex.ml & 0xffff) + (accex.r >> 24);
+		accex.r &= 0xffffff;
+		acc.r = (~acc.r & 0xffffff) + (accex.ml >> 16);
 		accex.ml &= 0xffff;
-		acc.ml = ((~acc.ml & 0xffff) + (acc.mr >> 24)) | 0x30000;
-		acc.mr &= 0xffffff;
+		acc.ml = ((~acc.ml & 0xffff) + (acc.r >> 24)) | 0x30000;
+		acc.r &= 0xffffff;
 	}
 
-	rnd_rq = !!(accex.ml | accex.mr);
+	rnd_rq = !!(accex.ml | accex.r);
 
 	return E_SUCCESS;
 }
@@ -528,7 +631,7 @@ int yta()
 		return E_SUCCESS;
 	}
 
-	acc.mr = accex.mr;
+	acc.r = accex.r;
 	acc.l = (accex.l & 0xffff) |
 		((acc.l + (enreg.o << 17) - (64 << 17)) & 0x1fe0000);
 	if (acc.l & 0x1000000) {
@@ -548,7 +651,7 @@ double fetch_real (int addr)
 	math_t exponent;
 	int64_t mantissa;
 
-	LOAD (word, addr);
+	word = toalu (mmu_load (addr));
 	mantissa = ((int64_t) word.l << 24 | word.r) << (64 - 48 + 7);
 
 	exponent.u.left32 = ((word.l >> 17) - 64 + 1023 - 64 + 1) << 20;
@@ -565,10 +668,10 @@ void normalize_and_round ()
 	switch ((acc.ml >> 16) & 3) {
 	case 2:
 	case 1:
-		rnd_rq |= acc.mr & 1;
-		accex.mr = (accex.mr >> 1) | (accex.ml << 23);
-		accex.ml = (accex.ml >> 1) | (acc.mr << 15);
-		acc.mr = (acc.mr >> 1) | (acc.ml << 23);
+		rnd_rq |= acc.r & 1;
+		accex.r = (accex.r >> 1) | (accex.ml << 23);
+		accex.ml = (accex.ml >> 1) | (acc.r << 15);
+		acc.r = (acc.r >> 1) | (acc.ml << 23);
 		acc.ml >>= 1;
 		++acc.o;
 		goto chk_rnd;
@@ -583,72 +686,72 @@ void normalize_and_round ()
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff) |
-					(acc.mr >> (24 - cnt));
-			acc.mr = (acc.mr << cnt) |
+					(acc.r >> (24 - cnt));
+			acc.r = (acc.r << cnt) |
 					(rr = accex.ml >> (16 - cnt));
 			accex.ml = (accex.ml << cnt) |
-					(accex.mr >> (24 - cnt));
-			accex.mr <<= cnt;
+					(accex.r >> (24 - cnt));
+			accex.r <<= cnt;
 			acc.o -= cnt;
 			goto chk_zero;
 		}
-		if ((r = acc.mr >> 16)) {
+		if ((r = acc.r >> 16)) {
 			int     cnt, fcnt;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r <<= 1);
-			acc.ml = acc.mr >> (8 - cnt);
-			acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
+			acc.ml = acc.r >> (8 - cnt);
+			acc.r = (acc.r << (fcnt = 16 + cnt)) |
 					(accex.ml << cnt) |
-					(accex.mr >> (24 - cnt));
-			accex.mr <<= fcnt;
+					(accex.r >> (24 - cnt));
+			accex.r <<= fcnt;
 			acc.o -= fcnt;
 			rr = acc.r & ((1l << fcnt) - 1);
 			goto chk_zero;
 		}
-		if ((r = acc.mr & 0xffff)) {
+		if ((r = acc.r & 0xffff)) {
 			int cnt;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff) |
 					(accex.ml >> (16 - cnt));
-			acc.mr = (accex.ml << (8 + cnt)) |
-					(accex.mr >> (16 - cnt));
-			accex.ml = accex.mr << cnt;
-			accex.mr = 0;
+			acc.r = (accex.ml << (8 + cnt)) |
+					(accex.r >> (16 - cnt));
+			accex.ml = accex.r << cnt;
+			accex.r = 0;
 			acc.o -= 24 + cnt;
-			rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
+			rr = (acc.ml & ((1 << cnt) - 1)) | acc.r;
 			goto chk_zero;
 		}
 		if ((r = accex.ml & 0xffff)) {
 			int cnt;
-			rr = accex.ml | accex.mr;
+			rr = accex.ml | accex.r;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff) |
-					(accex.mr >> (24 - cnt));
-			acc.mr = (accex.mr << cnt);
-			accex.ml = accex.mr = 0;
+					(accex.r >> (24 - cnt));
+			acc.r = (accex.r << cnt);
+			accex.ml = accex.r = 0;
 			acc.o -= 40 + cnt;
 			goto chk_zero;
 		}
-		if ((r = accex.mr >> 16)) {
+		if ((r = accex.r >> 16)) {
 			int cnt;
-			rr = accex.ml | accex.mr;
+			rr = accex.ml | accex.r;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r <<= 1);
-			acc.ml = accex.mr >> (8 - cnt);
-			acc.mr = accex.mr << (16 + cnt);
-			accex.ml = accex.mr = 0;
+			acc.ml = accex.r >> (8 - cnt);
+			acc.r = accex.r << (16 + cnt);
+			accex.ml = accex.r = 0;
 			acc.o -= 56 + cnt;
 			goto chk_zero;
 		}
-		if ((r = accex.mr & 0xffff)) {
+		if ((r = accex.r & 0xffff)) {
 			int cnt;
-			rr = accex.ml | accex.mr;
+			rr = accex.ml | accex.r;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff);
-			acc.mr = accex.ml = accex.mr = 0;
+			acc.r = accex.ml = accex.r = 0;
 			acc.o -= 64 + cnt;
 			goto chk_zero;
 		}
@@ -659,82 +762,82 @@ void normalize_and_round ()
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff) |
-					(acc.mr >> (24 - cnt));
-			acc.mr = (acc.mr << cnt) |
+					(acc.r >> (24 - cnt));
+			acc.r = (acc.r << cnt) |
 					(rr = accex.ml >> (16 - cnt));
 			accex.ml = ((accex.ml << cnt) |
-					(accex.mr >> (24 - cnt)))
+					(accex.r >> (24 - cnt)))
 					& 0xffff;
-			accex.mr <<= cnt;
+			accex.r <<= cnt;
 			acc.o -= cnt;
 			goto chk_zero;
 		}
-		if ((r = (~acc.mr >> 16) & 0xff)) {
+		if ((r = (~acc.r >> 16) & 0xff)) {
 			int     cnt, fcnt;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r = (r << 1) | 1);
-			acc.ml = 0x10000 | (acc.mr >> (8 - cnt));
-			acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
+			acc.ml = 0x10000 | (acc.r >> (8 - cnt));
+			acc.r = (acc.r << (fcnt = 16 + cnt)) |
 					(accex.ml << cnt) |
-					(accex.mr >> (24 - cnt));
+					(accex.r >> (24 - cnt));
 			accex.ml = ((accex.ml << fcnt) |
-					(accex.mr >> (8 - cnt)))
+					(accex.r >> (8 - cnt)))
 					& 0xffff;
-			accex.mr <<= fcnt;
+			accex.r <<= fcnt;
 			acc.o -= fcnt;
 			rr = acc.r & ((1l << fcnt) - 1);
 			goto chk_zero;
 		}
-		if ((r = ~acc.mr & 0xffff)) {
+		if ((r = ~acc.r & 0xffff)) {
 			int cnt;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff) |
 					(accex.ml >> (16 - cnt));
-			acc.mr = (accex.ml << (8 + cnt)) |
-					(accex.mr >> (16 - cnt));
-			accex.ml = (accex.mr << cnt) & 0xffff;
-			accex.mr = 0;
+			acc.r = (accex.ml << (8 + cnt)) |
+					(accex.r >> (16 - cnt));
+			accex.ml = (accex.r << cnt) & 0xffff;
+			accex.r = 0;
 			acc.o -= 24 + cnt;
-			rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
+			rr = (acc.ml & ((1 << cnt) - 1)) | acc.r;
 			goto chk_zero;
 		}
 		if ((r = ~accex.ml & 0xffff)) {
 			int cnt;
-			rr = accex.ml | accex.mr;
+			rr = accex.ml | accex.r;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff) |
-					(accex.mr >> (24 - cnt));
-			acc.mr = (accex.mr << cnt);
-			accex.ml = accex.mr = 0;
+					(accex.r >> (24 - cnt));
+			acc.r = (accex.r << cnt);
+			accex.ml = accex.r = 0;
 			acc.o -= 40 + cnt;
 			goto chk_zero;
 		}
-		if ((r = (~accex.mr >> 16) & 0xff)) {
+		if ((r = (~accex.r >> 16) & 0xff)) {
 			int cnt;
-			rr = accex.ml | accex.mr;
+			rr = accex.ml | accex.r;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r = (r << 1) | 1);
-			acc.ml = 0x10000 | (accex.mr >> (8 - cnt));
-			acc.mr = accex.mr << (16 + cnt);
-			accex.ml = accex.mr = 0;
+			acc.ml = 0x10000 | (accex.r >> (8 - cnt));
+			acc.r = accex.r << (16 + cnt);
+			accex.ml = accex.r = 0;
 			acc.o -= 56 + cnt;
 			goto chk_zero;
 		}
-		if ((r = ~accex.mr & 0xffff)) {
+		if ((r = ~accex.r & 0xffff)) {
 			int cnt;
-			rr = accex.ml | accex.mr;
+			rr = accex.ml | accex.r;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff);
-			acc.mr = accex.ml = accex.mr = 0;
+			acc.r = accex.ml = accex.r = 0;
 			acc.o -= 64 + cnt;
 			goto chk_zero;
 		} else {
 			rr = 1;
 			acc.ml = 0x10000;
-			acc.mr = accex.ml = accex.mr = 0;
+			acc.r = accex.ml = accex.r = 0;
 			acc.o -= 80;
 			goto chk_zero;
 		}
@@ -750,15 +853,15 @@ chk_rnd:
 			longjmp (cpu_halt, STOP_OVFL);
 	}
 	if (! (RAU & RAU_ROUND_DISABLE) && rnd_rq)
-		acc.mr |= 1;
+		acc.r |= 1;
 
-	if (!acc.ml && !acc.mr && ! (RAU & RAU_NORM_DISABLE)) {
+	if (!acc.ml && !acc.r && ! (RAU & RAU_NORM_DISABLE)) {
 zero:		acc.l = acc.r = accex.l = accex.r = 0;
 		return;
 	}
 	acc.l = ((uint32) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
-	acc.r = acc.mr & 0xffffff;
+	acc.r = acc.r & 0xffffff;
 
 	accex.l = ((uint32) (accex.o & 0x7f) << 17) | (accex.ml & 0x1ffff);
-	accex.r = accex.mr & 0xffffff;
+	accex.r = accex.r & 0xffffff;
 }
