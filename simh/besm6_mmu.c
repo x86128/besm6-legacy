@@ -27,7 +27,7 @@ UNIT mmu_unit = {
 };
 
 t_value BRZ[8];
-uint32 BAZ[8], TABST, RZ, OLDEST;
+uint32 BAZ[8], TABST, RZ, OLDEST, FLUSH;
 
 t_value BRS[4];
 uint32 BAS[4];
@@ -64,6 +64,7 @@ REG mmu_reg[] = {
 { "БАЗ6",  &BAZ[6],	8, 16, 0, 1 },
 { "БАЗ7",  &BAZ[7],	8, 16, 0, 1 },
 { "ТАБСТ", &TABST,	8, 28, 0, 1, REG_HIDDEN },/* Таблица старшинства БРЗ */
+{ "ЗпТР",  &FLUSH,	8,  4, 0, 1, REG_HIDDEN },/* Признак выталкивания БРЗ */
 { "Старш", &OLDEST,	8,  3, 0, 1 },		/* Номер вытолкнутого БРЗ */
 { "РП0",   &RP[0],	8, 48, 0, 1, REG_VMIO},	/* Регистры приписки, по 12 бит */
 { "РП1",   &RP[1],	8, 48, 0, 1, REG_VMIO},
@@ -118,6 +119,7 @@ t_stat mmu_reset (DEVICE *dptr)
 	}
 	TABST = 0;
 	OLDEST = 0;
+	FLUSH = 0;
 	RZ = 0;
 	/*
 	 * Front panel switches survive the reset
@@ -181,6 +183,28 @@ void mmu_protection_check (int addr)
 	}
 }
 
+void mmu_flush (int idx) {
+	if (! BAZ[idx]) {
+		/* Был пуст после сброса или выталкивания */
+		return;
+	}
+	/* Вычисляем физический адрес выталкиваемого БРЗ */
+	int waddr = BAZ[idx];
+	waddr = waddr > 0100000 ? waddr - 0100000 :
+	waddr & 01777 | TLB[waddr >> 10] << 10;
+	memory[waddr] = BRZ[idx];
+}
+
+void mmu_oldest () {
+	int i;
+	for (i = 0; i < 8; ++i) {
+		if (loses_to_all(i)) {
+			OLDEST = i;
+			return;
+		}
+	}
+}
+
 /*
  * Запись слова в память
  */
@@ -205,35 +229,39 @@ void mmu_store (int addr, t_value val)
 	if (M[DWP] == addr && (M[PSW] & PSW_WRITE_WATCH))
 		longjmp(cpu_halt, STOP_STORE_ADDR_MATCH);
 
+	/* Запись в тумблерные регистры - выталкивание БРЗ */
+	if (addr > 0100000 && addr < 0100010) {
+		switch (FLUSH) {
+		case 0:	/* начали */
+			FLUSH = 1;
+			break;
+		case 1 ... 8: /* по порядку */
+			mmu_flush (FLUSH-1);
+			set_wins (FLUSH-1);
+			mmu_oldest ();
+			BAZ[FLUSH-1] = 0;
+			++FLUSH;
+			break;
+		default:	/* куда еще */
+			break;
+		}
+		return;
+	} else
+		FLUSH = 0;
+
 	for (i = 0; i < 8; ++i) {
 		if (addr == BAZ[i]) {
 			matching = i;
 		}
 	}
 
-	/* Совпадение адресов не фиксируется для тумблерных регистров */
-	if (addr > 0100000 && addr < 0100010)
-		matching = OLDEST;
-
 	BRZ[matching] = SET_CONVOL (val, RUU ^ CONVOL_INSN);
 	BAZ[matching] = addr;
 	set_wins (matching);
 
 	if (matching == OLDEST) {
-		for (i = 0; i < 8; ++i) {
-			if (loses_to_all(i)) {
-				OLDEST = i;
-				break;
-			}
-		}
-		/* Вычисляем физический адрес выталкиваемого БРЗ */
-		int waddr = BAZ[OLDEST];
-		waddr = waddr > 0100000 ? waddr - 0100000 :
-		waddr & 01777 | TLB[waddr >> 10] << 10;
-		if (waddr >= 010) {
-			/* В ноль и тумблерные регистры не пишем */
-			memory[waddr] = BRZ[OLDEST];
-		}
+		mmu_oldest ();
+		mmu_flush (OLDEST);
 	}
 }
 
