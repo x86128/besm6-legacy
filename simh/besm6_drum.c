@@ -257,4 +257,5 @@ t_stat drum_event (UNIT *u)
 		GRP |= GRP_DRUM1_FREE;
 	else
 		GRP |= GRP_DRUM2_FREE;
+	return SCPE_OK;
 }
