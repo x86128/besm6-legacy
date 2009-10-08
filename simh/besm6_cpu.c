@@ -758,20 +758,20 @@ common_add:
 		acc = toalu (mmu_load (Aex));
 		break;
 #if 0
-	{aax,    F_LG, },			/* 011 и, aax */
-	{aex,    F_LG, },			/* 012 нтж, aex */
-	{arx,    F_MG, },			/* 013 слц, arx */
-	{avx,    F_AR | F_AG, },		/* 014 знак, avx */
-	{aox,    F_LG, },			/* 015 или, aox */
-	{b6div,  F_AR | F_MG, },		/* 016 дел, a/x */
-	{mul,    F_AR | F_MG, },		/* 017 умн, a*x */
-	{apx,    F_LG, },			/* 020 сбр, apx */
-	{aux,    F_LG, },			/* 021 рзб, aux */
-	{acx,    F_LG, },			/* 022 чед, acx */
-	{anx,    F_LG, },			/* 023 нед, anx */
-	{epx,    F_AR | F_MG, },		/* 024 слп, e+x */
-	{emx,    F_AR | F_MG, },		/* 025 вчп, e-x */
-	{asx,    F_LG | F_AROP, },		/* 026 сд, asx */
+	{aax,    F_LG, },				/* 011 и, aax */
+	{aex,    F_LG, },				/* 012 нтж, aex */
+	{arx,    F_MG, },				/* 013 слц, arx */
+	{avx,    F_AR | F_AG, },			/* 014 знак, avx */
+	{aox,    F_LG, },				/* 015 или, aox */
+	{b6div,  F_AR | F_MG, },			/* 016 дел, a/x */
+	{mul,    F_AR | F_MG, },			/* 017 умн, a*x */
+	{apx,    F_LG, },				/* 020 сбр, apx */
+	{aux,    F_LG, },				/* 021 рзб, aux */
+	{acx,    F_LG, },				/* 022 чед, acx */
+	{anx,    F_LG, },				/* 023 нед, anx */
+	{epx,    F_AR | F_MG, },			/* 024 слп, e+x */
+	{emx,    F_AR | F_MG, },			/* 025 вчп, e-x */
+	{asx,    F_LG | F_AROP, },			/* 026 сд, asx */
 #endif
 	case 011:					/* и, aax */
 	case 012:					/* нтж, aex */
@@ -844,7 +844,7 @@ common_add:
 		if (Aex & 04000)
 			RAU = SET_LOGICAL (RAU);
 		break;
-	case 034:					/* 034 слпа, e+n */
+	case 034:					/* слпа, e+n */
 		Aex = ADDR (addr + M[reg]);
 		enreg.o = Aex & 0177;
 		enreg.ml = enreg.r = 0;
@@ -852,7 +852,7 @@ common_add:
 		UNPCK (acc);
 		epx();
 		break;
-	case 035:					/* 035 вчпа, e-n */
+	case 035:					/* вчпа, e-n */
 		Aex = ADDR (addr + M[reg]);
 		enreg.o = Aex & 0177;
 		enreg.ml = enreg.r = 0;
@@ -860,7 +860,7 @@ common_add:
 		UNPCK (acc);
 		emx();
 		break;
-	case 036:					/* 036 сда, asn */
+	case 036:					/* сда, asn */
 		Aex = ADDR (addr + M[reg]);
 		enreg.o = Aex & 0177;
 		enreg.ml = enreg.r = 0;
