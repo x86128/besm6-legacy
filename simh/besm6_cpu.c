@@ -1328,7 +1328,7 @@ t_stat sim_instr (void)
 t_stat slow_clk (UNIT * this)
 {
 	GRP |= GRP_WATCHDOG;
-	sim_activate (this, 80000);
+	return sim_activate (this, 80000);
 }
 
 /*
@@ -1338,7 +1338,7 @@ t_stat slow_clk (UNIT * this)
 t_stat fast_clk (UNIT * this)
 {
 	GRP |= GRP_TIMER;
-	sim_activate (this, 20000);
+	return sim_activate (this, 20000);
 }
 
 
@@ -1351,7 +1351,7 @@ t_stat clk_reset(DEVICE * dev)
 {
 	/* Схема автозапуска включается по нереализованной кнопке "МР" */
 	/*sim_activate (&clocks[0], 80000);*/
-	sim_activate (&clocks[1], 20000);
+	return sim_activate (&clocks[1], 20000);
 }
 
 DEVICE clock_dev = {
