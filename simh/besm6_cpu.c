@@ -68,6 +68,7 @@ t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
 t_value ACC, RMR, GRP, MGRP;
 uint32 PRP, MPRP;
+uint32 READY; /* ready flags of various devices */
 
 extern const char *scp_error_messages[];
 
@@ -252,6 +253,7 @@ DEVICE *sim_devices[] = {
 	&drum_dev,
 	&mmu_dev,
 	&clock_dev,
+	&printer_dev,
 	0
 };
 
@@ -449,8 +451,8 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_BADCMD);
 		break;
 	case 014 ... 015:
-		/* TODO: управление АЦПУ */
-		longjmp (cpu_halt, STOP_BADCMD);
+		/* управление АЦПУ */
+		printer_control (Aex - 014, (uint32) (ACC & 017));
 		break;
 	case 030:
 		/* гашение ПРП */
@@ -476,8 +478,8 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_BADCMD);
 		break;
 	case 040 ... 057:
-		/* TODO: управление молоточками АЦПУ */
-		longjmp (cpu_halt, STOP_BADCMD);
+		/* управление молоточками АЦПУ */
+		printer_hammer (Aex >= 050, Aex & 7, (uint32) (ACC & BITS16));
 		break;
 	case 0100 ... 0137:
 		/* TODO: управление лентопротяжными механизмами
@@ -550,8 +552,8 @@ static void cmd_033 ()
 		acc = toalu (PRP & 077770000);
 		break;
 	case 04031:
-		/* TODO: опрос сигналов готовности (АЦПУ и пр.) */
-		longjmp (cpu_halt, STOP_BADCMD);
+		/* опрос сигналов готовности (АЦПУ и пр.) */
+		acc = toalu(READY);
 		break;
 	case 04034:
 		/* чтение младшей половины ПРП */
