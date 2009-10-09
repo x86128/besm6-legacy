@@ -195,14 +195,67 @@ void mmu_flush (int idx) {
 	memory[waddr] = BRZ[idx];
 }
 
-void mmu_oldest () {
+void mmu_update_oldest () {
 	int i;
 	for (i = 0; i < 8; ++i) {
 		if (loses_to_all(i)) {
 			OLDEST = i;
+			// fprintf(stderr, "Oldest = %d\r\n", i);
 			return;
 		}
 	}
+}
+
+int mmu_match(int addr, int fail) {
+	int i;
+	for (i = 0; i < 8; ++i) {
+		if (addr == BAZ[i]) {
+			return i;
+		}
+	}
+	return fail;
+}
+
+/*
+ * Разнообразные алгоритмы выталкивания БРЗ путем записи
+ * по адресам пультовых регистров. Тест УУ проходит дальше всего
+ * с mmu_flush_by_age().
+ */
+void mmu_flush_by_age() {
+	switch (FLUSH) {
+	case 0: 
+		break;
+	case 1 ... 8:
+		set_wins (OLDEST);
+		mmu_update_oldest ();
+		mmu_flush (OLDEST);
+		BAZ[OLDEST] = 0;
+		if (FLUSH == 7) {
+			TABST = 0;
+			OLDEST = 0;
+		}
+		break;
+	}
+	++FLUSH;
+}
+
+void mmu_flush_by_number() {
+	switch (FLUSH) {
+	case 0:
+		break;
+	case 1 ... 8:
+		mmu_flush (FLUSH-1);
+		set_wins (FLUSH-1);
+		if (FLUSH-1 == OLDEST)
+			mmu_update_oldest ();
+		BAZ[FLUSH-1] = 0;
+		if (FLUSH == 7) {
+			TABST = 0;
+			OLDEST = 0;
+		}
+		break;
+	}
+	++FLUSH;
 }
 
 /*
@@ -211,7 +264,7 @@ void mmu_oldest () {
 void mmu_store (int addr, t_value val)
 {
 	int i;
-	int matching = OLDEST;
+	int matching;
 
 	addr &= BITS15;
 	if (addr == 0)
@@ -231,36 +284,19 @@ void mmu_store (int addr, t_value val)
 
 	/* Запись в тумблерные регистры - выталкивание БРЗ */
 	if (addr > 0100000 && addr < 0100010) {
-		switch (FLUSH) {
-		case 0:	/* начали */
-			FLUSH = 1;
-			break;
-		case 1 ... 8: /* по порядку */
-			mmu_flush (FLUSH-1);
-			set_wins (FLUSH-1);
-			mmu_oldest ();
-			BAZ[FLUSH-1] = 0;
-			++FLUSH;
-			break;
-		default:	/* куда еще */
-			break;
-		}
+		mmu_flush_by_age();
 		return;
 	} else
 		FLUSH = 0;
 
-	for (i = 0; i < 8; ++i) {
-		if (addr == BAZ[i]) {
-			matching = i;
-		}
-	}
+	matching = mmu_match(addr, OLDEST);
 
 	BRZ[matching] = SET_CONVOL (val, RUU ^ CONVOL_INSN);
 	BAZ[matching] = addr;
 	set_wins (matching);
 
 	if (matching == OLDEST) {
-		mmu_oldest ();
+		mmu_update_oldest ();
 		mmu_flush (OLDEST);
 	}
 }
@@ -287,12 +323,7 @@ t_value mmu_load (int addr)
 	if (M[DWP] == addr && !(M[PSW] & PSW_WRITE_WATCH))
 		longjmp(cpu_halt, STOP_LOAD_ADDR_MATCH);
 
-	for (i = 0; i < 8; ++i) {
-		if (addr == BAZ[i]) {
-			matching = i;
-			break;
-		}
-	}
+	matching = mmu_match(addr, -1);
 
 	if (matching == -1) {
 		/* Вычисляем физический адрес слова */
@@ -316,7 +347,11 @@ t_value mmu_load (int addr)
 			longjmp (cpu_halt, STOP_RAM_CHECK);
 		}
 	} else {
-		set_wins (matching);
+		/* старшинство обновляется, только если оно не затрагивает
+		 * старший БРЗ (ТО-2).
+		 */
+		if (matching != OLDEST)
+			set_wins (matching);
 		val = BRZ[matching];
 		if (sim_log && mmu_dev.dctrl)
 			fprintf (sim_log, "--- %05o: чтение %016llo из БРЗ\n",
@@ -463,8 +498,6 @@ t_value mmu_fetch (int addr)
 		besm6_debug ("--- %05o: контроль команды", addr);
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
-	/* Предвыборка следующего слова */
-	mmu_prefetch(((addr + 1) & BITS15) | (addr & 0100000), 0);
 	return val & WORD;
 }
 
@@ -514,7 +547,7 @@ void mmu_setcache (int idx, t_value val)
 
 t_value mmu_getcache (int idx)
 {
-	return BRZ[idx];
+	return BRZ[idx] & WORD;
 }
 
 void mmu_print_brz ()

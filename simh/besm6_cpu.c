@@ -653,6 +653,7 @@ void cpu_one_inst ()
 		PC += 1;			/* increment PC */
 		RUU &= ~RUU_RIGHT_INSTR;
 	} else {
+		mmu_prefetch(nextpc | (IS_SUPERVISOR(RUU) ? BIT16 : 0), 0);
 		RUU |= RUU_RIGHT_INSTR;
 	}
 
