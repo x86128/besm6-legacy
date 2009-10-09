@@ -354,7 +354,7 @@ double besm6_to_ieee (t_value word)
  * 00000xxx.xxyyyyyy -> 110xxxxx, 10yyyyyy
  * xxxxyyyy.yyzzzzzz -> 1110xxxx, 10yyyyyy, 10zzzzzz
  */
-static void
+void
 utf8_putc (unsigned ch, FILE *fout)
 {
 	if (ch < 0x80) {
@@ -555,7 +555,7 @@ static void cmd_033 ()
 		break;
 	case 04034:
 		/* чтение младшей половины ПРП */
-		acc = toalu (PRP & 07777 | 0377);
+		acc = toalu ((PRP & 07777) | 0377);
 		break;
 	case 04035:
 		/* TODO: опрос схем контроля внешнего обмена */
@@ -618,8 +618,7 @@ t_value fromalu (alureg_t reg)
  */
 void cpu_one_inst ()
 {
-	int reg, opcode, addr, n, i, r, nextpc, nextaddrmod = 0;
-	optab_t op;
+	int reg, opcode, addr, nextpc, nextaddrmod = 0;
 
 	t_value word = mmu_fetch (PC);
 	if (RUU & RUU_RIGHT_INSTR)
@@ -633,13 +632,11 @@ void cpu_one_inst ()
 	if (RK & BIT20) {
 		addr = RK & BITS15;
 		opcode = (RK >> 12) & 0370;
-		op = optab [(opcode >> 3) + 060];
 	} else {
 		addr = RK & BITS12;
 		if (RK & BIT19)
 			addr |= 070000;
 		opcode = (RK >> 12) & 077;
-		op = optab [opcode];
 	}
 
 	if (sim_deb && cpu_dev.dctrl) {
@@ -680,6 +677,7 @@ void cpu_one_inst ()
 		M[017] = ADDR (M[017] - 1);
 		corr_stack = 1;
 		acc = toalu (mmu_load (M[017]));
+		RAU = SET_LOGICAL (RAU);
 		break;
 	case 002:					/* рег, mod */
 		Aex = ADDR (addr + M[reg]);
@@ -697,6 +695,7 @@ void cpu_one_inst ()
 		corr_stack = -1;
 		Aex = ADDR (addr + M[reg]);
 		acc = toalu (mmu_load (Aex));
+		RAU = SET_LOGICAL (RAU);
 		break;
 	case 004:					/* сл, a+x */
 		if (! addr && reg == 017) {
@@ -710,6 +709,8 @@ void cpu_one_inst ()
 		UNPCK (acc);
 common_add:
 		add();
+		RAU = SET_ADDITIVE (RAU);
+		normalize_and_round ();
 		break;
 	case 005:					/* вч, a-x */
 		if (! addr && reg == 017) {
@@ -757,36 +758,158 @@ common_add:
 		}
 		Aex = ADDR (addr + M[reg]);
 		acc = toalu (mmu_load (Aex));
+		RAU = SET_LOGICAL (RAU);
 		break;
-#if 0
-	{aax,    F_LG, },				/* 011 и, aax */
-	{aex,    F_LG, },				/* 012 нтж, aex */
-	{arx,    F_MG, },				/* 013 слц, arx */
-	{avx,    F_AR | F_AG, },			/* 014 знак, avx */
-	{aox,    F_LG, },				/* 015 или, aox */
-	{b6div,  F_AR | F_MG, },			/* 016 дел, a/x */
-	{mul,    F_AR | F_MG, },			/* 017 умн, a*x */
-	{apx,    F_LG, },				/* 020 сбр, apx */
-	{aux,    F_LG, },				/* 021 рзб, aux */
-	{acx,    F_LG, },				/* 022 чед, acx */
-	{anx,    F_LG, },				/* 023 нед, anx */
-	{epx,    F_AR | F_MG, },			/* 024 слп, e+x */
-	{emx,    F_AR | F_MG, },			/* 025 вчп, e-x */
-	{asx,    F_LG | F_AROP, },			/* 026 сд, asx */
-#endif
 	case 011:					/* и, aax */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		aax();
+		RAU = SET_LOGICAL (RAU);
+		break;
 	case 012:					/* нтж, aex */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		aex();
+		RAU = SET_LOGICAL (RAU);
+		break;
 	case 013:					/* слц, arx */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		arx();
+		RAU = SET_MULTIPLICATIVE (RAU);
+		break;
 	case 014:					/* знак, avx */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
+		avx();
+		RAU = SET_ADDITIVE (RAU);
+		normalize_and_round ();
+		break;
 	case 015:					/* или, aox */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		aox();
+		RAU = SET_LOGICAL (RAU);
+		break;
 	case 016:					/* дел, a/x */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
+		b6div();
+		RAU = SET_MULTIPLICATIVE (RAU);
+		normalize_and_round ();
+		break;
 	case 017:					/* умн, a*x */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
+		mul();
+		RAU = SET_MULTIPLICATIVE (RAU);
+		normalize_and_round ();
+		break;
 	case 020:					/* сбр, apx */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		apx();
+		RAU = SET_LOGICAL (RAU);
+		break;
 	case 021:					/* рзб, aux */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		aux();
+		RAU = SET_LOGICAL (RAU);
+		break;
 	case 022:					/* чед, acx */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		acx();
+		RAU = SET_LOGICAL (RAU);
+		break;
 	case 023:					/* нед, anx */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		anx();
+		RAU = SET_LOGICAL (RAU);
+		break;
 	case 024:					/* слп, e+x */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
+		epx();
+		RAU = SET_MULTIPLICATIVE (RAU);
+		normalize_and_round ();
+		break;
 	case 025:					/* вчп, e-x */
+		if (! addr && reg == 017) {
+			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
+		Aex = ADDR (addr + M[reg]);
+		enreg = toalu (mmu_load (Aex));
+		accex = zeroword;
+		UNPCK (enreg);
+		UNPCK (acc);
+		emx();
+		RAU = SET_MULTIPLICATIVE (RAU);
+		normalize_and_round ();
+		break;
 	case 026:					/* сд, asx */
 		if (! addr && reg == 017) {
 			M[017] = ADDR (M[017] - 1);
@@ -794,14 +917,9 @@ common_add:
 		}
 		Aex = ADDR (addr + M[reg]);
 		enreg = toalu (mmu_load (Aex));
-		if (op.o_flags & F_AR) {
-			accex = zeroword;
-			UNPCK (enreg);
-			UNPCK (acc);
-		} else if (op.o_flags & F_AROP) {
-			UNPCK (enreg);
-		}
-		(*op.o_impl)();
+		UNPCK (enreg);
+		asx();
+		RAU = SET_LOGICAL (RAU);
 		break;
 	case 027:					/* рж, xtr */
 		if (! addr && reg == 017) {
@@ -816,6 +934,7 @@ common_add:
 		acc.o = RAU;
 		acc.l = (long) (acc.o & Aex & 0177) << 17;
 		acc.r = 0;
+		RAU = SET_LOGICAL (RAU);
 		break;
 	case 031:					/* счмр, yta */
 		Aex = ADDR (addr + M[reg]);
@@ -852,6 +971,8 @@ common_add:
 		accex = zeroword;
 		UNPCK (acc);
 		epx();
+		RAU = SET_MULTIPLICATIVE (RAU);
+		normalize_and_round ();
 		break;
 	case 035:					/* вчпа, e-n */
 		Aex = ADDR (addr + M[reg]);
@@ -860,12 +981,15 @@ common_add:
 		accex = zeroword;
 		UNPCK (acc);
 		emx();
+		RAU = SET_MULTIPLICATIVE (RAU);
+		normalize_and_round ();
 		break;
 	case 036:					/* сда, asn */
 		Aex = ADDR (addr + M[reg]);
 		enreg.o = Aex & 0177;
 		enreg.ml = enreg.r = 0;
 		asx();
+		RAU = SET_LOGICAL (RAU);
 		break;
 	case 037:					/* ржа, ntr */
 		Aex = ADDR (addr + M[reg]);
@@ -902,12 +1026,14 @@ common_add:
 		if (rg != 017)
 			M[017] = ADDR (M[017] - 1);
 		acc = toalu (mmu_load (M[017]));
+		RAU = SET_LOGICAL (RAU);
 		break;
 	}
 	case 042:					/* счи, ita */
 load_modifier:	Aex = ADDR (addr + M[reg]);
 		acc.l = 0;
 		acc.r = ADDR(M[Aex & (IS_SUPERVISOR (RUU) ? 037 : 017)]);
+		RAU = SET_LOGICAL (RAU);
 		break;
 	case 043:					/* счим, its */
 		mmu_store (M[017], fromalu (acc));
@@ -1102,13 +1228,6 @@ branch_zero:	Aex = addr;
 		/* Unknown instruction - cannot happen. */
 		longjmp (cpu_halt, STOP_BADCMD);
 		break;
-	}
-	i = op.o_flags & F_GRP;
-	if (i)
-		RAU = SET_MODE (RAU, 2 << i);
-
-	if (op.o_flags & F_AR) {
-		normalize_and_round ();
 	}
 	ACC = fromalu (acc);
 	RMR = fromalu (accex);

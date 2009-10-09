@@ -190,8 +190,8 @@ void mmu_flush (int idx) {
 	}
 	/* Вычисляем физический адрес выталкиваемого БРЗ */
 	int waddr = BAZ[idx];
-	waddr = waddr > 0100000 ? waddr - 0100000 :
-	waddr & 01777 | TLB[waddr >> 10] << 10;
+	waddr = (waddr > 0100000) ? (waddr - 0100000) :
+		(waddr & 01777) | (TLB[waddr >> 10] << 10);
 	memory[waddr] = BRZ[idx];
 }
 
@@ -223,7 +223,7 @@ int mmu_match(int addr, int fail) {
  */
 void mmu_flush_by_age() {
 	switch (FLUSH) {
-	case 0: 
+	case 0:
 		break;
 	case 1 ... 8:
 		set_wins (OLDEST);
@@ -263,7 +263,6 @@ void mmu_flush_by_number() {
  */
 void mmu_store (int addr, t_value val)
 {
-	int i;
 	int matching;
 
 	addr &= BITS15;
@@ -306,7 +305,7 @@ void mmu_store (int addr, t_value val)
  */
 t_value mmu_load (int addr)
 {
-	int i, matching = -1;
+	int matching = -1;
 	t_value val;
 
 	addr &= BITS15;
@@ -327,8 +326,8 @@ t_value mmu_load (int addr)
 
 	if (matching == -1) {
 		/* Вычисляем физический адрес слова */
-		addr = addr > 0100000 ? addr - 0100000 :
-		addr & 01777 | TLB[addr >> 10] << 10;
+		addr = (addr > 0100000) ? (addr - 0100000) :
+			(addr & 01777) | (TLB[addr >> 10] << 10);
 		if (addr >= 010) {
 			/* Из памяти */
 			val = memory[addr];
@@ -371,10 +370,10 @@ t_value mmu_load (int addr)
 
 /*
  * N wins over M if the bit is set
- *  M=1   2   3 
+ *  M=1   2   3
  * N  ---------
- * 0| 0   1   2   
- * 1|     3   4   
+ * 0| 0   1   2
+ * 1|     3   4
  * 2|         5
  */
 
@@ -394,7 +393,8 @@ static unsigned brs_lose_mask[8] = {
 
 #define brs_set_wins(i) BRSLRU = (BRSLRU & ~brs_lose_mask[i]) | brs_win_mask[i]
 
-void mmu_fetch_check(int addr) {
+void mmu_fetch_check (int addr)
+{
 	/* В режиме супервизора защиты нет */
 	if (! IS_SUPERVISOR(RUU)) {
 		int page = TLB[addr >> 10];
@@ -414,7 +414,8 @@ void mmu_fetch_check(int addr) {
 /*
  * Предвыборка команды на БРС
  */
-t_value mmu_prefetch (int addr, int actual) {
+t_value mmu_prefetch (int addr, int actual)
+{
 	t_value val;
 	int i, matching = -1;
 
@@ -446,7 +447,7 @@ t_value mmu_prefetch (int addr, int actual) {
 		int page = TLB[addr >> 10];
 
 		/* Вычисляем физический адрес слова */
-		addr = addr & 01777 | page << 10;
+		addr = (addr & 01777) | (page << 10);
 	} else {
 		addr = addr & BITS15;
 	}
@@ -464,7 +465,6 @@ t_value mmu_prefetch (int addr, int actual) {
 t_value mmu_fetch (int addr)
 {
 	t_value val;
-	int i, matching = -1;
 
 	if (addr == 0) {
 		/* В режиме супервизора слово 0 - команда,
@@ -508,10 +508,10 @@ void mmu_setrp (int idx, t_value val)
 	/* Младшие 5 разрядов 4-х регистров приписки упакованы
 	 * по 5 в 1-20 рр, 6-е разряды - в 29-32 рр, 7-е разряды - в 33-36 рр
 	 */
-	p0 = val & 037 | ((val>>28)&1)<<5 | ((val>>32)&1)<<6;
-	p1 = (val>>5) & 037 | ((val>>29)&1)<<5 | ((val>>33)&1)<<6;
-	p2 = (val>>10) & 037 | ((val>>30)&1)<<5 | ((val>>34)&1)<<6;
-	p3 = (val>>15) & 037 | ((val>>31)&1)<<5 | ((val>>35)&1)<<6;
+	p0 = (val       & 037) | (((val>>28) & 1) << 5) | (((val>>32) & 1) << 6);
+	p1 = ((val>>5)  & 037) | (((val>>29) & 1) << 5) | (((val>>33) & 1) << 6);
+	p2 = ((val>>10) & 037) | (((val>>30) & 1) << 5) | (((val>>34) & 1) << 6);
+	p3 = ((val>>15) & 037) | (((val>>31) & 1) << 5) | (((val>>35) & 1) << 6);
 	RP[idx] = p0 | p1 << 12 | p2 << 24 | (t_value) p3 << 36;
 	TLB[idx*4] = p0;
 	TLB[idx*4+1] = p1;
