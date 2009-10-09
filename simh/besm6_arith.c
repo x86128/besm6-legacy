@@ -17,102 +17,6 @@
 #include "besm6_legacy.h"
 
 /*
- * Table of instruction codes.
- * To be deleted after code refactoring.
- */
-optab_t optab[] = {
-	{0,      0, },					/* 000 зп, atx */
-	{0,      F_LG, },				/* 001 зпм, stx */
-	{0,      0, },					/* 002 рег, mod */
-	{0,      F_LG, },				/* 003 счм, xts */
-	{0,      F_AR | F_AG, },			/* 004 сл, a+x */
-	{0,      F_AR | F_AG, },			/* 005 вч, a-x */
-	{0,      F_AR | F_AG, },			/* 006 вчоб, x-a */
-	{0,      F_AR | F_AG, },			/* 007 вчаб, amx */
-
-	{0,      F_LG, },				/* 010 сч, xta */
-	{aax,    F_LG, },				/* 011 и, aax */
-	{aex,    F_LG, },				/* 012 нтж, aex */
-	{arx,    F_MG, },				/* 013 слц, arx */
-	{avx,    F_AR | F_AG, },			/* 014 знак, avx */
-	{aox,    F_LG, },				/* 015 или, aox */
-	{b6div,  F_AR | F_MG, },			/* 016 дел, a/x */
-	{mul,    F_AR | F_MG, },			/* 017 умн, a*x */
-
-	{apx,    F_LG, },				/* 020 сбр, apx */
-	{aux,    F_LG, },				/* 021 рзб, aux */
-	{acx,    F_LG, },				/* 022 чед, acx */
-	{anx,    F_LG, },				/* 023 нед, anx */
-	{epx,    F_AR | F_MG, },			/* 024 слп, e+x */
-	{emx,    F_AR | F_MG, },			/* 025 вчп, e-x */
-	{asx,    F_LG | F_AROP, },			/* 026 сд, asx */
-	{0,      F_AROP, },				/* 027 рж, xtr */
-
-	{0,      F_LG, },				/* 030 счрж, rte */
-	{0,      0, },					/* 031 счмр, yta */
-	{0,      0, },					/* 032 э32, ext */
-	{0,      0, },					/* 033 увв, ext */
-	{epx,    F_AR| F_MG, },				/* 034 слпа, e+n */
-	{emx,    F_AR| F_MG, },				/* 035 вчпа, e-n */
-	{asx,    F_LG, },				/* 036 сда, asn */
-	{0,      0, },					/* 037 ржа, ntr */
-
-	{0,      0, },					/* 040 уи, ati */
-	{0,      F_LG, },				/* 041 уим, sti */
-	{0,      F_LG, },				/* 042 счи, ita */
-	{0,      F_LG, },				/* 043 счим, its */
-	{0,      0, },					/* 044 уии, mtj */
-	{0,      0, },					/* 045 сли, m+j */
-	{0,      0, },					/* 046 э46, x46 */
-	{0,      0, },					/* 047 э47, x47 */
-
-	{0,      0, },					/* 050 э50, *50 */
-	{0,      0, },					/* 051 э51, *51 */
-	{0,      0, },					/* 052 э52, *52 */
-	{0,      0, },					/* 053 э53, *53 */
-	{0,      0, },					/* 054 э54, *54 */
-	{0,      0, },					/* 055 э55, *55 */
-	{0,      0, },					/* 056 э56, *56 */
-	{0,      0, },					/* 057 э57, *57 */
-
-	{0,      0, },					/* 060 э60, *60 */
-	{0,      0, },					/* 061 э61, *61 */
-	{0,      0, },					/* 062 э62, *62 */
-	{0,      0, },					/* 063 э63, *63 */
-	{0,      0, },					/* 064 э64, *64 */
-	{0,      0, },					/* 065 э65, *65 */
-	{0,      0, },					/* 066 э66, *66 */
-	{0,      0, },					/* 067 э67, *67 */
-
-	{0,      0, },					/* 070 э70, *70 */
-	{0,      0, },					/* 071 э71, *71 */
-	{0,      0, },					/* 072 э72, *72 */
-	{0,      0, },					/* 073 э73, *73 */
-	{0,      0, },					/* 074 э74, *74 */
-	{0,      0, },					/* 075 э75, *75 */
-	{0,      0, },					/* 076 э76, *76 */
-	{0,      0, },					/* 077 э77, *77 */
-
-	{0,      0, },					/* 20 э20, *20 */
-	{0,      0, },					/* 21 э21, *21 */
-	{0,      0, },					/* 22 мода, utc */
-	{0,      0, },					/* 23 мод, wtc */
-	{0,      0, },					/* 24 уиа, vtm */
-	{0,      0, },					/* 25 слиа, utm */
-	{0,      0, },					/* 26 по, uza */
-	{0,      0, },					/* 27 пе, u1a */
-
-	{0,      0, },					/* 30 пб, uj */
-	{0,      0, },					/* 31 пв, vjm */
-	{0,      0, },					/* 32 выпр, iret */
-	{0,      0, },					/* 33 стоп, stop */
-	{0,      0, },					/* 34 пио, vzm */
-	{0,      0, },					/* 35 пино, v1m */
-	{0,      0, },					/* 36 э36, *36 */
-	{0,      0, },					/* 37 цикл, vlm */
-};
-
-/*
  * 64-bit floating-point value in format of standard IEEE 754.
  */
 typedef union {
@@ -136,8 +40,6 @@ typedef union {
 	to.u.right32 = (from.r & 0x7ffff) << 13;\
 }
 
-#define E_SUCCESS 0
-
 alureg_t acc, accex, enreg, zeroword;
 
 /* Требуется округление. */
@@ -160,7 +62,7 @@ alureg_t negate (alureg_t word)
 	return word;
 }
 
-int add()
+void add()
 {
 	alureg_t        a1, a2;
 	int             diff, neg;
@@ -232,26 +134,23 @@ int add()
 	acc.r = a1.r + a2.r;
 	acc.ml = a1.ml + a2.ml + (acc.r >> 24);
 	acc.r &= 0xffffff;
-	return E_SUCCESS;
 }
 
-int aax()
+void aax()
 {
 	acc.l &= enreg.l;
 	acc.r &= enreg.r;
 	accex = zeroword;
-	return E_SUCCESS;
 }
 
-int aex()
+void aex()
 {
 	accex = acc;
 	acc.l ^= enreg.l;
 	acc.r ^= enreg.r;
-	return E_SUCCESS;
 }
 
-int arx()
+void arx()
 {
 	uint32 i;
 
@@ -264,22 +163,19 @@ int arx()
 	}
 
 	accex = zeroword;
-	return E_SUCCESS;
 }
 
-int avx()
+void avx()
 {
 	if (NEGATIVE (enreg))
 		acc = negate (acc);
-	return E_SUCCESS;
 }
 
-int aox()
+void aox()
 {
 	acc.l |= enreg.l;
 	acc.r |= enreg.r;
 	accex = zeroword;
-	return E_SUCCESS;
 }
 
 /*
@@ -319,7 +215,7 @@ double nrdiv (double n, double d)
 	return ldexp (res, re+ne-de);
 }
 
-int b6div ()
+void b6div ()
 {
 	int             neg, o;
 	unsigned long   i, c, bias = 0;
@@ -337,7 +233,7 @@ int b6div ()
 	if ((acc.ml == 0) && (acc.r == 0)) {
 qzero:
 		acc = zeroword;
-		return E_SUCCESS;
+		return;
 	}
 	if ((acc.ml & 0x8000) == 0) {   /* normalize */
 		while (acc.ml == 0) {
@@ -373,11 +269,9 @@ qzero:
 		acc = negate (acc);
 	if ((o > 0x7f) && ! (RAU & RAU_OVF_DISABLE))
 		longjmp (cpu_halt, STOP_OVFL);
-
-	return E_SUCCESS;
 }
 
-int mul()
+void mul()
 {
 	uint8           neg = 0;
 	alureg_t        a, b;
@@ -392,7 +286,7 @@ int mul()
 		acc.l = acc.r = acc.o = acc.ml =
 		accex.l = accex.r = accex.o = accex.ml = 0;
 		rnd_rq = 0;
-		return E_SUCCESS;
+		return;
 	}
 
 	if (NEGATIVE (a)) {
@@ -451,11 +345,9 @@ int mul()
 	}
 
 	rnd_rq = !!(accex.ml | accex.r);
-
-	return E_SUCCESS;
 }
 
-int apx()
+void apx()
 {
 	for (accex.l = accex.r = 0; enreg.r; enreg.r >>= 1, acc.r >>= 1)
 		if (enreg.r & 1) {
@@ -473,10 +365,9 @@ int apx()
 		}
 	acc = accex;
 	accex.l = accex.r = 0;
-	return E_SUCCESS;
 }
 
-int aux()
+void aux()
 {
 	int     i;
 
@@ -503,10 +394,9 @@ int aux()
 	acc.l = accex.l;
 	acc.r = accex.r;
 	accex.l = accex.r = 0;
-	return E_SUCCESS;
 }
 
-int acx()
+void acx()
 {
 	int     c = 0;
 	uint32  i;
@@ -515,10 +405,10 @@ int acx()
 	for (i = acc.r; i; i &= i - 1, c++);
 	acc.r = c;
 	acc.l = 0;
-	return arx();
+	arx();
 }
 
-int anx()
+void anx()
 {
 	uint32  c;
 	uint32  i;
@@ -533,7 +423,7 @@ int anx()
 	} else {
 		acc = enreg;
 		accex.l = accex.r = 0;
-		return E_SUCCESS;
+		return;
 	}
 	if (i & 0xff0000)
 		b = i >> 16;
@@ -559,29 +449,25 @@ int anx()
 		acc.r = (i = acc.r + 1) & 0xffffff;
 		acc.l = acc.l + (i >> 24);
 	}
-
-	return E_SUCCESS;
 }
 
-int epx()
+void epx()
 {
 	acc.o += enreg.o - 64;
-	return E_SUCCESS;
 }
 
-int emx()
+void emx()
 {
 	acc.o += 64 - enreg.o;
-	return E_SUCCESS;
 }
 
-int asx()
+void asx()
 {
 	int     i, j;
 
 	accex.l = accex.r = 0;
 	if (!(i = enreg.o - 64))
-		return E_SUCCESS;
+		return;
 	if (i > 0) {
 		if (i < 24) {
 			j = 24 - i;
@@ -631,15 +517,13 @@ int asx()
 		} else
 			acc.l = acc.r = 0;
 	}
-
-	return E_SUCCESS;
 }
 
-int yta()
+void yta()
 {
 	if (IS_LOGICAL (RAU)) {
 		acc = accex;
-		return E_SUCCESS;
+		return;
 	}
 
 	acc.r = accex.r;
@@ -650,7 +534,6 @@ int yta()
 		if (! (RAU & RAU_OVF_DISABLE))
 			longjmp (cpu_halt, STOP_OVFL);
 	}
-	return E_SUCCESS;
 }
 
 /*

@@ -353,7 +353,6 @@ char *parse_instruction (char *cptr, uint32 *val)
 t_stat parse_instruction_word (char *cptr, t_value *val)
 {
 	uint32 left, right;
-	t_stat err;
 
 	*val = 0;
 	cptr = parse_instruction (cptr, &left);
@@ -526,7 +525,7 @@ t_stat parse_sym (char *cptr, t_addr addr, UNIT *uptr, t_value *val, int32 sw)
 t_stat besm6_read_line (FILE *input, int *type, t_value *val)
 {
 	char buf [512], *p;
-	int i, c, left, right;
+	int i, c;
 again:
 	if (! fgets (buf, sizeof (buf), input)) {
 		*type = 0;
