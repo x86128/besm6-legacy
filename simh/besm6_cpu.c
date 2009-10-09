@@ -416,7 +416,7 @@ static void cmd_002 ()
 	case 0140 ... 0177:
 		/* TODO: управление блокировкой схемы
 		 * автоматического запуска */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0200 ... 0207:
 		/* Чтение БРЗ */
@@ -444,11 +444,11 @@ static void cmd_033 ()
 		break;
 	case 3 ... 7:
 		/* TODO: управление обменом с магнитными лентами */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 010 ... 013:
 		/* TODO: управление устройствами ввода с перфоленты */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 014 ... 015:
 		/* управление АЦПУ */
@@ -461,11 +461,11 @@ static void cmd_033 ()
 		break;
 	case 031:
 		/* TODO: имитация сигналов прерывания ГРП */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 032 ... 033:
 		/* TODO: имитация сигналов из КМБ в КВУ */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 034:
 		/* запись в МПРП */
@@ -475,7 +475,7 @@ static void cmd_033 ()
 	case 035:
 		/* TODO: управление режимом имитации обмена
 		 * с МБ и МЛ, имитация обмена */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 040 ... 057:
 		/* управление молоточками АЦПУ */
@@ -485,19 +485,19 @@ static void cmd_033 ()
 		/* TODO: управление лентопротяжными механизмами
 		 * и гашение разрядов регистров признаков
 		 * окончания подвода зоны */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0140:
 		/* TODO: запись в регистр телеграфных каналов */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0141:
 		/* TODO: управление разметкой магнитной ленты */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0142:
 		/* TODO: имитация сигналов прерывания ПРП */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0147:
 		/* запись в регистр управления электропитанием */
@@ -505,47 +505,47 @@ static void cmd_033 ()
 		break;
 	case 0150 ... 0151:
 		/* TODO: управление вводом с перфокарт */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0154 ... 0155:
 		/* TODO: управление выводом на перфокарты */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0160 ... 0167:
 		/* TODO: управление электромагнитами пробивки перфокарт */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0170 ... 0171:
 		/* TODO: пробивка строки на перфоленте */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0174:
 		/* TODO: выдача кода в пульт оператора */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04001 ... 04003:
 		/* TODO: считывание слога в режиме имитации обмена */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04006:
 		/* TODO: считывание строки с устройства ввода
 		 * с перфоленты в запаянной программе */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04007:
 		/* TODO: опрос синхроимпульса ненулевой строки
 		 * в запаянной программе ввода с перфоленты */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04014 ... 04017:
 		/* TODO: считывание строки с устройства
 		 * ввода с перфоленты */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04020 ... 04023:
 		/* TODO: считывание слога в режиме имитации
 		 * внешнего обмена */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04030:
 		/* чтение старшей половины ПРП */
@@ -561,41 +561,41 @@ static void cmd_033 ()
 		break;
 	case 04035:
 		/* TODO: опрос схем контроля внешнего обмена */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04100:
 		/* TODO: опрос телеграфных каналов связи */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04102:
 		/* TODO: опрос сигналов готовности
 		 * перфокарт и перфолент */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04103 ... 04106:
 		/* TODO: опрос состояния лентопротяжных механизмов */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04107:
 		/* TODO: опрос схемы контроля записи на МЛ */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04140 ... 04157:
 		/* TODO: считывание строки перфокарты */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04160 ... 04167:
 		/* TODO: контрольное считывание строки перфокарты */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04170 ... 04173:
 		/* TODO: считывание контрольного кода
 		 * строки перфоленты */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04174:
 		/* TODO: считывание кода с пульта оператора */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	}
 }
@@ -1228,7 +1228,7 @@ branch_zero:	Aex = addr;
 		break;
 	default:
 		/* Unknown instruction - cannot happen. */
-		longjmp (cpu_halt, STOP_BADCMD);
+		longjmp (cpu_halt, STOP_STOP);
 		break;
 	}
 	ACC = fromalu (acc);
