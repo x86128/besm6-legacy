@@ -15,8 +15,7 @@
 #include "besm6_defs.h"
 
 t_stat printer_event (UNIT *u);
-void
-offset_gost_write (unsigned char *line, int n, FILE *fout);
+void offset_gost_write (char *line, int n, FILE *fout);
 
 /*
  * Printer data structures
@@ -106,11 +105,12 @@ t_stat printer_detach (UNIT *u)
  */
 void printer_control (int num, uint32 cmd)
 {
-	UNIT * u = &printer_unit[num];
-	if (printer_dev.dctrl)	
+	UNIT *u = &printer_unit[num];
+
+	if (printer_dev.dctrl)
 		besm6_debug(">>> АЦПУ%d команда %o", num, cmd);
 	if (READY & (PRN1_NOT_READY >> num)) {
-		if (printer_dev.dctrl)	
+		if (printer_dev.dctrl)
 			besm6_debug(">>> АЦПУ%d не готово", num, cmd);
 		return;
 	}
@@ -118,7 +118,7 @@ void printer_control (int num, uint32 cmd)
 	case 1:		/* linefeed */
 		READY |= PRN1_LINEFEED >> num;
 		feed[num] = LINEFEED_SYNC;
-		offset_gost_write(line[num], 128, stdout);
+		offset_gost_write (line[num], 128, stdout);
 		puts("\r\n");
 		memset(line[num], 0, 128);
 		break;
@@ -134,7 +134,7 @@ void printer_control (int num, uint32 cmd)
 	case 2:		/* ribbon off */
 		rampup[num] = cmd == 2 ? FAST_START : SLOW_START;
 		sim_cancel (u);
-		break;	
+		break;
 	}
 }
 
@@ -278,16 +278,15 @@ gost_putc (unsigned char ch, FILE *fout)
  * Write GOST-10859 string to file in UTF-8.
  */
 void
-offset_gost_write (unsigned char *line, int n, FILE *fout)
+offset_gost_write (char *line, int n, FILE *fout)
 {
         unsigned short u;
 
         while (n-- > 0) {
-		int ch = *line++;
+		unsigned char ch = *line++;
                 u = ch ? gost_to_unicode (ch-1) : 0;
                 if (! u)
                         u = ' ';
                 utf8_putc (u, fout);
         }
 }
-
