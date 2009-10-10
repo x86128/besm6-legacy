@@ -129,7 +129,8 @@ void printer_control (int num, uint32 cmd)
 			sim_activate (u, rampup[num]);
 		rampup[num] = 0;
 		break;
-	case 10:	/* motor off */
+	case 10:	/* motor and ribbon off */
+	case 8:		/* motor off? (undocumented) */
 	case 2:		/* ribbon off */
 		rampup[num] = cmd == 2 ? FAST_START : SLOW_START;
 		sim_cancel (u);

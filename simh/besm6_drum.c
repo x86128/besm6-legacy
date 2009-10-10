@@ -24,6 +24,7 @@
 #define DRUM_PAGE_MODE		001000000	/* обмен целой страницей */
 #define DRUM_READ		000400000	/* чтение с барабана в память */
 #define DRUM_PAGE		000370000	/* номер страницы памяти */
+#define DRUM_BLOCK	       0140000000	/* номер блока памяти - 25-24 рр */
 #define DRUM_PARAGRAF		000006000	/* номер абзаца */
 #define DRUM_UNIT		000001600	/* номер барабана */
 #define DRUM_CYLINDER		000000174	/* номер тракта на барабане */
@@ -189,7 +190,7 @@ void drum (int ctlr, uint32 cmd)
 		drum_nwords = 1024;
 		drum_zone = (cmd & (DRUM_UNIT | DRUM_CYLINDER)) >> 2;
 		drum_sector = 0;
-		drum_memory = (cmd & DRUM_PAGE) >> 2;
+		drum_memory = (cmd & DRUM_PAGE) >> 2 | (cmd & DRUM_BLOCK) >> 8;
 		if (drum_dev.dctrl)
 			besm6_debug ("*** %s МБ %c%d зона %02o память %05o-%05o",
 				(drum_op & DRUM_READ) ? "чтение" : "запись",
@@ -200,7 +201,7 @@ void drum (int ctlr, uint32 cmd)
 		drum_nwords = 256;
 		drum_zone = (cmd & (DRUM_UNIT | DRUM_CYLINDER)) >> 2;
 		drum_sector = cmd & DRUM_SECTOR;
-		drum_memory = (cmd & (DRUM_PAGE | DRUM_PARAGRAF)) >> 2;
+		drum_memory = (cmd & (DRUM_PAGE | DRUM_PARAGRAF)) >> 2 | (cmd & DRUM_BLOCK) >> 8;
 		if (drum_dev.dctrl)
 			besm6_debug ("*** %s МБ %c%d зона %02o сектор %d память %05o-%05o",
 				(drum_op & DRUM_READ) ? "чтение" : "запись",

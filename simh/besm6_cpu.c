@@ -440,7 +440,7 @@ static void cmd_033 ()
 	switch (Aex & 04177) {
 	case 1 ... 2:
 		/* Управление обменом с магнитными барабанами */
-		drum (Aex - 1, (uint32) (ACC & BITS24));
+		drum (Aex - 1, (uint32) ACC);
 		break;
 	case 3 ... 7:
 		/* TODO: управление обменом с магнитными лентами */
@@ -460,8 +460,8 @@ static void cmd_033 ()
 		PRP2GRP;
 		break;
 	case 031:
-		/* TODO: имитация сигналов прерывания ГРП */
-		longjmp (cpu_halt, STOP_STOP);
+		/* имитация сигналов прерывания ГРП (уточнить) */
+		GRP |= GRP_IMITATION;
 		break;
 	case 032 ... 033:
 		/* TODO: имитация сигналов из КМБ в КВУ */
