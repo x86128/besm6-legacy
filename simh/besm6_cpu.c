@@ -37,7 +37,6 @@
  * 13) A lot of comments in Russian (UTF-8).
  */
 #include "besm6_defs.h"
-#include "besm6_legacy.h"
 #include <math.h>
 #include <float.h>
 #include <unistd.h>
@@ -599,19 +598,6 @@ static void cmd_033 ()
 	}
 }
 
-alureg_t toalu (t_value val)
-{
-        alureg_t ret;
-        ret.l = val >> 24;
-        ret.r = val & BITS24;
-	return ret;
-}
-
-t_value fromalu (alureg_t reg)
-{
-        return (t_value) reg.l << 24 | reg.r;
-}
-
 /*
  * Execute one instruction, placed on address PC:RUU_RIGHT_INSTR.
  * Increment delay. When stopped, perform a longjmp to cpu_halt,
@@ -620,7 +606,6 @@ t_value fromalu (alureg_t reg)
 void cpu_one_inst ()
 {
 	int reg, opcode, addr, nextpc, nextaddrmod = 0;
-	alureg_t acc, enreg;
 
 	corr_stack = 0;
 	t_value word = mmu_fetch (PC);
@@ -704,12 +689,7 @@ void cpu_one_inst ()
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		UNPCK (enreg);
-		UNPCK (acc);
-common_add:
-		besm6_add (acc, enreg);
+		besm6_add (mmu_load (Aex), 0, 0);
 		RAU = SET_ADDITIVE (RAU);
 		break;
 	case 005:					/* вч, a-x */
@@ -718,39 +698,27 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		UNPCK (enreg);
-		UNPCK (acc);
-		enreg = negate (enreg);
-		goto common_add;
+		besm6_add (mmu_load (Aex), 0, 1);
+		RAU = SET_ADDITIVE (RAU);
+		break;
 	case 006:					/* вчоб, x-a */
 		if (! addr && reg == 017) {
 			M[017] = ADDR (M[017] - 1);
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		UNPCK (enreg);
-		UNPCK (acc);
-		acc = negate (acc);
-		goto common_add;
+		besm6_add (mmu_load (Aex), 1, 0);
+		RAU = SET_ADDITIVE (RAU);
+		break;
 	case 007:					/* вчаб, amx */
 		if (! addr && reg == 017) {
 			M[017] = ADDR (M[017] - 1);
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		UNPCK (enreg);
-		UNPCK (acc);
-		if (NEGATIVE (acc))
-			acc = negate (acc);
-		if (! NEGATIVE (enreg))
-			enreg = negate (enreg);
-		goto common_add;
+		besm6_add (mmu_load (Aex), 1, 1);
+		RAU = SET_ADDITIVE (RAU);
+		break;
 	case 010:					/* сч, xta */
 		if (! addr && reg == 017) {
 			M[017] = ADDR (M[017] - 1);
@@ -798,13 +766,7 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		UNPCK (enreg);
-		UNPCK (acc);
-		if (NEGATIVE (enreg))
-			acc = negate (acc);
-		normalize_and_round (acc, zeroword);
+		besm6_change_sign (mmu_load (Aex) >> 40 & 1);
 		RAU = SET_ADDITIVE (RAU);
 		break;
 	case 015:					/* или, aox */
@@ -823,11 +785,7 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		UNPCK (enreg);
-		UNPCK (acc);
-		besm6_divide (acc, enreg);
+		besm6_divide (mmu_load (Aex));
 		RAU = SET_MULTIPLICATIVE (RAU);
 		break;
 	case 017:					/* умн, a*x */
@@ -836,11 +794,7 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		UNPCK (enreg);
-		UNPCK (acc);
-		besm6_multiply (acc, enreg);
+		besm6_multiply (mmu_load (Aex));
 		RAU = SET_MULTIPLICATIVE (RAU);
 		break;
 	case 020:					/* сбр, apx */
@@ -849,9 +803,8 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		apx (acc, enreg);
+		besm6_pack (mmu_load (Aex));
+		RMR = 0;
 		RAU = SET_LOGICAL (RAU);
 		break;
 	case 021:					/* рзб, aux */
@@ -860,9 +813,8 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		aux (acc, enreg);
+		besm6_unpack (mmu_load (Aex));
+		RMR = 0;
 		RAU = SET_LOGICAL (RAU);
 		break;
 	case 022:					/* чед, acx */
@@ -871,7 +823,7 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		ACC = count_ones (ACC) + mmu_load (Aex);
+		ACC = besm6_count_ones (ACC) + mmu_load (Aex);
 		if (ACC & BIT49)
 			ACC = (ACC + 1) & BITS48;
 		RAU = SET_LOGICAL (RAU);
@@ -882,9 +834,7 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		anx (acc, enreg);
+		besm6_highest_bit (mmu_load (Aex));
 		RAU = SET_LOGICAL (RAU);
 		break;
 	case 024:					/* слп, e+x */
@@ -911,10 +861,7 @@ common_add:
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		enreg = toalu (mmu_load (Aex));
-		UNPCK (enreg);
-		shift (acc, enreg.o - 64);
+		besm6_shift ((mmu_load (Aex) >> 41) - 64);
 		RAU = SET_LOGICAL (RAU);
 		break;
 	case 027:					/* рж, xtr */
@@ -967,8 +914,7 @@ common_add:
 		break;
 	case 036:					/* сда, asn */
 		Aex = ADDR (addr + M[reg]);
-		acc = toalu (ACC);
-		shift (acc, (Aex & 0177) - 64);
+		besm6_shift ((Aex & 0177) - 64);
 		RAU = SET_LOGICAL (RAU);
 		break;
 	case 037:					/* ржа, ntr */
