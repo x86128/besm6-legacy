@@ -333,21 +333,6 @@ t_stat cpu_reset (DEVICE *dptr)
 	return SCPE_OK;
 }
 
-double besm6_to_ieee (t_value word)
-{
-	double mantissa;
-
-	/* Сдвигаем так, чтобы знак мантиссы пришелся на знак целого;
-	 * таким образом, mantissa равно исходной мантиссе, умноженной на 2**63.
-	 */
-        mantissa = (t_int64) word << (64 - 48 + 7);
-
-	int exponent = word >> 41;
-
-	/* Порядок смещен вверх на 64, и мантиссу нужно скорректировать */
-        return ldexp (mantissa, exponent - 64 - 63);
-}
-
 /*
  * Write Unicode symbol to file.
  * Convert to UTF-8 encoding:

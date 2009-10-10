@@ -22,9 +22,9 @@ typedef union {
 	double d;
 	struct {
 #ifndef WORDS_BIGENDIAN
-		unsigned right32, left32;
+		uint32 right32, left32;
 #else
-		unsigned left32, right32;
+		uint32 left32, right32;
 #endif
 	} u;
 } math_t;
@@ -33,16 +33,16 @@ typedef union {
  * Convert floating-point value from BESM-6 format to IEEE 754.
  */
 #define BESM_TO_IEEE(from,to) {\
-	to.u.left32 = ((from.o - 64 + 1022) << 20) |\
+	to.u.left32 = ((from.exponent - 64 + 1022) << 20) |\
 			((from.ml << 5) & 0xfffff) |\
 			(from.mr >> 19);\
 	to.u.right32 = (from.mr & 0x7ffff) << 13;\
 }
 
-typedef struct  {
+typedef struct {
 	unsigned mr;			/* right 24 bits of mantissa */
-	unsigned ml;			/* left part of mantissa */
-	unsigned o;			/* exponent */
+	unsigned ml;			/* sign and left part of mantissa */
+	unsigned exponent;		/* offset by 64 */
 } alureg_t;				/* ALU register type */
 
 static alureg_t zeroword;
@@ -56,7 +56,7 @@ static alureg_t toalu (t_value val)
 
         ret.mr = val & BITS24;
 	ret.ml = (val >> 24) & BITS17;
-	ret.o = (val >> 41) & BITS7;
+	ret.exponent = (val >> 41) & BITS7;
 	if (ret.ml & BIT17)
 		ret.ml |= BIT18;
 	return ret;
@@ -64,7 +64,7 @@ static alureg_t toalu (t_value val)
 
 static t_value fromalu (alureg_t reg)
 {
-        return (t_value) (reg.o & BITS7) << 41 |
+        return (t_value) (reg.exponent & BITS7) << 41 |
 		(t_value) (reg.ml & BITS17) << 24 | (reg.mr & BITS24);
 }
 
@@ -83,7 +83,7 @@ static alureg_t negate (alureg_t word)
 	if (((word.ml >> 1) ^ word.ml) & 0x10000) {
 		word.mr = ((word.mr >> 1) | (word.ml << 23)) & 0xffffff;
 		word.ml >>= 1;
-		++word.o;
+		++word.exponent;
 	}
 	if (is_negative (word))
 		word.ml |= 0x20000;
@@ -102,7 +102,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 #if 0
 	if (sim_deb && cpu_dev.dctrl) {
 		fprintf (sim_deb, "*** До нормализации: СМ=%03o-%06o %08o, РМР=%03o-%06o %08o\n",
-			acc.o, acc.ml, acc.mr, rmr.o, rmr.ml, rmr.mr);
+			acc.exponent, acc.ml, acc.mr, rmr.exponent, rmr.ml, rmr.mr);
 	}
 #endif
 	if (RAU & RAU_NORM_DISABLE)
@@ -120,7 +120,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 			rmr.ml = (rmr.ml << cnt) |
 					(rmr.mr >> (24 - cnt));
 			rmr.mr <<= cnt;
-			acc.o -= cnt;
+			acc.exponent -= cnt;
 			goto chk_zero;
 		}
 		if ((r = acc.mr >> 16)) {
@@ -132,7 +132,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 					(rmr.ml << cnt) |
 					(rmr.mr >> (24 - cnt));
 			rmr.mr <<= fcnt;
-			acc.o -= fcnt;
+			acc.exponent -= fcnt;
 			rr = acc.mr & ((1l << fcnt) - 1);
 			goto chk_zero;
 		}
@@ -146,7 +146,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 					(rmr.mr >> (16 - cnt));
 			rmr.ml = rmr.mr << cnt;
 			rmr.mr = 0;
-			acc.o -= 24 + cnt;
+			acc.exponent -= 24 + cnt;
 			rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
 			goto chk_zero;
 		}
@@ -159,7 +159,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 					(rmr.mr >> (24 - cnt));
 			acc.mr = (rmr.mr << cnt);
 			rmr.ml = rmr.mr = 0;
-			acc.o -= 40 + cnt;
+			acc.exponent -= 40 + cnt;
 			goto chk_zero;
 		}
 		if ((r = rmr.mr >> 16)) {
@@ -170,7 +170,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 			acc.ml = rmr.mr >> (8 - cnt);
 			acc.mr = rmr.mr << (16 + cnt);
 			rmr.ml = rmr.mr = 0;
-			acc.o -= 56 + cnt;
+			acc.exponent -= 56 + cnt;
 			goto chk_zero;
 		}
 		if ((r = rmr.mr & 0xffff)) {
@@ -180,7 +180,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff);
 			acc.mr = rmr.ml = rmr.mr = 0;
-			acc.o -= 64 + cnt;
+			acc.exponent -= 64 + cnt;
 			goto chk_zero;
 		}
 		goto zero;
@@ -197,7 +197,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 					(rmr.mr >> (24 - cnt)))
 					& 0xffff;
 			rmr.mr <<= cnt;
-			acc.o -= cnt;
+			acc.exponent -= cnt;
 			goto chk_zero;
 		}
 		if ((r = (~acc.mr >> 16) & 0xff)) {
@@ -212,7 +212,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 					(rmr.mr >> (8 - cnt)))
 					& 0xffff;
 			rmr.mr <<= fcnt;
-			acc.o -= fcnt;
+			acc.exponent -= fcnt;
 			rr = acc.mr & ((1l << fcnt) - 1);
 			goto chk_zero;
 		}
@@ -226,7 +226,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 					(rmr.mr >> (16 - cnt));
 			rmr.ml = (rmr.mr << cnt) & 0xffff;
 			rmr.mr = 0;
-			acc.o -= 24 + cnt;
+			acc.exponent -= 24 + cnt;
 			rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
 			goto chk_zero;
 		}
@@ -239,7 +239,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 					(rmr.mr >> (24 - cnt));
 			acc.mr = (rmr.mr << cnt);
 			rmr.ml = rmr.mr = 0;
-			acc.o -= 40 + cnt;
+			acc.exponent -= 40 + cnt;
 			goto chk_zero;
 		}
 		if ((r = (~rmr.mr >> 16) & 0xff)) {
@@ -250,7 +250,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 			acc.ml = 0x10000 | (rmr.mr >> (8 - cnt));
 			acc.mr = rmr.mr << (16 + cnt);
 			rmr.ml = rmr.mr = 0;
-			acc.o -= 56 + cnt;
+			acc.exponent -= 56 + cnt;
 			goto chk_zero;
 		}
 		if ((r = ~rmr.mr & 0xffff)) {
@@ -260,23 +260,23 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff);
 			acc.mr = rmr.ml = rmr.mr = 0;
-			acc.o -= 64 + cnt;
+			acc.exponent -= 64 + cnt;
 			goto chk_zero;
 		} else {
 			rr = 1;
 			acc.ml = 0x10000;
 			acc.mr = rmr.ml = rmr.mr = 0;
-			acc.o -= 80;
+			acc.exponent -= 80;
 			goto chk_zero;
 		}
 	}
 chk_zero:
 	rnd_rq = rnd_rq && !rr;
 chk_rnd:
-	if (acc.o & 0x8000)
+	if (acc.exponent & 0x8000)
 		goto zero;
-	if (acc.o & 0x80) {
-		acc.o = 0;
+	if (acc.exponent & 0x80) {
+		acc.exponent = 0;
 		if (! (RAU & RAU_OVF_DISABLE))
 			longjmp (cpu_halt, STOP_OVFL);
 	}
@@ -338,10 +338,10 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 #if 0
 	if (sim_deb && cpu_dev.dctrl) {
 		fprintf (sim_deb, "*** Сложение: СМ=%03o-%06o %08o + M[Аисп]=%03o-%06o %08o\n",
-			acc.o, acc.ml, acc.mr, word.o, word.ml, word.mr);
+			acc.exponent, acc.ml, acc.mr, word.exponent, word.ml, word.mr);
 	}
 #endif
-	diff = acc.o - word.o;
+	diff = acc.exponent - word.exponent;
 	if (diff < 0) {
 		diff = -diff;
 		a1 = acc;
@@ -350,7 +350,7 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 		a1 = word;
 		a2 = acc;
 	}
-	rmr.o = rmr.ml = rmr.mr = 0;
+	rmr.exponent = rmr.ml = rmr.mr = 0;
 	neg = is_negative (a1);
 	if (diff == 0) {
 		/* Nothing to do. */
@@ -399,7 +399,7 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 		} else
 			rmr.ml = rmr.mr = a1.ml = a1.mr = 0;
 	}
-	acc.o = a2.o;
+	acc.exponent = a2.exponent;
 	acc.mr = a1.mr + a2.mr;
 	acc.ml = a1.ml + a2.ml + (acc.mr >> 24);
 	acc.mr &= 0xffffff;
@@ -414,7 +414,7 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 		rmr.ml = (rmr.ml >> 1) | (acc.mr << 15);
 		acc.mr = (acc.mr >> 1) | (acc.ml << 23);
 		acc.ml >>= 1;
-		++acc.o;
+		++acc.exponent;
 	}
 	normalize_and_round (acc, rmr);
 }
@@ -510,7 +510,7 @@ qzero:		ACC = 0;
 	o = o - 1022 + 64;
 	if (o < 0)
 		goto qzero;
-	acc.o = o & 0x7f;
+	acc.exponent = o & 0x7f;
 	acc.ml = ((quotient.u.left32 & 0xfffff) | 0x100000) >> 5;
 	acc.mr = ((quotient.u.left32 & 0x1f) << 19) |
 			(quotient.u.right32 >> 13);
@@ -556,7 +556,7 @@ void besm6_multiply (t_value val)
 		neg ^= 1;
 		b = negate (b);
 	}
-	acc.o = a.o + b.o - 64;
+	acc.exponent = a.exponent + b.exponent - 64;
 
 	a3 = a.mr & 0xfff;
 	a2 = a.mr >> 12;
@@ -631,7 +631,7 @@ void besm6_add_exponent (int val)
 	alureg_t acc;
 
 	acc = toalu (ACC);
-	acc.o += val;
+	acc.exponent += val;
 	normalize_and_round (acc, zeroword);
 }
 
