@@ -45,8 +45,6 @@ typedef struct  {
 	unsigned o;			/* exponent */
 } alureg_t;				/* ALU register type */
 
-#define NEGATIVE(R)     (((R).ml & BIT17) != 0)
-
 static alureg_t zeroword;
 
 /* Требуется округление. */
@@ -70,9 +68,14 @@ static t_value fromalu (alureg_t reg)
 		(t_value) (reg.ml & BITS17) << 24 | (reg.mr & BITS24);
 }
 
+static int inline is_negative (alureg_t word)
+{
+	return (word.ml & BIT17) != 0;
+}
+
 static alureg_t negate (alureg_t word)
 {
-	if (NEGATIVE (word))
+	if (is_negative (word))
 		word.ml |= 0x20000;
 	word.mr = (~word.mr & 0xffffff) + 1;
 	word.ml = (~word.ml + (word.mr >> 24)) & 0x3ffff;
@@ -82,7 +85,7 @@ static alureg_t negate (alureg_t word)
 		word.ml >>= 1;
 		++word.o;
 	}
-	if (NEGATIVE (word))
+	if (is_negative (word))
 		word.ml |= 0x20000;
 	return word;
 }
@@ -326,9 +329,9 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 			acc = negate (acc);
 		} else {
 			/* Вычитание модулей */
-			if (NEGATIVE (acc))
+			if (is_negative (acc))
 				acc = negate (acc);
-			if (! NEGATIVE (word))
+			if (! is_negative (word))
 				word = negate (word);
 		}
 	}
@@ -348,7 +351,7 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 		a2 = acc;
 	}
 	rmr.o = rmr.ml = rmr.mr = 0;
-	neg = NEGATIVE (a1);
+	neg = is_negative (a1);
 	if (diff == 0) {
 		/* Nothing to do. */
 	} else if (diff <= 16) {
@@ -468,10 +471,10 @@ void besm6_divide (t_value val)
 	acc = toalu (ACC);
 	word = toalu (val);
 	RMR = 0;
-	neg = NEGATIVE (acc) != NEGATIVE (word);
-	if (NEGATIVE (acc))
+	neg = is_negative (acc) != is_negative (word);
+	if (is_negative (acc))
 		acc = negate (acc);
-	if (NEGATIVE (word))
+	if (is_negative (word))
 		word = negate (word);
 	if (! (word.ml & BIT16)) {
 		/* Ненормализованный делитель: деление на ноль. */
@@ -545,11 +548,11 @@ void besm6_multiply (t_value val)
 	b = word;
 	rmr = zeroword;
 
-	if (NEGATIVE (a)) {
+	if (is_negative (a)) {
 		neg = 1;
 		a = negate (a);
 	}
-	if (NEGATIVE (b)) {
+	if (is_negative (b)) {
 		neg ^= 1;
 		b = negate (b);
 	}
