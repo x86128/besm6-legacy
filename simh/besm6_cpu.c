@@ -803,7 +803,7 @@ void cpu_one_inst ()
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		besm6_pack (mmu_load (Aex));
+		ACC = besm6_pack (ACC, mmu_load (Aex));
 		RMR = 0;
 		RAU = SET_LOGICAL (RAU);
 		break;
@@ -813,7 +813,7 @@ void cpu_one_inst ()
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		besm6_unpack (mmu_load (Aex));
+		ACC = besm6_unpack (ACC, mmu_load (Aex));
 		RMR = 0;
 		RAU = SET_LOGICAL (RAU);
 		break;

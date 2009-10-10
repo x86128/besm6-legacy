@@ -35,28 +35,17 @@ typedef union {
 #define BESM_TO_IEEE(from,to) {\
 	to.u.left32 = ((from.o - 64 + 1022) << 20) |\
 			((from.ml << 5) & 0xfffff) |\
-			(from.r >> 19);\
-	to.u.right32 = (from.r & 0x7ffff) << 13;\
+			(from.mr >> 19);\
+	to.u.right32 = (from.mr & 0x7ffff) << 13;\
 }
 
 typedef struct  {
-	unsigned	l;		/* left 24 bits */
-	unsigned	r;		/* right 24 bits */
-	unsigned short	o;		/* exponent (temp storage) */
-	unsigned	ml;		/* left part of mantissa */
+	unsigned mr;			/* right 24 bits of mantissa */
+	unsigned ml;			/* left part of mantissa */
+	unsigned o;			/* exponent */
 } alureg_t;				/* ALU register type */
 
 #define NEGATIVE(R)     (((R).ml & BIT17) != 0)
-
-#define UNPCK(R)        { \
-	(R).o = ((R).l >> 17) & 0177; \
-	(R).ml = (R).l & BITS17; \
-	(R).ml |= ((R).ml & BIT17) << 1; \
-}
-
-#define PACK(R)		{ \
-        (R).l = ((unsigned) (R).o << 17) | (R).ml; \
-}
 
 static alureg_t zeroword;
 
@@ -66,25 +55,30 @@ static int rnd_rq;
 static alureg_t toalu (t_value val)
 {
         alureg_t ret;
-        ret.l = val >> 24;
-        ret.r = val & BITS24;
+
+        ret.mr = val & BITS24;
+	ret.ml = (val >> 24) & BITS17;
+	ret.o = (val >> 41) & BITS7;
+	if (ret.ml & BIT17)
+		ret.ml |= BIT18;
 	return ret;
 }
 
 static t_value fromalu (alureg_t reg)
 {
-        return (t_value) reg.l << 24 | reg.r;
+        return (t_value) (reg.o & BITS7) << 41 |
+		(t_value) (reg.ml & BITS17) << 24 | (reg.mr & BITS24);
 }
 
 static alureg_t negate (alureg_t word)
 {
 	if (NEGATIVE (word))
 		word.ml |= 0x20000;
-	word.r = (~word.r & 0xffffff) + 1;
-	word.ml = (~word.ml + (word.r >> 24)) & 0x3ffff;
-	word.r &= 0xffffff;
+	word.mr = (~word.mr & 0xffffff) + 1;
+	word.ml = (~word.ml + (word.mr >> 24)) & 0x3ffff;
+	word.mr &= 0xffffff;
 	if (((word.ml >> 1) ^ word.ml) & 0x10000) {
-		word.r = ((word.r >> 1) | (word.ml << 23)) & 0xffffff;
+		word.mr = ((word.mr >> 1) | (word.ml << 23)) & 0xffffff;
 		word.ml >>= 1;
 		++word.o;
 	}
@@ -94,8 +88,8 @@ static alureg_t negate (alureg_t word)
 }
 
 /*
- * Нормализация и округление значений, находящихся
- * в регистрах ACC и RMR.
+ * Нормализация и округление.
+ * Результат помещается в регистры ACC и RMR.
  */
 static void normalize_and_round (alureg_t acc, alureg_t rmr)
 {
@@ -105,7 +99,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 #if 0
 	if (sim_deb && cpu_dev.dctrl) {
 		fprintf (sim_deb, "*** До нормализации: СМ=%03o-%06o %08o, РМР=%03o-%06o %08o\n",
-			acc.o, acc.ml, acc.r, rmr.o, rmr.ml, rmr.r);
+			acc.o, acc.ml, acc.mr, rmr.o, rmr.ml, rmr.mr);
 	}
 #endif
 	if (RAU & RAU_NORM_DISABLE)
@@ -117,72 +111,72 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff) |
-					(acc.r >> (24 - cnt));
-			acc.r = (acc.r << cnt) |
+					(acc.mr >> (24 - cnt));
+			acc.mr = (acc.mr << cnt) |
 					(rr = rmr.ml >> (16 - cnt));
 			rmr.ml = (rmr.ml << cnt) |
-					(rmr.r >> (24 - cnt));
-			rmr.r <<= cnt;
+					(rmr.mr >> (24 - cnt));
+			rmr.mr <<= cnt;
 			acc.o -= cnt;
 			goto chk_zero;
 		}
-		if ((r = acc.r >> 16)) {
+		if ((r = acc.mr >> 16)) {
 			int     cnt, fcnt;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r <<= 1);
-			acc.ml = acc.r >> (8 - cnt);
-			acc.r = (acc.r << (fcnt = 16 + cnt)) |
+			acc.ml = acc.mr >> (8 - cnt);
+			acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
 					(rmr.ml << cnt) |
-					(rmr.r >> (24 - cnt));
-			rmr.r <<= fcnt;
+					(rmr.mr >> (24 - cnt));
+			rmr.mr <<= fcnt;
 			acc.o -= fcnt;
-			rr = acc.r & ((1l << fcnt) - 1);
+			rr = acc.mr & ((1l << fcnt) - 1);
 			goto chk_zero;
 		}
-		if ((r = acc.r & 0xffff)) {
+		if ((r = acc.mr & 0xffff)) {
 			int cnt;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff) |
 					(rmr.ml >> (16 - cnt));
-			acc.r = (rmr.ml << (8 + cnt)) |
-					(rmr.r >> (16 - cnt));
-			rmr.ml = rmr.r << cnt;
-			rmr.r = 0;
+			acc.mr = (rmr.ml << (8 + cnt)) |
+					(rmr.mr >> (16 - cnt));
+			rmr.ml = rmr.mr << cnt;
+			rmr.mr = 0;
 			acc.o -= 24 + cnt;
-			rr = (acc.ml & ((1 << cnt) - 1)) | acc.r;
+			rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
 			goto chk_zero;
 		}
 		if ((r = rmr.ml & 0xffff)) {
 			int cnt;
-			rr = rmr.ml | rmr.r;
+			rr = rmr.ml | rmr.mr;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff) |
-					(rmr.r >> (24 - cnt));
-			acc.r = (rmr.r << cnt);
-			rmr.ml = rmr.r = 0;
+					(rmr.mr >> (24 - cnt));
+			acc.mr = (rmr.mr << cnt);
+			rmr.ml = rmr.mr = 0;
 			acc.o -= 40 + cnt;
 			goto chk_zero;
 		}
-		if ((r = rmr.r >> 16)) {
+		if ((r = rmr.mr >> 16)) {
 			int cnt;
-			rr = rmr.ml | rmr.r;
+			rr = rmr.ml | rmr.mr;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r <<= 1);
-			acc.ml = rmr.r >> (8 - cnt);
-			acc.r = rmr.r << (16 + cnt);
-			rmr.ml = rmr.r = 0;
+			acc.ml = rmr.mr >> (8 - cnt);
+			acc.mr = rmr.mr << (16 + cnt);
+			rmr.ml = rmr.mr = 0;
 			acc.o -= 56 + cnt;
 			goto chk_zero;
 		}
-		if ((r = rmr.r & 0xffff)) {
+		if ((r = rmr.mr & 0xffff)) {
 			int cnt;
-			rr = rmr.ml | rmr.r;
+			rr = rmr.ml | rmr.mr;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff);
-			acc.r = rmr.ml = rmr.r = 0;
+			acc.mr = rmr.ml = rmr.mr = 0;
 			acc.o -= 64 + cnt;
 			goto chk_zero;
 		}
@@ -193,82 +187,82 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr)
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff) |
-					(acc.r >> (24 - cnt));
-			acc.r = (acc.r << cnt) |
+					(acc.mr >> (24 - cnt));
+			acc.mr = (acc.mr << cnt) |
 					(rr = rmr.ml >> (16 - cnt));
 			rmr.ml = ((rmr.ml << cnt) |
-					(rmr.r >> (24 - cnt)))
+					(rmr.mr >> (24 - cnt)))
 					& 0xffff;
-			rmr.r <<= cnt;
+			rmr.mr <<= cnt;
 			acc.o -= cnt;
 			goto chk_zero;
 		}
-		if ((r = (~acc.r >> 16) & 0xff)) {
+		if ((r = (~acc.mr >> 16) & 0xff)) {
 			int     cnt, fcnt;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r = (r << 1) | 1);
-			acc.ml = 0x10000 | (acc.r >> (8 - cnt));
-			acc.r = (acc.r << (fcnt = 16 + cnt)) |
+			acc.ml = 0x10000 | (acc.mr >> (8 - cnt));
+			acc.mr = (acc.mr << (fcnt = 16 + cnt)) |
 					(rmr.ml << cnt) |
-					(rmr.r >> (24 - cnt));
+					(rmr.mr >> (24 - cnt));
 			rmr.ml = ((rmr.ml << fcnt) |
-					(rmr.r >> (8 - cnt)))
+					(rmr.mr >> (8 - cnt)))
 					& 0xffff;
-			rmr.r <<= fcnt;
+			rmr.mr <<= fcnt;
 			acc.o -= fcnt;
-			rr = acc.r & ((1l << fcnt) - 1);
+			rr = acc.mr & ((1l << fcnt) - 1);
 			goto chk_zero;
 		}
-		if ((r = ~acc.r & 0xffff)) {
+		if ((r = ~acc.mr & 0xffff)) {
 			int cnt;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff) |
 					(rmr.ml >> (16 - cnt));
-			acc.r = (rmr.ml << (8 + cnt)) |
-					(rmr.r >> (16 - cnt));
-			rmr.ml = (rmr.r << cnt) & 0xffff;
-			rmr.r = 0;
+			acc.mr = (rmr.ml << (8 + cnt)) |
+					(rmr.mr >> (16 - cnt));
+			rmr.ml = (rmr.mr << cnt) & 0xffff;
+			rmr.mr = 0;
 			acc.o -= 24 + cnt;
-			rr = (acc.ml & ((1 << cnt) - 1)) | acc.r;
+			rr = (acc.ml & ((1 << cnt) - 1)) | acc.mr;
 			goto chk_zero;
 		}
 		if ((r = ~rmr.ml & 0xffff)) {
 			int cnt;
-			rr = rmr.ml | rmr.r;
+			rr = rmr.ml | rmr.mr;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff) |
-					(rmr.r >> (24 - cnt));
-			acc.r = (rmr.r << cnt);
-			rmr.ml = rmr.r = 0;
+					(rmr.mr >> (24 - cnt));
+			acc.mr = (rmr.mr << cnt);
+			rmr.ml = rmr.mr = 0;
 			acc.o -= 40 + cnt;
 			goto chk_zero;
 		}
-		if ((r = (~rmr.r >> 16) & 0xff)) {
+		if ((r = (~rmr.mr >> 16) & 0xff)) {
 			int cnt;
-			rr = rmr.ml | rmr.r;
+			rr = rmr.ml | rmr.mr;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r = (r << 1) | 1);
-			acc.ml = 0x10000 | (rmr.r >> (8 - cnt));
-			acc.r = rmr.r << (16 + cnt);
-			rmr.ml = rmr.r = 0;
+			acc.ml = 0x10000 | (rmr.mr >> (8 - cnt));
+			acc.mr = rmr.mr << (16 + cnt);
+			rmr.ml = rmr.mr = 0;
 			acc.o -= 56 + cnt;
 			goto chk_zero;
 		}
-		if ((r = ~rmr.r & 0xffff)) {
+		if ((r = ~rmr.mr & 0xffff)) {
 			int cnt;
-			rr = rmr.ml | rmr.r;
+			rr = rmr.ml | rmr.mr;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff);
-			acc.r = rmr.ml = rmr.r = 0;
+			acc.mr = rmr.ml = rmr.mr = 0;
 			acc.o -= 64 + cnt;
 			goto chk_zero;
 		} else {
 			rr = 1;
 			acc.ml = 0x10000;
-			acc.r = rmr.ml = rmr.r = 0;
+			acc.mr = rmr.ml = rmr.mr = 0;
 			acc.o -= 80;
 			goto chk_zero;
 		}
@@ -284,21 +278,15 @@ chk_rnd:
 			longjmp (cpu_halt, STOP_OVFL);
 	}
 	if (! (RAU & RAU_ROUND_DISABLE) && rnd_rq)
-		acc.r |= 1;
+		acc.mr |= 1;
 
-	if (!acc.ml && !acc.r && ! (RAU & RAU_NORM_DISABLE)) {
+	if (!acc.ml && !acc.mr && ! (RAU & RAU_NORM_DISABLE)) {
 zero:		ACC = 0;
 		RMR = 0;
 		rnd_rq = 0;
 		return;
 	}
 	rnd_rq = 0;
-
-	acc.l = ((uint32) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
-	acc.r = acc.r & 0xffffff;
-
-	rmr.l = ((uint32) (rmr.o & 0x7f) << 17) | (rmr.ml & 0x1ffff);
-	rmr.r = rmr.r & 0xffffff;
 
 	ACC = fromalu (acc);
 	RMR = fromalu (rmr);
@@ -313,6 +301,11 @@ zero:		ACC = 0;
 #endif
 }
 
+/*
+ * Сложение и все варианты вычитаний.
+ * Исходные значения: регистр ACC и аргумент 'val'.
+ * Результат помещается в регистры ACC и RMR.
+ */
 void besm6_add (t_value val, int negate_acc, int negate_val)
 {
 	alureg_t acc, word, rmr, a1, a2;
@@ -320,8 +313,6 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 
 	acc = toalu (ACC);
 	word = toalu (val);
-	UNPCK (acc);
-	UNPCK (word);
 	if (! negate_acc) {
 		if (! negate_val) {
 			/* Сложение */
@@ -344,7 +335,7 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 #if 0
 	if (sim_deb && cpu_dev.dctrl) {
 		fprintf (sim_deb, "*** Сложение: СМ=%03o-%06o %08o + M[Аисп]=%03o-%06o %08o\n",
-			acc.o, acc.ml, acc.r, word.o, word.ml, word.r);
+			acc.o, acc.ml, acc.mr, word.o, word.ml, word.mr);
 	}
 #endif
 	diff = acc.o - word.o;
@@ -356,69 +347,69 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 		a1 = word;
 		a2 = acc;
 	}
-	rmr.o = rmr.ml = rmr.r = 0;
+	rmr.o = rmr.ml = rmr.mr = 0;
 	neg = NEGATIVE (a1);
 	if (diff == 0) {
 		/* Nothing to do. */
 	} else if (diff <= 16) {
 		int rdiff = 16 - diff;
-		rnd_rq = (rmr.ml = (a1.r << rdiff) & 0xffff) != 0;
-		a1.r = ((a1.r >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
+		rnd_rq = (rmr.ml = (a1.mr << rdiff) & 0xffff) != 0;
+		a1.mr = ((a1.mr >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
 		a1.ml = ((a1.ml >> diff) |
 			(neg ? ~0 << rdiff : 0)) & 0x3ffff;
 	} else if (diff <= 40) {
 		diff -= 16;
-		rnd_rq = (rmr.r = (a1.r << (24 - diff)) & 0xffffff) != 0;
-		rnd_rq |= (rmr.ml = ((a1.r >> diff) |
+		rnd_rq = (rmr.mr = (a1.mr << (24 - diff)) & 0xffffff) != 0;
+		rnd_rq |= (rmr.ml = ((a1.mr >> diff) |
 			(a1.ml << (24 - diff))) & 0xffff) != 0;
-		a1.r = ((((a1.r >> 16) | (a1.ml << 8)) >> diff) |
+		a1.mr = ((((a1.mr >> 16) | (a1.ml << 8)) >> diff) |
 				(neg ? (~0l << (24 - diff)) : 0)) & 0xffffff;
 		a1.ml = neg ? 0x3ffff : 0;
 	} else if (diff <= 56) {
 		int rdiff = 16 - (diff -= 40);
-		rnd_rq = a1.ml || a1.r;
-		rmr.r = ((a1.r >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
+		rnd_rq = a1.ml || a1.mr;
+		rmr.mr = ((a1.mr >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
 		rmr.ml = ((a1.ml >> diff) |
 			(neg ? ~0 << rdiff : 0)) & 0xffff;
 		if (neg) {
-			a1.r = 0xffffff;
+			a1.mr = 0xffffff;
 			a1.ml = 0x3ffff;
 		} else
-			a1.ml = a1.r = 0;
+			a1.ml = a1.mr = 0;
 	} else if (diff <= 80) {
 		diff -= 56;
-		rnd_rq = a1.ml || a1.r;
-		rmr.r = ((((a1.r >> 16) | (a1.ml << 8)) >> diff) |
+		rnd_rq = a1.ml || a1.mr;
+		rmr.mr = ((((a1.mr >> 16) | (a1.ml << 8)) >> diff) |
 				(neg ? (~0l << (24 - diff)) : 0)) & 0xffffff;
 		rmr.ml = neg ? 0x3ffff : 0;
 		if (neg) {
-			a1.r = 0xffffff;
+			a1.mr = 0xffffff;
 			rmr.ml = a1.ml = 0x3ffff;
 		} else
-			rmr.ml = a1.ml = a1.r = 0;
+			rmr.ml = a1.ml = a1.mr = 0;
 	} else {
-		rnd_rq = a1.ml || a1.r;
+		rnd_rq = a1.ml || a1.mr;
 		if (neg) {
 			rmr.ml = 0xffff;
-			a1.r = rmr.r = 0xffffff;
+			a1.mr = rmr.mr = 0xffffff;
 			a1.ml = 0x3ffff;
 		} else
-			rmr.ml = rmr.r = a1.ml = a1.r = 0;
+			rmr.ml = rmr.mr = a1.ml = a1.mr = 0;
 	}
 	acc.o = a2.o;
-	acc.r = a1.r + a2.r;
-	acc.ml = a1.ml + a2.ml + (acc.r >> 24);
-	acc.r &= 0xffffff;
+	acc.mr = a1.mr + a2.mr;
+	acc.ml = a1.ml + a2.ml + (acc.mr >> 24);
+	acc.mr &= 0xffffff;
 
 	/* Если требуется нормализация вправо, биты 42:41
 	 * принимают значение 01 или 10. */
 	switch ((acc.ml >> 16) & 3) {
 	case 2:
 	case 1:
-		rnd_rq |= acc.r & 1;
-		rmr.r = (rmr.r >> 1) | (rmr.ml << 23);
-		rmr.ml = (rmr.ml >> 1) | (acc.r << 15);
-		acc.r = (acc.r >> 1) | (acc.ml << 23);
+		rnd_rq |= acc.mr & 1;
+		rmr.mr = (rmr.mr >> 1) | (rmr.ml << 23);
+		rmr.ml = (rmr.ml >> 1) | (acc.mr << 15);
+		acc.mr = (acc.mr >> 1) | (acc.ml << 23);
 		acc.ml >>= 1;
 		++acc.o;
 	}
@@ -462,6 +453,11 @@ static double nrdiv (double n, double d)
 	return ldexp (res, re+ne-de);
 }
 
+/*
+ * Деление.
+ * Исходные значения: регистр ACC и аргумент 'val'.
+ * Результат помещается в регистры ACC и RMR.
+ */
 void besm6_divide (t_value val)
 {
 	alureg_t acc, word;
@@ -471,37 +467,33 @@ void besm6_divide (t_value val)
 
 	acc = toalu (ACC);
 	word = toalu (val);
-	UNPCK (acc);
-	UNPCK (word);
 	RMR = 0;
 	neg = NEGATIVE (acc) != NEGATIVE (word);
 	if (NEGATIVE (acc))
 		acc = negate (acc);
 	if (NEGATIVE (word))
 		word = negate (word);
-	if ((word.ml & 0x8000) == 0) {
-		PACK (acc);
-		ACC = fromalu (acc);
+	if (! (word.ml & BIT16)) {
+		/* Ненормализованный делитель: деление на ноль. */
 		longjmp (cpu_halt, STOP_DIVZERO);
 	}
-
-	if ((acc.ml == 0) && (acc.r == 0)) {
+	if ((acc.ml == 0) && (acc.mr == 0)) {
 qzero:		ACC = 0;
 		return;
 	}
 	if ((acc.ml & 0x8000) == 0) {   /* normalize */
 		while (acc.ml == 0) {
-			if (!acc.r)
+			if (! acc.mr)
 				goto qzero;
 			bias += 16;
-			acc.ml = acc.r >> 8;
-			acc.r = (acc.r & 0xff) << 16;
+			acc.ml = acc.mr >> 8;
+			acc.mr = (acc.mr & 0xff) << 16;
 		}
 		for (i = 0x8000, c = 0; (i & acc.ml) == 0; ++c)
 			i >>= 1;
 		bias += c;
-		acc.ml = ((acc.ml << c) | (acc.r >> (24 - c))) & 0xffff;
-		acc.r = (acc.r << c) & 0xffffff;
+		acc.ml = ((acc.ml << c) | (acc.mr >> (24 - c))) & 0xffff;
+		acc.mr = (acc.mr << c) & 0xffffff;
 	}
 
 	BESM_TO_IEEE (acc, dividend);
@@ -517,7 +509,7 @@ qzero:		ACC = 0;
 		goto qzero;
 	acc.o = o & 0x7f;
 	acc.ml = ((quotient.u.left32 & 0xfffff) | 0x100000) >> 5;
-	acc.r = ((quotient.u.left32 & 0x1f) << 19) |
+	acc.mr = ((quotient.u.left32 & 0x1f) << 19) |
 			(quotient.u.right32 >> 13);
 	if (neg)
 		acc = negate (acc);
@@ -527,6 +519,11 @@ qzero:		ACC = 0;
 		longjmp (cpu_halt, STOP_OVFL);
 }
 
+/*
+ * Умножение.
+ * Исходные значения: регистр ACC и аргумент 'val'.
+ * Результат помещается в регистры ACC и RMR.
+ */
 void besm6_multiply (t_value val)
 {
 	uint8           neg = 0;
@@ -534,22 +531,19 @@ void besm6_multiply (t_value val)
 	uint16          a1, a2, a3, b1, b2, b3;
 	register uint32 l;
 
-	acc = toalu (ACC);
-	word = toalu (val);
-	UNPCK (acc);
-	UNPCK (word);
-
-	a = acc;
-	b = word;
-	rmr = zeroword;
-
-	if ((!a.l && !a.r) || (!b.l && !b.r)) {
+	if (! ACC || ! val) {
 		/* multiplication by zero is zero */
 		ACC = 0;
 		RMR = 0;
 		rnd_rq = 0;
 		return;
 	}
+	acc = toalu (ACC);
+	word = toalu (val);
+
+	a = acc;
+	b = word;
+	rmr = zeroword;
 
 	if (NEGATIVE (a)) {
 		neg = 1;
@@ -561,130 +555,124 @@ void besm6_multiply (t_value val)
 	}
 	acc.o = a.o + b.o - 64;
 
-	a3 = a.r & 0xfff;
-	a2 = a.r >> 12;
+	a3 = a.mr & 0xfff;
+	a2 = a.mr >> 12;
 	a1 = a.ml;
 
-	b3 = b.r & 0xfff;
-	b2 = b.r >> 12;
+	b3 = b.mr & 0xfff;
+	b2 = b.mr >> 12;
 	b1 = b.ml;
 
-	rmr.r = (uint32) a3 * b3;
+	rmr.mr = (uint32) a3 * b3;
 
 	l = (uint32) a2 * b3 + (uint32) a3 * b2;
-	rmr.r += (l << 12) & 0xfff000;
+	rmr.mr += (l << 12) & 0xfff000;
 	rmr.ml = l >> 12;
 
 	l = (uint32) a1 * b3 + (uint32) a2 * b2 + (uint32) a3 * b1;
 	rmr.ml += l & 0xffff;
-	acc.r = l >> 16;
+	acc.mr = l >> 16;
 
 	l = (uint32) a1 * b2 + (uint32) a2 * b1;
 	rmr.ml += (l & 0xf) << 12;
-	acc.r += (l >> 4) & 0xffffff;
+	acc.mr += (l >> 4) & 0xffffff;
 	acc.ml = l >> 28;
 
 	l = (uint32) a1 * b1;
-	acc.r += (l & 0xffff) << 8;
+	acc.mr += (l & 0xffff) << 8;
 	acc.ml += l >> 16;
 
-	rmr.ml += rmr.r >> 24;
-	acc.r += rmr.ml >> 16;
-	acc.ml += acc.r >> 24;
-	rmr.r &= 0xffffff;
+	rmr.ml += rmr.mr >> 24;
+	acc.mr += rmr.ml >> 16;
+	acc.ml += acc.mr >> 24;
+	rmr.mr &= 0xffffff;
 	rmr.ml &= 0xffff;
-	acc.r &= 0xffffff;
+	acc.mr &= 0xffffff;
 	acc.ml &= 0xffff;
 
 	if (neg) {
-		rmr.r = (~rmr.r & 0xffffff) + 1;
-		rmr.ml = (~rmr.ml & 0xffff) + (rmr.r >> 24);
-		rmr.r &= 0xffffff;
-		acc.r = (~acc.r & 0xffffff) + (rmr.ml >> 16);
+		rmr.mr = (~rmr.mr & 0xffffff) + 1;
+		rmr.ml = (~rmr.ml & 0xffff) + (rmr.mr >> 24);
+		rmr.mr &= 0xffffff;
+		acc.mr = (~acc.mr & 0xffffff) + (rmr.ml >> 16);
 		rmr.ml &= 0xffff;
-		acc.ml = ((~acc.ml & 0xffff) + (acc.r >> 24)) | 0x30000;
-		acc.r &= 0xffffff;
+		acc.ml = ((~acc.ml & 0xffff) + (acc.mr >> 24)) | 0x30000;
+		acc.mr &= 0xffffff;
 	}
 
-	rnd_rq = !!(rmr.ml | rmr.r);
+	rnd_rq = !!(rmr.ml | rmr.mr);
 
 	normalize_and_round (acc, rmr);
 }
 
+/*
+ * Изменение знака числа на сумматоре ACC.
+ * Результат помещается в регистры ACC и RMR.
+ */
 void besm6_change_sign (int negate_acc)
 {
 	alureg_t acc;
 
 	acc = toalu (ACC);
-	UNPCK (acc);
 	if (negate_acc)
 		acc = negate (acc);
 	normalize_and_round (acc, zeroword);
 }
 
+/*
+ * Изменение порядка числа на сумматоре ACC.
+ * Результат помещается в регистры ACC и RMR.
+ */
 void besm6_add_exponent (int val)
 {
 	alureg_t acc;
 
 	acc = toalu (ACC);
-	UNPCK (acc);
 	acc.o += val;
 	normalize_and_round (acc, zeroword);
 }
 
-void besm6_pack (t_value val)
+/*
+ * Сборка значения по маске.
+ */
+t_value besm6_pack (t_value val, t_value mask)
 {
-	alureg_t acc, word, rmr;
+	t_value result;
 
-	acc = toalu (ACC);
-	word = toalu (val);
-	for (rmr.l = rmr.r = 0; word.r; word.r >>= 1, acc.r >>= 1)
-		if (word.r & 1) {
-			rmr.r = ((rmr.r >> 1) | (rmr.l << 23)) & BITS24;
-			rmr.l >>= 1;
-			if (acc.r & 1)
-				rmr.l |= 0x800000;
+	result = 0;
+	for (; mask; mask>>=1, val>>=1)
+		if (mask & 1) {
+			result >>= 1;
+			if (val & 1)
+				result |= BIT48;
 		}
-	for (; word.l; word.l >>= 1, acc.l >>= 1)
-		if (word.l & 1) {
-			rmr.r = ((rmr.r >> 1) | (rmr.l << 23)) & BITS24;
-			rmr.l >>= 1;
-			if (acc.l & 1)
-				rmr.l |= 0x800000;
-		}
-	ACC = fromalu (rmr);
+	return result;
 }
 
-void besm6_unpack (t_value val)
+/*
+ * Разборка значения по маске.
+ */
+t_value besm6_unpack (t_value val, t_value mask)
 {
-	alureg_t acc, word, rmr;
+	t_value result;
 	int i;
 
-	acc = toalu (ACC);
-	word = toalu (val);
-	rmr.l = rmr.r = 0;
-	for (i = 0; i < 24; ++i) {
-		rmr.l <<= 1;
-		if (word.l & 0x800000) {
-			if (acc.l & 0x800000)
-				rmr.l |= 1;
-			acc.l = (acc.l << 1) | (acc.r >> 23);
-			acc.r = (acc.r << 1) & BITS24;
+	result = 0;
+	for (i=0; i<48; ++i) {
+		result <<= 1;
+		if (mask & BIT48) {
+			if (val & BIT48)
+				result |= 1;
+			val <<= 1;
 		}
-		word.l <<= 1;
+		mask <<= 1;
 	}
-	for (i = 0; i < 24; ++i) {
-		rmr.r <<= 1;
-		if (word.r & 0x800000) {
-			if (acc.l & 0x800000)
-				rmr.r |= 1;
-			acc.l = (acc.l << 1);
-		}
-		word.r <<= 1;
-	}
-	ACC = fromalu (rmr);
+	return result;
 }
 
+/*
+ * Подсчёт количества единиц в слове.
+ */
 int besm6_count_ones (t_value word)
 {
 	int c;
@@ -694,106 +682,93 @@ int besm6_count_ones (t_value word)
 	return c;
 }
 
+/*
+ * Вычисление номера старшей единицы сумматора АСС, слева направо, нумеруя с единицы.
+ * 48-й разряд сумматора соответствует результату "1" и так далее.
+ * К номеру старшей единицы циклически прибавляется слово по Аисп.
+ * В регистр младших разрядов помещается исходное значение, придвинутое влево,
+ * без старшего бита.
+ */
 void besm6_highest_bit (t_value val)
 {
-	alureg_t acc, word;
-	uint32 c, i;
-	uint8 b;
+	static const int highest_of_six_bits [64] = {
+		0,6,5,5,4,4,4,4,3,3,3,3,3,3,3,3,
+		2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+		1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+	};
+	int n;
 
-	acc = toalu (ACC);
-	word = toalu (val);
-	if (acc.l) {
-		i = acc.l;
-		c = 1;
-	} else if (acc.r) {
-		i = acc.r;
-		c = 25;
-	} else {
+	if (! ACC) {
+		/* Нулевой сумматор, возвращаем 0. */
 		ACC = val;
 		RMR = 0;
 		return;
 	}
-	if (i & 0xff0000)
-		b = i >> 16;
-	else if (i & 0xff00) {
-		b = i >> 8;
-		c += 8;
+	if (ACC >> 24 & BITS24) {
+		if (ACC >> 36 & BITS12) {
+			if (ACC >> 42 & BITS6) {
+				n = highest_of_six_bits [ACC >> 42 & BITS6];
+			} else {
+				n = 6 + highest_of_six_bits [ACC >> 36 & BITS6];
+			}
+		} else {
+			if (ACC >> 30 & BITS6) {
+				n = 12 + highest_of_six_bits [ACC >> 30 & BITS6];
+			} else {
+				n = 18 + highest_of_six_bits [ACC >> 24 & BITS6];
+			}
+		}
 	} else {
-		b = i;
-		c += 16;
+		if (ACC >> 12 & BITS12) {
+			if (ACC >> 18 & BITS6) {
+				n = 24 + highest_of_six_bits [ACC >> 18 & BITS6];
+			} else {
+				n = 30 + highest_of_six_bits [ACC >> 12 & BITS6];
+			}
+		} else {
+			if (ACC >> 6 & BITS6) {
+				n = 36 + highest_of_six_bits [ACC >> 6 & BITS6];
+			} else {
+				n = 42 + highest_of_six_bits [ACC & BITS6];
+			}
+		}
 	}
-	while (!(b & 0x80)) {
-		b <<= 1;
-		++c;
-	}
+	/* Вычисляем РМР: отрезаем старший бит и все левее. */
+	besm6_shift (48 - n);
 
-	besm6_shift (48 - c);
-
-	ACC = c + fromalu (word);
+	/* Циклическое сложение номера старшей единицы с словом по Аисп. */
+	ACC = n + val;
 	if (ACC & BIT49)
 		ACC = (ACC + 1) & BITS48;
 }
 
+/*
+ * Сдвиг сумматора ACC с выдвижением в регистр младших разрядов RMR.
+ */
 void besm6_shift (int i)
 {
-	int j;
-	alureg_t acc, rmr;
-
-	if (! i) {
-		RMR = 0;
-		return;
-	}
-	acc = toalu (ACC);
-	rmr.l = rmr.r = 0;
+	RMR = 0;
 	if (i > 0) {
-		if (i < 24) {
-			j = 24 - i;
-			rmr.l = (acc.r << j) & 0xffffff;
-			acc.r = ((acc.r >> i) | (acc.l << j)) & 0xffffff;
-			acc.l >>= i;
-		} else if (i < 48) {
-			i -= 24;
-			j = 24 - i;
-			rmr.r = (acc.r << j) & 0xffffff;
-			rmr.l = ((acc.r >> i) | (acc.l << j)) & 0xffffff;
-			acc.r = acc.l >> i;
-			acc.l = 0;
-		} else if (i < 72) {
-			i -= 48;
-			rmr.r = ((acc.r >> i) | (acc.l << (24 - i))) & 0xffffff;
-			rmr.l = acc.l >> i;
-			acc.l = acc.r = 0;
-		} else if (i < 96) {
-			rmr.r = acc.l >> (i - 72);
-			acc.l = acc.r = 0;
-		} else
-			acc.l = acc.r = 0;
-	} else {
-		if (i > -24) {
-			i = -i;
-			j = 24 - i;
-			rmr.r = acc.l >> j;
-			acc.l = ((acc.l << i) | (acc.r >> j)) & 0xffffff;
-			acc.r = (acc.r << i) & 0xffffff;
-		} else if (i > -48) {
-			i = -i - 24;
-			j = 24 - i;
-			rmr.l = acc.l >> j;
-			rmr.r = ((acc.l << i) | (acc.r >> j)) & 0xffffff;
-			acc.l = (acc.r << i) & 0xffffff;
-			acc.r = 0;
-		} else if (i > -72) {
-			i = -i - 48;
-			j = 24 - i;
-			rmr.l = ((acc.l << i) | (acc.r >> j)) & 0xffffff;
-			rmr.r = (acc.r << i) & 0xffffff;
-			acc.l = acc.r = 0;
-		} else if (i > -96) {
-			rmr.l = (acc.r << i) & 0xffffff;
-			acc.l = acc.r = 0;
-		} else
-			acc.l = acc.r = 0;
+		/* Сдвиг вправо. */
+		if (i < 48) {
+			RMR = (ACC << (48-i)) & BITS48;
+			ACC >>= i;
+		} else {
+			if (i < 96)
+				RMR = ACC >> (i-48);
+			ACC = 0;
+		}
+	} else if (i < 0) {
+		/* Сдвиг влево. */
+		i = -i;
+		if (i < 48) {
+			RMR = ACC >> (48-i);
+			ACC = (ACC << i) & BITS48;
+		} else {
+			if (i < 96)
+				RMR = (ACC << (i-48)) & BITS48;
+			ACC = 0;
+		}
 	}
-	ACC = fromalu (acc);
-	RMR = fromalu (rmr);
 }
