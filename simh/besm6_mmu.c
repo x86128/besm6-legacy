@@ -273,8 +273,11 @@ void mmu_store (int addr, t_value val)
 	addr &= BITS15;
 	if (addr == 0)
 		return;
-	if (sim_log && mmu_dev.dctrl)
-		fprintf (sim_log, "--- %05o: запись %016llo\n", addr, val);
+	if (sim_log && mmu_dev.dctrl) {
+		fprintf (sim_log, "--- %05o: запись ", addr);
+		fprint_sym (sim_log, 0, &val, 0, 0);
+		fprintf (sim_log, "\n");
+	}
 
 	mmu_protection_check (addr);
 
@@ -342,9 +345,11 @@ t_value mmu_load (int addr)
 				besm6_debug("--- %05o: чтение ТР%o", PC, addr);
 			val = pult[addr];
 		}
-		if (sim_log && mmu_dev.dctrl)
-			fprintf (sim_log, "--- %05o: чтение %016llo\n",
-				addr & BITS15, val & WORD);
+		if (sim_log && mmu_dev.dctrl) {
+			fprintf (sim_log, "--- %05o: чтение ", addr & BITS15);
+			fprint_sym (sim_log, 0, &val, 0, 0);
+			fprintf (sim_log, "\n");
+		}
 
 		/* На тумблерных регистрах контроля числа не бывает */
 		if (addr >= 010 && ! IS_NUMBER (val)) {
@@ -359,16 +364,18 @@ t_value mmu_load (int addr)
 		if (matching != OLDEST)
 			set_wins (matching);
 		val = BRZ[matching];
-		if (sim_log && mmu_dev.dctrl)
-			fprintf (sim_log, "--- %05o: чтение %016llo из БРЗ\n",
-				addr & BITS15, val & WORD);
+		if (sim_log && mmu_dev.dctrl) {
+			fprintf (sim_log, "--- %05o: чтение ", addr & BITS15);
+			fprint_sym (sim_log, 0, &val, 0, 0);
+			fprintf (sim_log, " из БРЗ\n");
+		}
 		if (! IS_NUMBER (val)) {
 			iintr_data = matching;
 			besm6_debug ("--- %05o: контроль числа БРЗ", addr);
 			longjmp (cpu_halt, STOP_CACHE_CHECK);
 		}
 	}
-	return val & WORD;
+	return val & BITS48;
 }
 
 /* A little BRS LRU table */
@@ -496,16 +503,18 @@ t_value mmu_fetch (int addr)
 
 	val = mmu_prefetch(addr, 1);
 
-	if (sim_log && mmu_dev.dctrl)
-		fprintf (sim_log, "--- %05o: выборка %016llo\n",
-			addr, val & WORD);
+	if (sim_log && mmu_dev.dctrl) {
+		fprintf (sim_log, "--- %05o: выборка ", addr);
+		fprint_sym (sim_log, 0, &val, 0, SWMASK ('I'));
+		fprintf (sim_log, "\n");
+	}
 
 	/* Тумблерные регистры пока только с командной сверткой */
 	if (addr >= 010 && ! IS_INSN (val)) {
 		besm6_debug ("--- %05o: контроль команды", addr);
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
-	return val & WORD;
+	return val & BITS48;
 }
 
 void mmu_setrp (int idx, t_value val)
@@ -554,7 +563,7 @@ void mmu_setcache (int idx, t_value val)
 
 t_value mmu_getcache (int idx)
 {
-	return BRZ[idx] & WORD;
+	return BRZ[idx] & BITS48;
 }
 
 void mmu_print_brz ()
