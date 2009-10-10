@@ -100,10 +100,15 @@ MTAB mmu_mod[] = {
 
 t_stat mmu_reset (DEVICE *dptr);
 
+t_stat mmu_examine(t_value *vptr, t_addr addr, UNIT *uptr, int32 sw) {
+	mmu_print_brz();
+	return SCPE_NOFNC;
+}
+
 DEVICE mmu_dev = {
 	"MMU", &mmu_unit, mmu_reg, mmu_mod,
 	1, 8, 3, 1, 8, 50,
-	NULL, NULL, &mmu_reset,
+	&mmu_examine, NULL, &mmu_reset,
 	NULL, NULL, NULL, NULL,
 	DEV_DEBUG
 };
@@ -333,6 +338,8 @@ t_value mmu_load (int addr)
 			val = memory[addr];
 		} else {
 			/* С тумблерных регистров */
+			if (mmu_dev.dctrl)
+				besm6_debug("--- %05o: чтение ТР%o", PC, addr);
 			val = pult[addr];
 		}
 		if (sim_log && mmu_dev.dctrl)
