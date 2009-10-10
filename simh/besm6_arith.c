@@ -40,7 +40,7 @@ typedef union {
 	to.u.right32 = (from.r & 0x7ffff) << 13;\
 }
 
-alureg_t acc, accex, enreg, zeroword;
+alureg_t zeroword;
 
 /* Требуется округление. */
 int rnd_rq;
@@ -62,11 +62,16 @@ alureg_t negate (alureg_t word)
 	return word;
 }
 
-void add()
+void besm6_add (alureg_t acc, alureg_t enreg)
 {
-	alureg_t        a1, a2;
+	alureg_t        rmr, a1, a2;
 	int             diff, neg;
-
+#if 0
+	if (sim_deb && cpu_dev.dctrl) {
+		fprintf (sim_deb, "*** Сложение: СМ=%03o-%06o %08o + M[Аисп]=%03o-%06o %08o\n",
+			acc.o, acc.ml, acc.r, enreg.o, enreg.ml, enreg.r);
+	}
+#endif
 	diff = acc.o - enreg.o;
 	if (diff < 0) {
 		diff = -diff;
@@ -76,25 +81,20 @@ void add()
 		a1 = enreg;
 		a2 = acc;
 	}
+	rmr.o = rmr.ml = rmr.r = 0;
 	neg = NEGATIVE (a1);
-	if (!diff)
-		/*
-		accex.o = accex.ml = accex.r = 0;
-		*/      ;
-	else if (diff <= 16) {
+	if (diff == 0) {
+		/* Nothing to do. */
+	} else if (diff <= 16) {
 		int rdiff = 16 - diff;
-		/*
-		accex.r = 0;
-		*/
-		rnd_rq = (accex.ml = (a1.r << rdiff) & 0xffff) != 0;
+		rnd_rq = (rmr.ml = (a1.r << rdiff) & 0xffff) != 0;
 		a1.r = ((a1.r >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
 		a1.ml = ((a1.ml >> diff) |
 			(neg ? ~0 << rdiff : 0)) & 0x3ffff;
 	} else if (diff <= 40) {
 		diff -= 16;
-		rnd_rq = (accex.r = (a1.r << (24 - diff)) & 0xffffff) != 0;
-/* было         rnd_rq |= (accex.ml = (((a1.r & 0xff0000) >> diff) |   */
-		rnd_rq |= (accex.ml = ((a1.r >> diff) |
+		rnd_rq = (rmr.r = (a1.r << (24 - diff)) & 0xffffff) != 0;
+		rnd_rq |= (rmr.ml = ((a1.r >> diff) |
 			(a1.ml << (24 - diff))) & 0xffff) != 0;
 		a1.r = ((((a1.r >> 16) | (a1.ml << 8)) >> diff) |
 				(neg ? (~0l << (24 - diff)) : 0)) & 0xffffff;
@@ -102,8 +102,8 @@ void add()
 	} else if (diff <= 56) {
 		int rdiff = 16 - (diff -= 40);
 		rnd_rq = a1.ml || a1.r;
-		accex.r = ((a1.r >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
-		accex.ml = ((a1.ml >> diff) |
+		rmr.r = ((a1.r >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
+		rmr.ml = ((a1.ml >> diff) |
 			(neg ? ~0 << rdiff : 0)) & 0xffff;
 		if (neg) {
 			a1.r = 0xffffff;
@@ -113,69 +113,41 @@ void add()
 	} else if (diff <= 80) {
 		diff -= 56;
 		rnd_rq = a1.ml || a1.r;
-		accex.r = ((((a1.r >> 16) | (a1.ml << 8)) >> diff) |
+		rmr.r = ((((a1.r >> 16) | (a1.ml << 8)) >> diff) |
 				(neg ? (~0l << (24 - diff)) : 0)) & 0xffffff;
-		accex.ml = neg ? 0x3ffff : 0;
+		rmr.ml = neg ? 0x3ffff : 0;
 		if (neg) {
 			a1.r = 0xffffff;
-			accex.ml = a1.ml = 0x3ffff;
+			rmr.ml = a1.ml = 0x3ffff;
 		} else
-			accex.ml = a1.ml = a1.r = 0;
+			rmr.ml = a1.ml = a1.r = 0;
 	} else {
 		rnd_rq = a1.ml || a1.r;
 		if (neg) {
-			accex.ml = 0xffff;
-			a1.r = accex.r = 0xffffff;
+			rmr.ml = 0xffff;
+			a1.r = rmr.r = 0xffffff;
 			a1.ml = 0x3ffff;
 		} else
-			accex.ml = accex.r = a1.ml = a1.r = 0;
+			rmr.ml = rmr.r = a1.ml = a1.r = 0;
 	}
 	acc.o = a2.o;
 	acc.r = a1.r + a2.r;
 	acc.ml = a1.ml + a2.ml + (acc.r >> 24);
 	acc.r &= 0xffffff;
-}
 
-void aax()
-{
-	acc.l &= enreg.l;
-	acc.r &= enreg.r;
-	accex = zeroword;
-}
-
-void aex()
-{
-	accex = acc;
-	acc.l ^= enreg.l;
-	acc.r ^= enreg.r;
-}
-
-void arx()
-{
-	uint32 i;
-
-	acc.r = (i = acc.r + enreg.r) & 0xffffff;
-	acc.l = (i = acc.l + enreg.l + (i >> 24)) & 0xffffff;
-
-	if (i & 0x1000000) {
-		acc.r = (i = acc.r + 1) & 0xffffff;
-		acc.l = acc.l + (i >> 24);
+	/* Если требуется нормализация вправо, биты 42:41
+	 * принимают значение 01 или 10. */
+	switch ((acc.ml >> 16) & 3) {
+	case 2:
+	case 1:
+		rnd_rq |= acc.r & 1;
+		rmr.r = (rmr.r >> 1) | (rmr.ml << 23);
+		rmr.ml = (rmr.ml >> 1) | (acc.r << 15);
+		acc.r = (acc.r >> 1) | (acc.ml << 23);
+		acc.ml >>= 1;
+		++acc.o;
 	}
-
-	accex = zeroword;
-}
-
-void avx()
-{
-	if (NEGATIVE (enreg))
-		acc = negate (acc);
-}
-
-void aox()
-{
-	acc.l |= enreg.l;
-	acc.r |= enreg.r;
-	accex = zeroword;
+	normalize_and_round (acc, rmr);
 }
 
 /*
@@ -215,24 +187,26 @@ double nrdiv (double n, double d)
 	return ldexp (res, re+ne-de);
 }
 
-void b6div ()
+void besm6_divide (alureg_t acc, alureg_t enreg)
 {
 	int             neg, o;
 	unsigned long   i, c, bias = 0;
 	math_t          dividend, divisor, quotient;
 
-	accex.o = accex.ml = accex.r = 0;
+	RMR = 0;
 	neg = NEGATIVE (acc) != NEGATIVE (enreg);
 	if (NEGATIVE (acc))
 		acc = negate (acc);
 	if (NEGATIVE (enreg))
 		enreg = negate (enreg);
-	if ((enreg.ml & 0x8000) == 0)
+	if ((enreg.ml & 0x8000) == 0) {
+		PACK (acc);
+		ACC = fromalu (acc);
 		longjmp (cpu_halt, STOP_DIVZERO);
+	}
 
 	if ((acc.ml == 0) && (acc.r == 0)) {
-qzero:
-		acc = zeroword;
+qzero:		ACC = 0;
 		return;
 	}
 	if ((acc.ml & 0x8000) == 0) {   /* normalize */
@@ -267,24 +241,27 @@ qzero:
 			(quotient.u.right32 >> 13);
 	if (neg)
 		acc = negate (acc);
+	normalize_and_round (acc, zeroword);
+
 	if ((o > 0x7f) && ! (RAU & RAU_OVF_DISABLE))
 		longjmp (cpu_halt, STOP_OVFL);
 }
 
-void mul()
+void besm6_multiply (alureg_t acc, alureg_t enreg)
 {
 	uint8           neg = 0;
-	alureg_t        a, b;
+	alureg_t        rmr, a, b;
 	uint16          a1, a2, a3, b1, b2, b3;
 	register uint32 l;
 
 	a = acc;
 	b = enreg;
+	rmr = zeroword;
 
 	if ((!a.l && !a.r) || (!b.l && !b.r)) {
 		/* multiplication by zero is zero */
-		acc.l = acc.r = acc.o = acc.ml =
-		accex.l = accex.r = accex.o = accex.ml = 0;
+		ACC = 0;
+		RMR = 0;
 		rnd_rq = 0;
 		return;
 	}
@@ -307,18 +284,18 @@ void mul()
 	b2 = b.r >> 12;
 	b1 = b.ml;
 
-	accex.r = (uint32) a3 * b3;
+	rmr.r = (uint32) a3 * b3;
 
 	l = (uint32) a2 * b3 + (uint32) a3 * b2;
-	accex.r += (l << 12) & 0xfff000;
-	accex.ml = l >> 12;
+	rmr.r += (l << 12) & 0xfff000;
+	rmr.ml = l >> 12;
 
 	l = (uint32) a1 * b3 + (uint32) a2 * b2 + (uint32) a3 * b1;
-	accex.ml += l & 0xffff;
+	rmr.ml += l & 0xffff;
 	acc.r = l >> 16;
 
 	l = (uint32) a1 * b2 + (uint32) a2 * b1;
-	accex.ml += (l & 0xf) << 12;
+	rmr.ml += (l & 0xf) << 12;
 	acc.r += (l >> 4) & 0xffffff;
 	acc.ml = l >> 28;
 
@@ -326,89 +303,100 @@ void mul()
 	acc.r += (l & 0xffff) << 8;
 	acc.ml += l >> 16;
 
-	accex.ml += accex.r >> 24;
-	acc.r += accex.ml >> 16;
+	rmr.ml += rmr.r >> 24;
+	acc.r += rmr.ml >> 16;
 	acc.ml += acc.r >> 24;
-	accex.r &= 0xffffff;
-	accex.ml &= 0xffff;
+	rmr.r &= 0xffffff;
+	rmr.ml &= 0xffff;
 	acc.r &= 0xffffff;
 	acc.ml &= 0xffff;
 
 	if (neg) {
-		accex.r = (~accex.r & 0xffffff) + 1;
-		accex.ml = (~accex.ml & 0xffff) + (accex.r >> 24);
-		accex.r &= 0xffffff;
-		acc.r = (~acc.r & 0xffffff) + (accex.ml >> 16);
-		accex.ml &= 0xffff;
+		rmr.r = (~rmr.r & 0xffffff) + 1;
+		rmr.ml = (~rmr.ml & 0xffff) + (rmr.r >> 24);
+		rmr.r &= 0xffffff;
+		acc.r = (~acc.r & 0xffffff) + (rmr.ml >> 16);
+		rmr.ml &= 0xffff;
 		acc.ml = ((~acc.ml & 0xffff) + (acc.r >> 24)) | 0x30000;
 		acc.r &= 0xffffff;
 	}
 
-	rnd_rq = !!(accex.ml | accex.r);
+	rnd_rq = !!(rmr.ml | rmr.r);
+
+	normalize_and_round (acc, rmr);
 }
 
-void apx()
+void besm6_add_exponent (int val)
 {
-	for (accex.l = accex.r = 0; enreg.r; enreg.r >>= 1, acc.r >>= 1)
+	alureg_t acc;
+
+	acc = toalu (ACC);
+	UNPCK (acc);
+	acc.o += val;
+	normalize_and_round (acc, zeroword);
+}
+
+void apx (alureg_t acc, alureg_t enreg)
+{
+	alureg_t rmr;
+
+	for (rmr.l = rmr.r = 0; enreg.r; enreg.r >>= 1, acc.r >>= 1)
 		if (enreg.r & 1) {
-			accex.r = ((accex.r >> 1) | (accex.l << 23)) & BITS24;
-			accex.l >>= 1;
+			rmr.r = ((rmr.r >> 1) | (rmr.l << 23)) & BITS24;
+			rmr.l >>= 1;
 			if (acc.r & 1)
-				accex.l |= 0x800000;
+				rmr.l |= 0x800000;
 		}
 	for (; enreg.l; enreg.l >>= 1, acc.l >>= 1)
 		if (enreg.l & 1) {
-			accex.r = ((accex.r >> 1) | (accex.l << 23)) & BITS24;
-			accex.l >>= 1;
+			rmr.r = ((rmr.r >> 1) | (rmr.l << 23)) & BITS24;
+			rmr.l >>= 1;
 			if (acc.l & 1)
-				accex.l |= 0x800000;
+				rmr.l |= 0x800000;
 		}
-	acc = accex;
-	accex.l = accex.r = 0;
+	ACC = fromalu (rmr);
+	RMR = 0;
 }
 
-void aux()
+void aux (alureg_t acc, alureg_t enreg)
 {
 	int     i;
+	alureg_t rmr;
 
-	accex.l = accex.r = 0;
+	rmr.l = rmr.r = 0;
 	for (i = 0; i < 24; ++i) {
-		accex.l <<= 1;
+		rmr.l <<= 1;
 		if (enreg.l & 0x800000) {
 			if (acc.l & 0x800000)
-				accex.l |= 1;
+				rmr.l |= 1;
 			acc.l = (acc.l << 1) | (acc.r >> 23);
 			acc.r = (acc.r << 1) & BITS24;
 		}
 		enreg.l <<= 1;
 	}
 	for (i = 0; i < 24; ++i) {
-		accex.r <<= 1;
+		rmr.r <<= 1;
 		if (enreg.r & 0x800000) {
 			if (acc.l & 0x800000)
-				accex.r |= 1;
+				rmr.r |= 1;
 			acc.l = (acc.l << 1);
 		}
 		enreg.r <<= 1;
 	}
-	acc.l = accex.l;
-	acc.r = accex.r;
-	accex.l = accex.r = 0;
+	ACC = fromalu (rmr);
+	RMR = 0;
 }
 
-void acx()
+int count_ones (t_value word)
 {
-	int     c = 0;
-	uint32  i;
+	int c;
 
-	for (i = acc.l; i; i &= i - 1, c++);
-	for (i = acc.r; i; i &= i - 1, c++);
-	acc.r = c;
-	acc.l = 0;
-	arx();
+	for (c=0; word; ++c)
+		word &= word-1;
+	return c;
 }
 
-void anx()
+void anx (alureg_t acc, alureg_t enreg)
 {
 	uint32  c;
 	uint32  i;
@@ -421,8 +409,8 @@ void anx()
 		i = acc.r;
 		c = 25;
 	} else {
-		acc = enreg;
-		accex.l = accex.r = 0;
+		ACC = fromalu (enreg);
+		RMR = 0;
 		return;
 	}
 	if (i & 0xff0000)
@@ -439,55 +427,43 @@ void anx()
 		++c;
 	}
 
-	enreg.o = 64 + 48 - c;
-	asx();
+	shift (acc, 48 - c);
 
-	acc.r = (i = c + enreg.r) & 0xffffff;
-	acc.l = (i = enreg.l + (i >> 24)) & 0xffffff;
-
-	if (i & 0x1000000) {
-		acc.r = (i = acc.r + 1) & 0xffffff;
-		acc.l = acc.l + (i >> 24);
-	}
+	ACC = c + fromalu (enreg);
+	if (ACC & BIT49)
+		ACC = (ACC + 1) & BITS48;
 }
 
-void epx()
+void shift (alureg_t acc, int i)
 {
-	acc.o += enreg.o - 64;
-}
+	int j;
+	alureg_t rmr;
 
-void emx()
-{
-	acc.o += 64 - enreg.o;
-}
-
-void asx()
-{
-	int     i, j;
-
-	accex.l = accex.r = 0;
-	if (!(i = enreg.o - 64))
+	if (! i) {
+		RMR = 0;
 		return;
+	}
+	rmr.l = rmr.r = 0;
 	if (i > 0) {
 		if (i < 24) {
 			j = 24 - i;
-			accex.l = (acc.r << j) & 0xffffff;
+			rmr.l = (acc.r << j) & 0xffffff;
 			acc.r = ((acc.r >> i) | (acc.l << j)) & 0xffffff;
 			acc.l >>= i;
 		} else if (i < 48) {
 			i -= 24;
 			j = 24 - i;
-			accex.r = (acc.r << j) & 0xffffff;
-			accex.l = ((acc.r >> i) | (acc.l << j)) & 0xffffff;
+			rmr.r = (acc.r << j) & 0xffffff;
+			rmr.l = ((acc.r >> i) | (acc.l << j)) & 0xffffff;
 			acc.r = acc.l >> i;
 			acc.l = 0;
 		} else if (i < 72) {
 			i -= 48;
-			accex.r = ((acc.r >> i) | (acc.l << (24 - i))) & 0xffffff;
-			accex.l = acc.l >> i;
+			rmr.r = ((acc.r >> i) | (acc.l << (24 - i))) & 0xffffff;
+			rmr.l = acc.l >> i;
 			acc.l = acc.r = 0;
 		} else if (i < 96) {
-			accex.r = acc.l >> (i - 72);
+			rmr.r = acc.l >> (i - 72);
 			acc.l = acc.r = 0;
 		} else
 			acc.l = acc.r = 0;
@@ -495,45 +471,30 @@ void asx()
 		if (i > -24) {
 			i = -i;
 			j = 24 - i;
-			accex.r = acc.l >> j;
+			rmr.r = acc.l >> j;
 			acc.l = ((acc.l << i) | (acc.r >> j)) & 0xffffff;
 			acc.r = (acc.r << i) & 0xffffff;
 		} else if (i > -48) {
 			i = -i - 24;
 			j = 24 - i;
-			accex.l = acc.l >> j;
-			accex.r = ((acc.l << i) | (acc.r >> j)) & 0xffffff;
+			rmr.l = acc.l >> j;
+			rmr.r = ((acc.l << i) | (acc.r >> j)) & 0xffffff;
 			acc.l = (acc.r << i) & 0xffffff;
 			acc.r = 0;
 		} else if (i > -72) {
 			i = -i - 48;
 			j = 24 - i;
-			accex.l = ((acc.l << i) | (acc.r >> j)) & 0xffffff;
-			accex.r = (acc.r << i) & 0xffffff;
+			rmr.l = ((acc.l << i) | (acc.r >> j)) & 0xffffff;
+			rmr.r = (acc.r << i) & 0xffffff;
 			acc.l = acc.r = 0;
 		} else if (i > -96) {
-			accex.l = (acc.r << i) & 0xffffff;
+			rmr.l = (acc.r << i) & 0xffffff;
 			acc.l = acc.r = 0;
 		} else
 			acc.l = acc.r = 0;
 	}
-}
-
-void yta()
-{
-	if (IS_LOGICAL (RAU)) {
-		acc = accex;
-		return;
-	}
-
-	acc.r = accex.r;
-	acc.l = (accex.l & 0xffff) |
-		((acc.l + (enreg.o << 17) - (64 << 17)) & 0x1fe0000);
-	if (acc.l & 0x1000000) {
-		acc.l &= 0xffffff;
-		if (! (RAU & RAU_OVF_DISABLE))
-			longjmp (cpu_halt, STOP_OVFL);
-	}
+	ACC = fromalu (acc);
+	RMR = fromalu (rmr);
 }
 
 /*
@@ -554,23 +515,21 @@ double fetch_real (int addr)
 	return mantissa * exponent.d;
 }
 
-void normalize_and_round ()
+/*
+ * Нормализация и округление значений, находящихся
+ * в регистрах ACC и RMR.
+ */
+void normalize_and_round (alureg_t acc, alureg_t rmr)
 {
 	uint32 rr = 0;
 	int i, r;
 
-	switch ((acc.ml >> 16) & 3) {
-	case 2:
-	case 1:
-		rnd_rq |= acc.r & 1;
-		accex.r = (accex.r >> 1) | (accex.ml << 23);
-		accex.ml = (accex.ml >> 1) | (acc.r << 15);
-		acc.r = (acc.r >> 1) | (acc.ml << 23);
-		acc.ml >>= 1;
-		++acc.o;
-		goto chk_rnd;
+#if 0
+	if (sim_deb && cpu_dev.dctrl) {
+		fprintf (sim_deb, "*** До нормализации: СМ=%03o-%06o %08o, РМР=%03o-%06o %08o\n",
+			acc.o, acc.ml, acc.r, rmr.o, rmr.ml, rmr.r);
 	}
-
+#endif
 	if (RAU & RAU_NORM_DISABLE)
 		goto chk_rnd;
 	i = (acc.ml >> 15) & 3;
@@ -582,10 +541,10 @@ void normalize_and_round ()
 			acc.ml = (r & 0xffff) |
 					(acc.r >> (24 - cnt));
 			acc.r = (acc.r << cnt) |
-					(rr = accex.ml >> (16 - cnt));
-			accex.ml = (accex.ml << cnt) |
-					(accex.r >> (24 - cnt));
-			accex.r <<= cnt;
+					(rr = rmr.ml >> (16 - cnt));
+			rmr.ml = (rmr.ml << cnt) |
+					(rmr.r >> (24 - cnt));
+			rmr.r <<= cnt;
 			acc.o -= cnt;
 			goto chk_zero;
 		}
@@ -595,9 +554,9 @@ void normalize_and_round ()
 						++cnt, r <<= 1);
 			acc.ml = acc.r >> (8 - cnt);
 			acc.r = (acc.r << (fcnt = 16 + cnt)) |
-					(accex.ml << cnt) |
-					(accex.r >> (24 - cnt));
-			accex.r <<= fcnt;
+					(rmr.ml << cnt) |
+					(rmr.r >> (24 - cnt));
+			rmr.r <<= fcnt;
 			acc.o -= fcnt;
 			rr = acc.r & ((1l << fcnt) - 1);
 			goto chk_zero;
@@ -607,45 +566,45 @@ void normalize_and_round ()
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff) |
-					(accex.ml >> (16 - cnt));
-			acc.r = (accex.ml << (8 + cnt)) |
-					(accex.r >> (16 - cnt));
-			accex.ml = accex.r << cnt;
-			accex.r = 0;
+					(rmr.ml >> (16 - cnt));
+			acc.r = (rmr.ml << (8 + cnt)) |
+					(rmr.r >> (16 - cnt));
+			rmr.ml = rmr.r << cnt;
+			rmr.r = 0;
 			acc.o -= 24 + cnt;
 			rr = (acc.ml & ((1 << cnt) - 1)) | acc.r;
 			goto chk_zero;
 		}
-		if ((r = accex.ml & 0xffff)) {
+		if ((r = rmr.ml & 0xffff)) {
 			int cnt;
-			rr = accex.ml | accex.r;
+			rr = rmr.ml | rmr.r;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff) |
-					(accex.r >> (24 - cnt));
-			acc.r = (accex.r << cnt);
-			accex.ml = accex.r = 0;
+					(rmr.r >> (24 - cnt));
+			acc.r = (rmr.r << cnt);
+			rmr.ml = rmr.r = 0;
 			acc.o -= 40 + cnt;
 			goto chk_zero;
 		}
-		if ((r = accex.r >> 16)) {
+		if ((r = rmr.r >> 16)) {
 			int cnt;
-			rr = accex.ml | accex.r;
+			rr = rmr.ml | rmr.r;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r <<= 1);
-			acc.ml = accex.r >> (8 - cnt);
-			acc.r = accex.r << (16 + cnt);
-			accex.ml = accex.r = 0;
+			acc.ml = rmr.r >> (8 - cnt);
+			acc.r = rmr.r << (16 + cnt);
+			rmr.ml = rmr.r = 0;
 			acc.o -= 56 + cnt;
 			goto chk_zero;
 		}
-		if ((r = accex.r & 0xffff)) {
+		if ((r = rmr.r & 0xffff)) {
 			int cnt;
-			rr = accex.ml | accex.r;
+			rr = rmr.ml | rmr.r;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r <<= 1);
 			acc.ml = (r & 0xffff);
-			acc.r = accex.ml = accex.r = 0;
+			acc.r = rmr.ml = rmr.r = 0;
 			acc.o -= 64 + cnt;
 			goto chk_zero;
 		}
@@ -658,11 +617,11 @@ void normalize_and_round ()
 			acc.ml = 0x10000 | (~r & 0xffff) |
 					(acc.r >> (24 - cnt));
 			acc.r = (acc.r << cnt) |
-					(rr = accex.ml >> (16 - cnt));
-			accex.ml = ((accex.ml << cnt) |
-					(accex.r >> (24 - cnt)))
+					(rr = rmr.ml >> (16 - cnt));
+			rmr.ml = ((rmr.ml << cnt) |
+					(rmr.r >> (24 - cnt)))
 					& 0xffff;
-			accex.r <<= cnt;
+			rmr.r <<= cnt;
 			acc.o -= cnt;
 			goto chk_zero;
 		}
@@ -672,12 +631,12 @@ void normalize_and_round ()
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (acc.r >> (8 - cnt));
 			acc.r = (acc.r << (fcnt = 16 + cnt)) |
-					(accex.ml << cnt) |
-					(accex.r >> (24 - cnt));
-			accex.ml = ((accex.ml << fcnt) |
-					(accex.r >> (8 - cnt)))
+					(rmr.ml << cnt) |
+					(rmr.r >> (24 - cnt));
+			rmr.ml = ((rmr.ml << fcnt) |
+					(rmr.r >> (8 - cnt)))
 					& 0xffff;
-			accex.r <<= fcnt;
+			rmr.r <<= fcnt;
 			acc.o -= fcnt;
 			rr = acc.r & ((1l << fcnt) - 1);
 			goto chk_zero;
@@ -687,51 +646,51 @@ void normalize_and_round ()
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff) |
-					(accex.ml >> (16 - cnt));
-			acc.r = (accex.ml << (8 + cnt)) |
-					(accex.r >> (16 - cnt));
-			accex.ml = (accex.r << cnt) & 0xffff;
-			accex.r = 0;
+					(rmr.ml >> (16 - cnt));
+			acc.r = (rmr.ml << (8 + cnt)) |
+					(rmr.r >> (16 - cnt));
+			rmr.ml = (rmr.r << cnt) & 0xffff;
+			rmr.r = 0;
 			acc.o -= 24 + cnt;
 			rr = (acc.ml & ((1 << cnt) - 1)) | acc.r;
 			goto chk_zero;
 		}
-		if ((r = ~accex.ml & 0xffff)) {
+		if ((r = ~rmr.ml & 0xffff)) {
 			int cnt;
-			rr = accex.ml | accex.r;
+			rr = rmr.ml | rmr.r;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff) |
-					(accex.r >> (24 - cnt));
-			acc.r = (accex.r << cnt);
-			accex.ml = accex.r = 0;
+					(rmr.r >> (24 - cnt));
+			acc.r = (rmr.r << cnt);
+			rmr.ml = rmr.r = 0;
 			acc.o -= 40 + cnt;
 			goto chk_zero;
 		}
-		if ((r = (~accex.r >> 16) & 0xff)) {
+		if ((r = (~rmr.r >> 16) & 0xff)) {
 			int cnt;
-			rr = accex.ml | accex.r;
+			rr = rmr.ml | rmr.r;
 			for (cnt = 0; (r & 0x80) == 0;
 						++cnt, r = (r << 1) | 1);
-			acc.ml = 0x10000 | (accex.r >> (8 - cnt));
-			acc.r = accex.r << (16 + cnt);
-			accex.ml = accex.r = 0;
+			acc.ml = 0x10000 | (rmr.r >> (8 - cnt));
+			acc.r = rmr.r << (16 + cnt);
+			rmr.ml = rmr.r = 0;
 			acc.o -= 56 + cnt;
 			goto chk_zero;
 		}
-		if ((r = ~accex.r & 0xffff)) {
+		if ((r = ~rmr.r & 0xffff)) {
 			int cnt;
-			rr = accex.ml | accex.r;
+			rr = rmr.ml | rmr.r;
 			for (cnt = 0; (r & 0x8000) == 0;
 						++cnt, r = (r << 1) | 1);
 			acc.ml = 0x10000 | (~r & 0xffff);
-			acc.r = accex.ml = accex.r = 0;
+			acc.r = rmr.ml = rmr.r = 0;
 			acc.o -= 64 + cnt;
 			goto chk_zero;
 		} else {
 			rr = 1;
 			acc.ml = 0x10000;
-			acc.r = accex.ml = accex.r = 0;
+			acc.r = rmr.ml = rmr.r = 0;
 			acc.o -= 80;
 			goto chk_zero;
 		}
@@ -750,14 +709,28 @@ chk_rnd:
 		acc.r |= 1;
 
 	if (!acc.ml && !acc.r && ! (RAU & RAU_NORM_DISABLE)) {
-zero:		acc.l = acc.r = accex.l = accex.r = 0;
+zero:		ACC = 0;
+		RMR = 0;
 		rnd_rq = 0;
 		return;
 	}
+	rnd_rq = 0;
+
 	acc.l = ((uint32) (acc.o & 0x7f) << 17) | (acc.ml & 0x1ffff);
 	acc.r = acc.r & 0xffffff;
 
-	accex.l = ((uint32) (accex.o & 0x7f) << 17) | (accex.ml & 0x1ffff);
-	accex.r = accex.r & 0xffffff;
-	rnd_rq = 0;
+	rmr.l = ((uint32) (rmr.o & 0x7f) << 17) | (rmr.ml & 0x1ffff);
+	rmr.r = rmr.r & 0xffffff;
+
+	ACC = fromalu (acc);
+	RMR = fromalu (rmr);
+#if 0
+	if (sim_deb && cpu_dev.dctrl) {
+		fprintf (sim_deb, "*** После нормализации: СМ=");
+		fprint_sym (sim_deb, 0, &ACC, 0, 0);
+		fprintf (sim_deb, ", РМР=");
+		fprint_sym (sim_deb, 0, &RMR, 0, 0);
+		fprintf (sim_deb, "\n");
+	}
+#endif
 }
