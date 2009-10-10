@@ -488,8 +488,8 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0140:
-		/* TODO: запись в регистр телеграфных каналов */
-		longjmp (cpu_halt, STOP_STOP);
+		/* запись в регистр телеграфных каналов */
+		tty_send((uint32) ACC & BITS24);
 		break;
 	case 0141:
 		/* TODO: управление разметкой магнитной ленты */
