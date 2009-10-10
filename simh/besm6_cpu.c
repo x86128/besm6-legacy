@@ -622,6 +622,7 @@ void cpu_one_inst ()
 {
 	int reg, opcode, addr, nextpc, nextaddrmod = 0;
 
+	corr_stack = 0;
 	t_value word = mmu_fetch (PC);
 	if (RUU & RUU_RIGHT_INSTR)
 		RK = word;		/* get right instruction */
@@ -661,7 +662,6 @@ void cpu_one_inst ()
         }
 
 	delay = 0;
-	corr_stack = 0;
 
 	acc = toalu (ACC);
 	accex = toalu (RMR);
@@ -1020,14 +1020,14 @@ common_add:
 		Aex = ADDR (addr + M[reg]);
 		rg = Aex & (IS_SUPERVISOR (RUU) ? 037 : 017);
 		ad = ADDR (acc.r);
-		M[rg] = ad;
 		if ((M[PSW] & PSW_MMAP_DISABLE) &&
                                  (rg == IBP || rg == DWP))
                                 M[rg] |= BIT16;
 		M[0] = 0;
 		if (rg != 017)
 			M[017] = ADDR (M[017] - 1);
-		acc = toalu (mmu_load (M[017]));
+		acc = toalu (mmu_load (rg != 017 ? M[017] : ad));
+		M[rg] = ad;
 		RAU = SET_LOGICAL (RAU);
 		break;
 	}
@@ -1182,7 +1182,8 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 		if (! IS_SUPERVISOR (RUU)) {
 			longjmp (cpu_halt, STOP_BADCMD);
 		}
-		M[PSW] = M[SPSW] & (SPSW_INTR_DISABLE |
+		M[PSW] = (M[PSW] & PSW_WRITE_WATCH) |
+			M[SPSW] & (SPSW_INTR_DISABLE |
 			SPSW_MMAP_DISABLE | SPSW_PROT_DISABLE);
 		PC = M[(reg & 3) | 030];
 		RUU &= ~RUU_RIGHT_INSTR;
@@ -1338,6 +1339,10 @@ t_stat sim_instr (void)
 		case STOP_INSN_PROT:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
 				return r;
+			if (RUU & RUU_RIGHT_INSTR) {
+				++PC;
+			}
+			RUU ^= RUU_RIGHT_INSTR;
 			op_int_1();
 			// SPSW_NEXT_RK must be 1 for this interrupt
 			M[SPSW] |= SPSW_NEXT_RK;
@@ -1346,8 +1351,12 @@ t_stat sim_instr (void)
 		case STOP_OPERAND_PROT:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
 				return r;
+			if (RUU & RUU_RIGHT_INSTR) {
+				++PC;
+			}
+			RUU ^= RUU_RIGHT_INSTR;
 			op_int_1();
-			// SPSW_NEXT_RK can be 0 or 1; 0 means the standard PC rollback
+			M[SPSW] |= SPSW_NEXT_RK;
 			// The offending virtual page is in bits 5-9
 			GRP |= GRP_OPRND_PROT;
 			GRP = GRP_SET_PAGE (GRP, iintr_data);
@@ -1372,19 +1381,34 @@ t_stat sim_instr (void)
 		case STOP_INSN_ADDR_MATCH:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
 				return r;
+			if (RUU & RUU_RIGHT_INSTR) {
+				++PC;
+			}
+			RUU ^= RUU_RIGHT_INSTR;
 			op_int_1();
+			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_BREAKPOINT;
 			break;
 		case STOP_LOAD_ADDR_MATCH:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
 				return r;
+			if (RUU & RUU_RIGHT_INSTR) {
+				++PC;
+			}
+			RUU ^= RUU_RIGHT_INSTR;
 			op_int_1();
+			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_WATCHPT_R;
 			break;
 		case STOP_STORE_ADDR_MATCH:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
 				return r;
+			if (RUU & RUU_RIGHT_INSTR) {
+				++PC;
+			}
+			RUU ^= RUU_RIGHT_INSTR;
 			op_int_1();
+			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_WATCHPT_W;
 			break;
 		case STOP_OVFL:
