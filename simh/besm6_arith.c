@@ -43,6 +43,7 @@ typedef struct {
 	unsigned mr;			/* right 24 bits of mantissa */
 	unsigned ml;			/* sign and left part of mantissa */
 	unsigned exponent;		/* offset by 64 */
+	/* TODO: заменить mr, ml одним полем "uint64 mantissa" */
 } alureg_t;				/* ALU register type */
 
 static alureg_t zeroword;
