@@ -641,6 +641,7 @@ void cpu_one_inst ()
 		mmu_store (Aex, ACC);
 		if (! addr && reg == 017)
 			M[017] = ADDR (M[017] + 1);
+		delay = MEAN_TIME (3, 3);
 		break;
 	case 001:					/* зпм, stx */
 		Aex = ADDR (addr + M[reg]);
@@ -649,6 +650,7 @@ void cpu_one_inst ()
 		corr_stack = 1;
 		ACC = mmu_load (M[017]);
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (6, 6);
 		break;
 	case 002:					/* рег, mod */
 		Aex = ADDR (addr + M[reg]);
@@ -667,6 +669,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		ACC = mmu_load (Aex);
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (6, 6);
 		break;
 	case 004:					/* сл, a+x */
 		if (! addr && reg == 017) {
@@ -676,6 +679,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_add (mmu_load (Aex), 0, 0);
 		RAU = SET_ADDITIVE (RAU);
+		delay = MEAN_TIME (3, 11);
 		break;
 	case 005:					/* вч, a-x */
 		if (! addr && reg == 017) {
@@ -685,6 +689,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_add (mmu_load (Aex), 0, 1);
 		RAU = SET_ADDITIVE (RAU);
+		delay = MEAN_TIME (3, 11);
 		break;
 	case 006:					/* вчоб, x-a */
 		if (! addr && reg == 017) {
@@ -694,6 +699,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_add (mmu_load (Aex), 1, 0);
 		RAU = SET_ADDITIVE (RAU);
+		delay = MEAN_TIME (3, 11);
 		break;
 	case 007:					/* вчаб, amx */
 		if (! addr && reg == 017) {
@@ -703,6 +709,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_add (mmu_load (Aex), 1, 1);
 		RAU = SET_ADDITIVE (RAU);
+		delay = MEAN_TIME (3, 11);
 		break;
 	case 010:					/* сч, xta */
 		if (! addr && reg == 017) {
@@ -712,6 +719,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		ACC = mmu_load (Aex);
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 3);
 		break;
 	case 011:					/* и, aax */
 		if (! addr && reg == 017) {
@@ -722,6 +730,7 @@ void cpu_one_inst ()
 		ACC &= mmu_load (Aex);
 		RMR = 0;
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 4);
 		break;
 	case 012:					/* нтж, aex */
 		if (! addr && reg == 017) {
@@ -732,6 +741,7 @@ void cpu_one_inst ()
 		RMR = ACC;
 		ACC ^= mmu_load (Aex);
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 3);
 		break;
 	case 013:					/* слц, arx */
 		if (! addr && reg == 017) {
@@ -744,6 +754,7 @@ void cpu_one_inst ()
 			ACC = (ACC + 1) & BITS48;
 		RMR = 0;
 		RAU = SET_MULTIPLICATIVE (RAU);
+		delay = MEAN_TIME (3, 6);
 		break;
 	case 014:					/* знак, avx */
 		if (! addr && reg == 017) {
@@ -753,6 +764,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_change_sign (mmu_load (Aex) >> 40 & 1);
 		RAU = SET_ADDITIVE (RAU);
+		delay = MEAN_TIME (3, 5);
 		break;
 	case 015:					/* или, aox */
 		if (! addr && reg == 017) {
@@ -763,6 +775,7 @@ void cpu_one_inst ()
 		ACC |= mmu_load (Aex);
 		RMR = 0;
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 4);
 		break;
 	case 016:					/* дел, a/x */
 		if (! addr && reg == 017) {
@@ -772,6 +785,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_divide (mmu_load (Aex));
 		RAU = SET_MULTIPLICATIVE (RAU);
+		delay = MEAN_TIME (3, 50);
 		break;
 	case 017:					/* умн, a*x */
 		if (! addr && reg == 017) {
@@ -781,6 +795,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_multiply (mmu_load (Aex));
 		RAU = SET_MULTIPLICATIVE (RAU);
+		delay = MEAN_TIME (3, 18);
 		break;
 	case 020:					/* сбр, apx */
 		if (! addr && reg == 017) {
@@ -791,6 +806,7 @@ void cpu_one_inst ()
 		ACC = besm6_pack (ACC, mmu_load (Aex));
 		RMR = 0;
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 53);
 		break;
 	case 021:					/* рзб, aux */
 		if (! addr && reg == 017) {
@@ -801,6 +817,7 @@ void cpu_one_inst ()
 		ACC = besm6_unpack (ACC, mmu_load (Aex));
 		RMR = 0;
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 53);
 		break;
 	case 022:					/* чед, acx */
 		if (! addr && reg == 017) {
@@ -812,6 +829,7 @@ void cpu_one_inst ()
 		if (ACC & BIT49)
 			ACC = (ACC + 1) & BITS48;
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 56);
 		break;
 	case 023:					/* нед, anx */
 		if (! addr && reg == 017) {
@@ -821,6 +839,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_highest_bit (mmu_load (Aex));
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 32);
 		break;
 	case 024:					/* слп, e+x */
 		if (! addr && reg == 017) {
@@ -830,6 +849,7 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_add_exponent ((mmu_load (Aex) >> 41) - 64);
 		RAU = SET_MULTIPLICATIVE (RAU);
+		delay = MEAN_TIME (3, 5);
 		break;
 	case 025:					/* вчп, e-x */
 		if (! addr && reg == 017) {
@@ -839,16 +859,21 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		besm6_add_exponent (64 - (mmu_load (Aex) >> 41));
 		RAU = SET_MULTIPLICATIVE (RAU);
+		delay = MEAN_TIME (3, 5);
 		break;
-	case 026:					/* сд, asx */
+	case 026: {					/* сд, asx */
+		int n;
 		if (! addr && reg == 017) {
 			M[017] = ADDR (M[017] - 1);
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		besm6_shift ((mmu_load (Aex) >> 41) - 64);
+		n = (mmu_load (Aex) >> 41) - 64;
+		besm6_shift (n);
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 4 + abs (n));
 		break;
+	}
 	case 027:					/* рж, xtr */
 		if (! addr && reg == 017) {
 			M[017] = ADDR (M[017] - 1);
@@ -856,26 +881,26 @@ void cpu_one_inst ()
 		}
 		Aex = ADDR (addr + M[reg]);
 		RAU = (mmu_load (Aex) >> 41) & 077;
+		delay = MEAN_TIME (3, 3);
 		break;
 	case 030:					/* счрж, rte */
 		Aex = ADDR (addr + M[reg]);
 		ACC = (t_value) (RAU & Aex & 0177) << 41;
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 3);
 		break;
-	case 031: {					/* счмр, yta */
-		t_value x;
-
+	case 031: 					/* счмр, yta */
 		Aex = ADDR (addr + M[reg]);
 		if (IS_LOGICAL (RAU)) {
 			ACC = RMR;
-			break;
+		} else {
+			t_value x = RMR;
+			ACC = (ACC & ~BITS41) | (RMR & BITS40);
+			besm6_add_exponent ((Aex & 0177) - 64);
+			RMR = x;
 		}
-		ACC = (ACC & ~BITS41) | (RMR & BITS40);
-		x = RMR;
-		besm6_add_exponent ((Aex & 0177) - 64);
-		RMR = x;
+		delay = MEAN_TIME (3, 5);
 		break;
-	}
 	case 032:					/* э32, ext */
 		/* Fall through... */
 	case 033:					/* увв, ext */
@@ -886,25 +911,33 @@ void cpu_one_inst ()
 		/* Режим АУ - логический, если операция была "чтение" */
 		if (Aex & 04000)
 			RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 8);
 		break;
 	case 034:					/* слпа, e+n */
 		Aex = ADDR (addr + M[reg]);
 		besm6_add_exponent ((Aex & 0177) - 64);
 		RAU = SET_MULTIPLICATIVE (RAU);
+		delay = MEAN_TIME (3, 5);
 		break;
 	case 035:					/* вчпа, e-n */
 		Aex = ADDR (addr + M[reg]);
 		besm6_add_exponent (64 - (Aex & 0177));
 		RAU = SET_MULTIPLICATIVE (RAU);
+		delay = MEAN_TIME (3, 5);
 		break;
-	case 036:					/* сда, asn */
+	case 036: {					/* сда, asn */
+		int n;
 		Aex = ADDR (addr + M[reg]);
-		besm6_shift ((Aex & 0177) - 64);
+		n = (Aex & 0177) - 64;
+		besm6_shift (n);
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (3, 4 + abs (n));
 		break;
+	}
 	case 037:					/* ржа, ntr */
 		Aex = ADDR (addr + M[reg]);
 		RAU = Aex & 077;
+		delay = MEAN_TIME (3, 3);
 		break;
 	case 040:					/* уи, ati */
 		Aex = ADDR (addr + M[reg]);
@@ -922,6 +955,7 @@ void cpu_one_inst ()
 		} else
 			M[Aex & 017] = ADDR (ACC);
 		M[0] = 0;
+		delay = MEAN_TIME (14, 3);
 		break;
 	case 041: {					/* уим, sti */
 		unsigned rg, ad;
@@ -938,9 +972,11 @@ void cpu_one_inst ()
 		ACC = mmu_load (rg != 017 ? M[017] : ad);
 		M[rg] = ad;
 		RAU = SET_LOGICAL (RAU);
+		delay = MEAN_TIME (14, 3);
 		break;
 	}
 	case 042:					/* счи, ita */
+		delay = MEAN_TIME (6, 3);
 load_modifier:	Aex = ADDR (addr + M[reg]);
 		ACC = ADDR(M[Aex & (IS_SUPERVISOR (RUU) ? 037 : 017)]);
 		RAU = SET_LOGICAL (RAU);
@@ -948,6 +984,7 @@ load_modifier:	Aex = ADDR (addr + M[reg]);
 	case 043:					/* счим, its */
 		mmu_store (M[017], ACC);
 		M[017] = ADDR (M[017] + 1);
+		delay = MEAN_TIME (9, 6);
 		goto load_modifier;
 	case 044:					/* уии, mtj */
 		Aex = addr;
@@ -960,6 +997,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 		} else
 			M[Aex & 017] = M[reg];
 		M[0] = 0;
+		delay = 6;
 		break;
 	case 045:					/* сли, j+m */
 		Aex = addr;
@@ -967,6 +1005,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			goto transfer_modifier;
 		M[Aex & 017] = ADDR (M[Aex & 017] + M[reg]);
 		M[0] = 0;
+		delay = 6;
 		break;
 	case 046:					/* э46, x46 */
 		Aex = addr;
@@ -974,6 +1013,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			longjmp (cpu_halt, STOP_BADCMD);
 		M[Aex & 017] = ADDR (Aex);
 		M[0] = 0;
+		delay = 6;
 		break;
 	case 047:					/* э47, x47 */
 		Aex = addr;
@@ -981,6 +1021,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			longjmp (cpu_halt, STOP_BADCMD);
 		M[Aex & 017] = ADDR (M[Aex & 017] + Aex);
 		M[0] = 0;
+		delay = 6;
 		break;
 	case 050 ... 077:				/* э50...э77 */
 	case 0200:					/* э20 */
@@ -1002,11 +1043,13 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 		else
 			PC = 0540 + (opcode >> 3);	/* э20, э21 */
 		RUU &= ~RUU_RIGHT_INSTR;
+		delay = 7;
 		break;
 	case 0220:					/* мода, utc */
 		Aex = ADDR (addr + M[reg]);
 		M[MOD] = Aex;
 		nextaddrmod = 1;
+		delay = 4;
 		break;
 	case 0230:					/* мод, wtc */
 		if (! addr && reg == 017) {
@@ -1016,6 +1059,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 		Aex = ADDR (addr + M[reg]);
 		M[MOD] = ADDR (mmu_load (Aex));
 		nextaddrmod = 1;
+		delay = MEAN_TIME (13, 3);
 		break;
 	case 0240:					/* уиа, vtm */
 		Aex = addr;
@@ -1027,6 +1071,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			M[PSW] |= addr & (PSW_INTR_DISABLE |
 				PSW_MMAP_DISABLE | PSW_PROT_DISABLE);
 		}
+		delay = 4;
 		break;
 	case 0250:					/* слиа, utm */
 		Aex = ADDR (addr + M[reg]);
@@ -1038,10 +1083,12 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			M[PSW] |= addr & (PSW_INTR_DISABLE |
 				PSW_MMAP_DISABLE | PSW_PROT_DISABLE);
 		}
+		delay = 4;
 		break;
 	case 0260:					/* по, uza */
 		Aex = ADDR (addr + M[reg]);
 		RMR = ACC;
+		delay = MEAN_TIME (12, 3);
 		if (IS_ADDITIVE (RAU)) {
 			if (ACC & BIT41)
 				break;
@@ -1055,10 +1102,12 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			break;
 		PC = Aex;
 		RUU &= ~RUU_RIGHT_INSTR;
+		delay += 3;
 		break;
 	case 0270:					/* пе, u1a */
 		Aex = ADDR (addr + M[reg]);
 		RMR = ACC;
+		delay = MEAN_TIME (12, 3);
 		if (IS_ADDITIVE (RAU)) {
 			if (! (ACC & BIT41))
 				break;
@@ -1072,11 +1121,13 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			/* fall thru, i.e. branch */;
 		PC = Aex;
 		RUU &= ~RUU_RIGHT_INSTR;
+		delay += 3;
 		break;
 	case 0300:					/* пб, uj */
 		Aex = ADDR (addr + M[reg]);
 		PC = Aex;
 		RUU &= ~RUU_RIGHT_INSTR;
+		delay = 7;
 		break;
 	case 0310:					/* пв, vjm */
 		Aex = addr;
@@ -1084,6 +1135,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 		M[0] = 0;
 		PC = addr;
 		RUU &= ~RUU_RIGHT_INSTR;
+		delay = 7;
 		break;
 	case 0320:					/* выпр, iret */
 		Aex = addr;
@@ -1105,35 +1157,43 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			RUU |= RUU_MOD_RK;
 		else
 			RUU &= ~RUU_MOD_RK;
+		delay = 7;
 		break;
 	case 0330:					/* стоп, stop */
 		Aex = ADDR (addr + M[reg]);
+		delay = 7;
 		mmu_print_brz ();
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0340:					/* пио, vzm */
 branch_zero:	Aex = addr;
+		delay = 4;
 		if (! M[reg]) {
 			PC = addr;
 			RUU &= ~RUU_RIGHT_INSTR;
+			delay += 3;
 		}
 		break;
 	case 0350:					/* пино, v1m */
 		Aex = addr;
+		delay = 4;
 		if (M[reg]) {
 			PC = addr;
 			RUU &= ~RUU_RIGHT_INSTR;
+			delay += 3;
 		}
 		break;
 	case 0360:					/* э36, *36 */
 		goto branch_zero;
 	case 0370:					/* цикл, vlm */
 		Aex = addr;
-		if (!M[reg])
+		delay = 4;
+		if (! M[reg])
 			break;
 		M[reg] = ADDR (M[reg] + 1);
 		PC = addr;
 		RUU &= ~RUU_RIGHT_INSTR;
+		delay += 3;
 		break;
 	default:
 		/* Unknown instruction - cannot happen. */
