@@ -531,8 +531,7 @@ void besm6_multiply (t_value val)
 {
 	uint8           neg = 0;
 	alureg_t        acc, word, rmr, a, b;
-	uint16          a1, a2, a3, b1, b2, b3;
-	register uint32 l;
+	register t_uint64 l;
 
 	if (! ACC || ! val) {
 		/* multiplication by zero is zero */
@@ -558,40 +557,18 @@ void besm6_multiply (t_value val)
 	}
 	acc.exponent = a.exponent + b.exponent - 64;
 
-	a3 = a.mr & 0xfff;
-	a2 = a.mr >> 12;
-	a1 = a.ml;
+ 	l = (t_uint64) a.mr * b.mr;
+	rmr.mr = l & BITS24;
+	l >>= 24;
 
-	b3 = b.mr & 0xfff;
-	b2 = b.mr >> 12;
-	b1 = b.ml;
+	l += (t_uint64) a.mr * b.ml + (t_uint64) a.ml * b.mr;
+	rmr.ml = l & BITS16;
+	l >>= 16;
 
-	rmr.mr = (uint32) a3 * b3;
-
-	l = (uint32) a2 * b3 + (uint32) a3 * b2;
-	rmr.mr += (l << 12) & 0xfff000;
-	rmr.ml = l >> 12;
-
-	l = (uint32) a1 * b3 + (uint32) a2 * b2 + (uint32) a3 * b1;
-	rmr.ml += l & 0xffff;
-	acc.mr = l >> 16;
-
-	l = (uint32) a1 * b2 + (uint32) a2 * b1;
-	rmr.ml += (l & 0xf) << 12;
-	acc.mr += (l >> 4) & 0xffffff;
-	acc.ml = l >> 28;
-
-	l = (uint32) a1 * b1;
-	acc.mr += (l & 0xffff) << 8;
-	acc.ml += l >> 16;
-
-	rmr.ml += rmr.mr >> 24;
-	acc.mr += rmr.ml >> 16;
-	acc.ml += acc.mr >> 24;
-	rmr.mr &= 0xffffff;
-	rmr.ml &= 0xffff;
-	acc.mr &= 0xffffff;
-	acc.ml &= 0xffff;
+	/* Now l is offset by 40, but a.ml * b.ml is offset by 48 */
+	l += (t_uint64) a.ml * b.ml * 256;
+	acc.mr = l & BITS24;
+	acc.ml = l >> 24;
 
 	if (neg) {
 		rmr.mr = (~rmr.mr & 0xffffff) + 1;
