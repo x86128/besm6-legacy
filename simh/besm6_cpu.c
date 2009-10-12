@@ -1,5 +1,5 @@
 /*
- * besm6_cpu.c: BESM-6 CPU simulator
+ * BESM-6 CPU simulator.
  *
  * Copyright (c) 1997-2009, Leonid Broukhis
  * Copyright (c) 2009, Serge Vakulenko
@@ -30,7 +30,7 @@
  *  8) Punch reader is planned.
  *  9) Card puncher is not implemented.
  * 10) Displays are planned.
- * 11) Printers are planned.
+ * 11) Printer АЦПУ-128 is implemented.
  * 12) Instruction mnemonics, register names and stop messages
  *     are in Russian using UTF-8 encoding. It is assumed, that
  *     user locale is UTF-8.
@@ -1277,6 +1277,7 @@ t_stat sim_instr (void)
 				(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
 				message);
 		}
+		besm6_draw_panel();
 
 		/*
 		 * ПоП и ПоК вызывают останов при любом внутреннем прерывании
@@ -1407,6 +1408,7 @@ t_stat sim_instr (void)
 	/* Main instruction fetch/decode loop */
 	for (;;) {
 		if (sim_interval <= 0) {		/* check clock queue */
+			besm6_draw_panel();
 			r = sim_process_event ();
 			if (r)
 				return r;
@@ -1418,6 +1420,7 @@ t_stat sim_instr (void)
 
 		if (sim_brk_summ &&			/* breakpoint? */
 		    sim_brk_test (PC, SWMASK ('E'))) {
+			besm6_draw_panel();
 			return STOP_IBKPT;		/* stop simulation */
 		}
 
@@ -1432,9 +1435,10 @@ t_stat sim_instr (void)
 		if (delay < 1)
 			delay = 1;
 		sim_interval -= delay;			/* count down delay */
-
-		if (sim_step && (--sim_step <= 0))	/* do step count */
+		if (sim_step && (--sim_step <= 0)) {	/* do step count */
+			besm6_draw_panel();
 			return SCPE_STOP;
+		}
 	}
 }
 
