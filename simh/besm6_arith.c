@@ -2,6 +2,7 @@
  * BESM-6 arithmetic instructions.
  *
  * Copyright (c) 1997-2009, Leonid Broukhis
+ * Copyright (c) 2009, Serge Vakulenko
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
