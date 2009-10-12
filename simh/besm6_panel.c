@@ -40,6 +40,7 @@ static const SDL_Color white = { 255, 255, 255, 0 };
 static const SDL_Color black = { 0,   0,   0,   0 };
 static const SDL_Color cyan  = { 0,   128, 128, 0 };
 static const SDL_Color grey  = { 24,  24,  24,  0 };
+static t_value old_BRZ [8];
 
 /*
  * Рисование текста в кодировке UTF-8, с антиалиасингом.
@@ -124,13 +125,16 @@ static void draw_lamp (int left, int top, int bg, int on)
 /*
  * Периодическая отрисовка: мигание лампочек.
  */
-static void draw_periodic()
+static int draw_periodic()
 {
-	int x, y, bg;
+	int x, y, bg, changed;
 	t_value val;
 
+	changed = 0;
 	for (y=0; y<8; ++y) {
 		val = BRZ [7-y];
+		if (val == old_BRZ [7-y])
+			continue;
 		for (x=0; x<48; ++x) {
 			if (x/3 & 1)
 				bg = grey.r << 16 | grey.g << 8 | grey.b;
@@ -138,7 +142,10 @@ static void draw_periodic()
 				bg = 0;
 			draw_lamp (100 + x*12, 34 + 24*y, bg, val >> (47-x) & 1);
 		}
+		old_BRZ [7-y] = val;
+		changed = 1;
 	}
+	return changed;
 }
 
 /*
@@ -166,6 +173,7 @@ static void draw_static()
 	for (y=7; y>=0; --y) {
 		sprintf (message, "брз %d", 7-y);
 		render_utf8 (font_big, 24, 24 + 24*y, 1, message);
+		old_BRZ[y] = ~0;
 	}
 	/* Номера битов. */
 	for (x=0; x<48; ++x) {
@@ -266,14 +274,15 @@ void besm6_draw_panel ()
 	/* Lock surface if needed */
 	if (SDL_MUSTLOCK (screen) && SDL_LockSurface (screen) < 0)
 		return;
-	draw_periodic();
+	int changed = draw_periodic();
 
 	/* Unlock if needed */
 	if (SDL_MUSTLOCK (screen))
 		SDL_UnlockSurface (screen);
 
 	/* Tell SDL to update the whole screen */
-	SDL_UpdateRect (screen, 0, 0, WIDTH, HEIGHT);
+	if (changed)
+		SDL_UpdateRect (screen, 0, 0, WIDTH, HEIGHT);
 
 	/* Exit SIMH when window closed.*/
 	SDL_Event event;
