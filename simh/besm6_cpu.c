@@ -89,6 +89,7 @@ jmp_buf cpu_halt;
 t_stat cpu_examine (t_value *vptr, t_addr addr, UNIT *uptr, int32 sw);
 t_stat cpu_deposit (t_value val, t_addr addr, UNIT *uptr, int32 sw);
 t_stat cpu_reset (DEVICE *dptr);
+t_stat cpu_panel (UNIT *this);
 
 /*
  * CPU data structures
@@ -99,7 +100,7 @@ t_stat cpu_reset (DEVICE *dptr);
  * cpu_mod      CPU modifiers list
  */
 
-UNIT cpu_unit = { UDATA (NULL, UNIT_FIX, MEMSIZE) };
+UNIT cpu_unit = { UDATA (cpu_panel, UNIT_FIX, MEMSIZE) };
 
 REG cpu_reg[] = {
 { "СчАС",  &PC,		8, 15, 0, 1 },		/* счётчик адреса команды */
@@ -330,7 +331,16 @@ t_stat cpu_reset (DEVICE *dptr)
 
 	GRP = MGRP = 0;
 	sim_brk_types = sim_brk_dflt = SWMASK ('E');
-	return SCPE_OK;
+	return sim_activate (&cpu_unit, 10000);
+}
+
+/*
+ * Перерисовка панели каждые N циклов.
+ */
+t_stat cpu_panel (UNIT * this)
+{
+	besm6_draw_panel();
+	return sim_activate (this, 10000);
 }
 
 /*
