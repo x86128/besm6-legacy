@@ -251,6 +251,7 @@ DEVICE *sim_devices[] = {
 	&cpu_dev,
 	&reg_dev,
 	&drum_dev,
+	&disk_dev,
 	&mmu_dev,
 	&clock_dev,
 	&printer_dev,
@@ -272,6 +273,7 @@ const char *sim_stop_messages[] = {
 	"Деление на нуль",				/* Division by zero or denorm */
 	"Двойное внутреннее прерывание",		/* SIMH: Double internal interrupt */
 	"Чтение неформатированного барабана",		/* Reading unformatted drum */
+	"Чтение неформатированного диска",		/* Reading unformatted disk */
 	"Останов по КРА",				/* Hardware breakpoint */
 	"Останов по считыванию",			/* Load watchpoint */
 	"Останов по записи",				/* Store watchpoint */
@@ -367,8 +369,14 @@ utf8_putc (unsigned ch, FILE *fout)
 	putc ((ch & 0x3f) | 0x80, fout);
 }
 
+/*
+ * Команда "рег"
+ */
 static void cmd_002 ()
 {
+	if (sim_deb && cpu_dev.dctrl) {
+		fprintf (sim_deb, "\tАисп=%03o\n", Aex & 0377);
+	}
 	switch (Aex & 0377) {
 	case 0 ... 7:
 		mmu_setcache (Aex & 7, ACC);
@@ -428,14 +436,24 @@ static void cmd_002 ()
 	}
 }
 
+/*
+ * Команда "увв"
+ */
 static void cmd_033 ()
 {
+	if (sim_deb && cpu_dev.dctrl) {
+		fprintf (sim_deb, "\tАисп=%04o\n", Aex & 04177);
+	}
 	switch (Aex & 04177) {
 	case 1 ... 2:
 		/* Управление обменом с магнитными барабанами */
 		drum (Aex - 1, (uint32) ACC);
 		break;
-	case 3 ... 7:
+	case 3 ... 4:
+		/* Управление обменом с магнитными дисками */
+		disk_io (Aex - 3, (uint32) ACC);
+		break;
+	case 5 ... 7:
 		/* TODO: управление обменом с магнитными лентами */
 		longjmp (cpu_halt, STOP_STOP);
 		break;
@@ -446,6 +464,10 @@ static void cmd_033 ()
 	case 014 ... 015:
 		/* управление АЦПУ */
 		printer_control (Aex - 014, (uint32) (ACC & 017));
+		break;
+	case 023 ... 024:
+		/* Управление обменом с магнитными дисками */
+		disk_ctl (Aex - 023, (uint32) ACC);
 		break;
 	case 030:
 		/* гашение ПРП */
@@ -472,7 +494,7 @@ static void cmd_033 ()
 		break;
 	case 040 ... 057:
 		/* управление молоточками АЦПУ */
-		printer_hammer (Aex >= 050, Aex & 7, (uint32) (ACC & BITS16));
+		printer_hammer (Aex >= 050, Aex & 7, (uint32) (ACC & BITS(16)));
 		break;
 	case 0100 ... 0137:
 		/* TODO: управление лентопротяжными механизмами
@@ -482,7 +504,7 @@ static void cmd_033 ()
 		break;
 	case 0140:
 		/* запись в регистр телеграфных каналов */
-		tty_send((uint32) ACC & BITS24);
+		tty_send ((uint32) ACC & BITS(24));
 		break;
 	case 0141:
 		/* TODO: управление разметкой магнитной ленты */
@@ -516,9 +538,13 @@ static void cmd_033 ()
 		/* TODO: выдача кода в пульт оператора */
 		longjmp (cpu_halt, STOP_STOP);
 		break;
-	case 04001 ... 04003:
+	case 04001 ... 04002:
 		/* TODO: считывание слога в режиме имитации обмена */
 		longjmp (cpu_halt, STOP_STOP);
+		break;
+	case 04003 ... 04004:
+		/* Управление обменом с магнитными дисками */
+		ACC = disk_state (Aex - 04003);
 		break;
 	case 04006:
 		/* TODO: считывание строки с устройства ввода
@@ -590,6 +616,11 @@ static void cmd_033 ()
 		/* TODO: считывание кода с пульта оператора */
 		longjmp (cpu_halt, STOP_STOP);
 		break;
+	default:
+		/* Неиспользуемые адреса */
+		besm6_debug ("*** %05o%s: УВВ %o - неправильный адрес ввода-вывода",
+			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", Aex);
+		break;
 	}
 }
 
@@ -609,15 +640,15 @@ void cpu_one_inst ()
 	else
 		RK = word >> 24;	/* get left instruction */
 
-	RK &= BITS24;
+	RK &= BITS(24);
 
 	reg = RK >> 20;
-	if (RK & BIT20) {
-		addr = RK & BITS15;
+	if (RK & BIT(20)) {
+		addr = RK & BITS(15);
 		opcode = (RK >> 12) & 0370;
 	} else {
-		addr = RK & BITS12;
-		if (RK & BIT19)
+		addr = RK & BITS(12);
+		if (RK & BIT(19))
 			addr |= 070000;
 		opcode = (RK >> 12) & 077;
 	}
@@ -635,7 +666,7 @@ void cpu_one_inst ()
 		PC += 1;			/* increment PC */
 		RUU &= ~RUU_RIGHT_INSTR;
 	} else {
-		mmu_prefetch(nextpc | (IS_SUPERVISOR(RUU) ? BIT16 : 0), 0);
+		mmu_prefetch(nextpc | (IS_SUPERVISOR(RUU) ? BIT(16) : 0), 0);
 		RUU |= RUU_RIGHT_INSTR;
 	}
 
@@ -960,7 +991,7 @@ void cpu_one_inst ()
 			 */
 			if ((M[PSW] & PSW_MMAP_DISABLE) &&
 				 (reg == IBP || reg == DWP))
-				M[reg] |= BIT16;
+				M[reg] |= BIT(16);
 
 		} else
 			M[Aex & 017] = ADDR (ACC);
@@ -975,7 +1006,7 @@ void cpu_one_inst ()
 		ad = ADDR (ACC);
 		if ((M[PSW] & PSW_MMAP_DISABLE) &&
                                  (rg == IBP || rg == DWP))
-                                M[rg] |= BIT16;
+                                M[rg] |= BIT(16);
 		M[0] = 0;
 		if (rg != 017) {
 			M[017] = ADDR (M[017] - 1);
@@ -1004,7 +1035,7 @@ load_modifier:	Aex = ADDR (addr + M[reg]);
 transfer_modifier:	M[Aex & 037] = M[reg];
 			if ((M[PSW] & PSW_MMAP_DISABLE) &&
 			    ((Aex & 037) == IBP || (Aex & 037) == DWP))
-                                M[Aex & 037] |= BIT16;
+                                M[Aex & 037] |= BIT(16);
 
 		} else
 			M[Aex & 017] = M[reg];
@@ -1273,7 +1304,7 @@ t_stat sim_instr (void)
 	int iintr = 0;
 
 	/* Restore register state */
-	PC = PC & BITS15;				/* mask PC */
+	PC = PC & BITS(15);				/* mask PC */
 	sim_cancel_step ();				/* defang SCP step */
 	mmu_setup ();					/* copy RP to TLB */
 
@@ -1426,7 +1457,7 @@ t_stat sim_instr (void)
 				return r;
 		}
 
-		if (PC > BITS15) {			/* выход за пределы памяти */
+		if (PC > BITS(15)) {			/* выход за пределы памяти */
 			return STOP_RUNOUT;		/* stop simulation */
 		}
 
