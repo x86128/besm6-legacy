@@ -39,7 +39,7 @@ static SDL_Color background;
 static const SDL_Color white = { 255, 255, 255, 0 };
 static const SDL_Color black = { 0,   0,   0,   0 };
 static const SDL_Color cyan  = { 0,   128, 128, 0 };
-static const SDL_Color grey  = { 24,  24,  24,  0 };
+static const SDL_Color grey  = { 32,  32,  32,  0 };
 static t_value old_BRZ [8];
 
 /*
@@ -72,7 +72,7 @@ static void render_utf8 (TTF_Font *font, int x, int y, int halign, char *message
 /*
  * Рисуем неонку.
  */
-static void draw_lamp (int left, int top, int bg, int on)
+static void draw_lamp (int left, int top, int on)
 {
 	/* Images created by GIMP: save as C file without alpha channel. */
 	static const int lamp_width = 12;
@@ -117,7 +117,7 @@ static void draw_lamp (int left, int top, int bg, int on)
 			r = *p++;
 			g = *p++;
 			b = *p++;
-			*screenp++ = (r || g || b) ? (r<<16 | g<<8 | b) : bg;
+			*screenp++ = r<<16 | g<<8 | b;
 		}
 	}
 }
@@ -127,7 +127,7 @@ static void draw_lamp (int left, int top, int bg, int on)
  */
 static int draw_periodic()
 {
-	int x, y, bg, changed;
+	int x, y, changed;
 	t_value val;
 
 	changed = 0;
@@ -136,11 +136,7 @@ static int draw_periodic()
 		if (val == old_BRZ [7-y])
 			continue;
 		for (x=0; x<48; ++x) {
-			if (x/3 & 1)
-				bg = grey.r << 16 | grey.g << 8 | grey.b;
-			else
-				bg = 0;
-			draw_lamp (100 + x*12, 34 + 24*y, bg, val >> (47-x) & 1);
+			draw_lamp (100 + x*12, 34 + 24*y, val >> (47-x) & 1);
 		}
 		old_BRZ [7-y] = val;
 		changed = 1;
@@ -162,11 +158,11 @@ static void draw_static()
 
 	/* Оттеняем группы разрядов. */
 	color = grey.r << 16 | grey.g << 8 | grey.b;
-	for (x=3; x<48; x+=6) {
-		area.x = 100 + x*12;
-		area.y = 10;
-		area.w = 12*3;
-		area.h = 24*8 + 16;
+	for (x=3; x<48; x+=3) {
+		area.x = 99 + x*12;
+		area.y = 26;
+		area.w = 2;
+		area.h = 24*8 + 2;
 		SDL_FillRect (screen, &area, color);
 	}
 	/* Названия регистров. */
@@ -178,10 +174,6 @@ static void draw_static()
 	/* Номера битов. */
 	for (x=0; x<48; ++x) {
 		sprintf (message, "%d", 48-x);
-		if (x/3 & 1)
-			background = grey;
-		else
-			background = black;
 		render_utf8 (font_small, 106 + x*12, 10, 0, message);
 	}
 }

@@ -120,8 +120,11 @@ t_stat drum_detach (UNIT *u)
  */
 void drum_write (UNIT *u)
 {
+	t_value *sysdata;
+
+	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
 	fseek (u->fileref, ZONE_SIZE * drum_zone * 8, SEEK_SET);
-	sim_fwrite (&memory [020], 8, 8, u->fileref);
+	sim_fwrite (sysdata, 8, 8, u->fileref);
 	sim_fwrite (&memory [drum_memory], 8, 1024, u->fileref);
 	if (ferror (u->fileref))
 		longjmp (cpu_halt, SCPE_IOERR);
@@ -129,9 +132,12 @@ void drum_write (UNIT *u)
 
 void drum_write_sector (UNIT *u)
 {
+	t_value *sysdata;
+
+	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
 	fseek (u->fileref, (ZONE_SIZE*drum_zone + drum_sector*2) * 8,
 		SEEK_SET);
-	sim_fwrite (&memory [020 + drum_sector*2], 8, 2, u->fileref);
+	sim_fwrite (&sysdata [drum_sector*2], 8, 2, u->fileref);
 	fseek (u->fileref, (ZONE_SIZE*drum_zone + 8 + drum_sector*256) * 8,
 		SEEK_SET);
 	sim_fwrite (&memory [drum_memory], 8, 256, u->fileref);
@@ -144,8 +150,11 @@ void drum_write_sector (UNIT *u)
  */
 void drum_read (UNIT *u)
 {
+	t_value *sysdata;
+
+	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
 	fseek (u->fileref, ZONE_SIZE * drum_zone * 8, SEEK_SET);
-	if (sim_fread (&memory [020], 8, 8, u->fileref) != 8) {
+	if (sim_fread (sysdata, 8, 8, u->fileref) != 8) {
 		/* Чтение неинициализированного барабана */
 		longjmp (cpu_halt, STOP_DRUMINVDATA);
 	}
@@ -160,8 +169,11 @@ void drum_read (UNIT *u)
 
 void drum_read_sector (UNIT *u)
 {
+	t_value *sysdata;
+
+	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
 	fseek (u->fileref, (ZONE_SIZE*drum_zone + drum_sector*2) * 8, SEEK_SET);
-	if (sim_fread (&memory [020 + drum_sector*2], 8, 2, u->fileref) != 2) {
+	if (sim_fread (&sysdata [drum_sector*2], 8, 2, u->fileref) != 2) {
 		/* Чтение неинициализированного барабана */
 		longjmp (cpu_halt, STOP_DRUMINVDATA);
 	}
