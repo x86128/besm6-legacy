@@ -977,8 +977,10 @@ void cpu_one_inst ()
                                  (rg == IBP || rg == DWP))
                                 M[rg] |= BIT16;
 		M[0] = 0;
-		if (rg != 017)
+		if (rg != 017) {
 			M[017] = ADDR (M[017] - 1);
+			corr_stack = 1;
+		}
 		ACC = mmu_load (rg != 017 ? M[017] : ad);
 		M[rg] = ad;
 		RAU = SET_LOGICAL (RAU);

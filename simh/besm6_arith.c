@@ -16,88 +16,67 @@
 #include <math.h>
 #include "besm6_defs.h"
 
-/*
- * 64-bit floating-point value in format of standard IEEE 754.
- */
-typedef union {
-	double d;
-	struct {
-#ifndef WORDS_BIGENDIAN
-		uint32 right32, left32;
-#else
-		uint32 left32, right32;
-#endif
-	} u;
-} math_t;
-
-/*
- * Convert floating-point value from BESM-6 format to IEEE 754.
- */
-#define BESM_TO_IEEE(from,to) {\
-	to.u.left32 = ((from.exponent - 64 + 1022) << 20) |\
-			((from.ml << 5) & 0xfffff) |\
-			(from.mr >> 19);\
-	to.u.right32 = (from.mr & 0x7ffff) << 13;\
-}
-
 typedef struct {
-	unsigned mr;			/* right 24 bits of mantissa */
-	unsigned ml;			/* sign and left part of mantissa */
+	t_uint64 mantissa;
 	unsigned exponent;		/* offset by 64 */
-	/* TODO: заменить mr, ml одним полем "uint64 mantissa" */
 } alureg_t;				/* ALU register type */
 
 static alureg_t zeroword;
 
-typedef struct {
-	t_uint64 mantissa;
-	unsigned exponent;		/* offset by 64 */
-} alureg64_t;				/* ALU register type */
+static alureg_t ieee_to_alu (double d)
+{
+	alureg_t res;
+	t_value word;
+	int exponent;
+	int sign;
 
+	sign = d < 0;
+	if (sign)
+		d = -d;
+	d = frexp (d, &exponent);
+	/* 0.5 <= d < 1.0 */
+	d = ldexp (d, 40);
+	word = d;
+	if (sign)
+		word = BIT42 - word;
+	res.mantissa = word;
+	res.exponent = exponent + 64;
+	return res;
+}
 
 static alureg_t toalu (t_value val)
 {
-        alureg_t ret;
+	alureg_t ret;
 
-        ret.mr = val & BITS24;
-	ret.ml = (val >> 24) & BITS17;
+	ret.mantissa = val & BITS41;
 	ret.exponent = (val >> 41) & BITS7;
-	if (ret.ml & BIT17)
-		ret.ml |= BIT18;
+	if (ret.mantissa & BIT41)
+		ret.mantissa |= BIT41<<1;
 	return ret;
 }
 
 static t_value fromalu (alureg_t reg)
 {
-        return (t_value) (reg.exponent & BITS7) << 41 |
-		(t_value) (reg.ml & BITS17) << 24 | (reg.mr & BITS24);
-}
-
-static t_value fromalu64 (alureg64_t reg)
-{
-        return (t_value) (reg.exponent & BITS7) << 41 |
+	return (t_value) (reg.exponent & BITS7) << 41 |
 		(t_value) (reg.mantissa & BITS41);
 }
 
 static int inline is_negative (alureg_t word)
 {
-	return (word.ml & BIT17) != 0;
+	return (word.mantissa & BIT41) != 0;
 }
 
 static alureg_t negate (alureg_t word)
 {
 	if (is_negative (word))
-		word.ml |= 0x20000;
-	word.mr = (~word.mr & 0xffffff) + 1;
-	word.ml = (~word.ml + (word.mr >> 24)) & 0x3ffff;
-	word.mr &= 0xffffff;
-	if (((word.ml >> 1) ^ word.ml) & 0x10000) {
-		word.mr = ((word.mr >> 1) | (word.ml << 23)) & 0xffffff;
-		word.ml >>= 1;
+		word.mantissa |= BIT42;
+	word.mantissa = (~word.mantissa + 1) & BITS42;
+	if (((word.mantissa >> 1) ^ word.mantissa) & BIT41) {
+		word.mantissa >>= 1;
 		++word.exponent;
 	}
 	if (is_negative (word))
-		word.ml |= 0x20000;
+		word.mantissa |= BIT42;
 	return word;
 }
 
@@ -105,23 +84,12 @@ static alureg_t negate (alureg_t word)
  * Нормализация и округление.
  * Результат помещается в регистры ACC и RMR.
  */
-static void normalize_and_round (alureg_t acc_, alureg_t rmr_, int rnd_rq)
+static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 {
 	t_uint64 rr = 0;
 	int i;
 	t_uint64 r;
-	alureg64_t acc, rmr;
-	acc.mantissa = (t_uint64) acc_.ml << 24 | acc_.mr;
-	rmr.mantissa = (t_uint64) rmr_.ml << 24 | rmr_.mr;
-	acc.exponent = acc_.exponent;
-	rmr.exponent = rmr_.exponent;
 
-#if 0
-	if (sim_deb && cpu_dev.dctrl) {
-		fprintf (sim_deb, "*** До нормализации: СМ=%03o-%06o %08o, РМР=%03o-%06o %08o\n",
-			acc.exponent, acc.ml, acc.mr, rmr.exponent, rmr.ml, rmr.mr);
-	}
-#endif
 	if (RAU & RAU_NORM_DISABLE)
 		goto chk_rnd;
 	i = (acc.mantissa >> 39) & 3;
@@ -131,6 +99,7 @@ static void normalize_and_round (alureg_t acc_, alureg_t rmr_, int rnd_rq)
 			for (cnt = 0; (r & BIT40) == 0;
 						++cnt, r <<= 1);
 			acc.mantissa = r | (rr = rmr.mantissa >> (40 - cnt));
+		        /* 41 р. РМР может быть равен 1? */
 			rmr.mantissa <<= cnt;
 			acc.exponent -= cnt;
 			goto chk_zero;
@@ -153,6 +122,7 @@ static void normalize_and_round (alureg_t acc_, alureg_t rmr_, int rnd_rq)
 						++cnt, r = (r << 1) | 1);
 			acc.mantissa = BIT41 | (~r & BITS40) |
 					(rr = rmr.mantissa >> (40 - cnt));
+		        /* 41 р. РМР не может быть равен 1? */
 			rmr.mantissa = (rmr.mantissa << cnt) & BITS40;
 			acc.exponent -= cnt;
 			goto chk_zero;
@@ -193,18 +163,8 @@ zero:		ACC = 0;
 		return;
 	}
 
-	ACC = fromalu64 (acc);
-	RMR = fromalu64 (rmr);
-
-#if 0
-	if (sim_deb && cpu_dev.dctrl) {
-		fprintf (sim_deb, "*** После нормализации: СМ=");
-		fprint_sym (sim_deb, 0, &ACC, 0, 0);
-		fprintf (sim_deb, ", РМР=");
-		fprint_sym (sim_deb, 0, &RMR, 0, 0);
-		fprintf (sim_deb, "\n");
-	}
-#endif
+	ACC = fromalu (acc);
+	RMR = fromalu (rmr);
 }
 
 /*
@@ -238,12 +198,7 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 				word = negate (word);
 		}
 	}
-#if 0
-	if (sim_deb && cpu_dev.dctrl) {
-		fprintf (sim_deb, "*** Сложение: СМ=%03o-%06o %08o + M[Аисп]=%03o-%06o %08o\n",
-			acc.exponent, acc.ml, acc.mr, word.exponent, word.ml, word.mr);
-	}
-#endif
+
 	diff = acc.exponent - word.exponent;
 	if (diff < 0) {
 		diff = -diff;
@@ -253,70 +208,42 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 		a1 = word;
 		a2 = acc;
 	}
-	rmr.exponent = rmr.ml = rmr.mr = 0;
+	rmr.exponent = rmr.mantissa = 0;
 	neg = is_negative (a1);
 	if (diff == 0) {
 		/* Nothing to do. */
-	} else if (diff <= 16) {
-		int rdiff = 16 - diff;
-		rnd_rq = (rmr.ml = (a1.mr << rdiff) & 0xffff) != 0;
-		a1.mr = ((a1.mr >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
-		a1.ml = ((a1.ml >> diff) |
-			(neg ? ~0 << rdiff : 0)) & 0x3ffff;
 	} else if (diff <= 40) {
-		diff -= 16;
-		rnd_rq = (rmr.mr = (a1.mr << (24 - diff)) & 0xffffff) != 0;
-		rnd_rq |= (rmr.ml = ((a1.mr >> diff) |
-			(a1.ml << (24 - diff))) & 0xffff) != 0;
-		a1.mr = ((((a1.mr >> 16) | (a1.ml << 8)) >> diff) |
-				(neg ? (~0l << (24 - diff)) : 0)) & 0xffffff;
-		a1.ml = neg ? 0x3ffff : 0;
-	} else if (diff <= 56) {
-		int rdiff = 16 - (diff -= 40);
-		rnd_rq = a1.ml || a1.mr;
-		rmr.mr = ((a1.mr >> diff) | (a1.ml << (rdiff + 8))) & 0xffffff;
-		rmr.ml = ((a1.ml >> diff) |
-			(neg ? ~0 << rdiff : 0)) & 0xffff;
-		if (neg) {
-			a1.mr = 0xffffff;
-			a1.ml = 0x3ffff;
-		} else
-			a1.ml = a1.mr = 0;
+		rnd_rq = (rmr.mantissa = (a1.mantissa << (40 - diff)) & BITS40) != 0;
+		a1.mantissa = ((a1.mantissa >> diff) |
+				(neg ? (~0ll << (40 - diff)) : 0)) & BITS42;
 	} else if (diff <= 80) {
-		diff -= 56;
-		rnd_rq = a1.ml || a1.mr;
-		rmr.mr = ((((a1.mr >> 16) | (a1.ml << 8)) >> diff) |
-				(neg ? (~0l << (24 - diff)) : 0)) & 0xffffff;
-		rmr.ml = neg ? 0x3ffff : 0;
+		diff -= 40;
+		rnd_rq = a1.mantissa != 0;
+		rmr.mantissa = ((a1.mantissa >> diff) |
+				(neg ? (~0ll << (40 - diff)) : 0)) & BITS40;
 		if (neg) {
-			a1.mr = 0xffffff;
-			rmr.ml = a1.ml = 0x3ffff;
+			a1.mantissa = BITS42;
 		} else
-			rmr.ml = a1.ml = a1.mr = 0;
+			a1.mantissa = 0;
 	} else {
-		rnd_rq = a1.ml || a1.mr;
+		rnd_rq = a1.mantissa != 0;
 		if (neg) {
-			rmr.ml = 0xffff;
-			a1.mr = rmr.mr = 0xffffff;
-			a1.ml = 0x3ffff;
+			rmr.mantissa = BITS40;
+			a1.mantissa = BITS42;
 		} else
-			rmr.ml = rmr.mr = a1.ml = a1.mr = 0;
+			rmr.mantissa = a1.mantissa = 0;
 	}
 	acc.exponent = a2.exponent;
-	acc.mr = a1.mr + a2.mr;
-	acc.ml = a1.ml + a2.ml + (acc.mr >> 24);
-	acc.mr &= 0xffffff;
+	acc.mantissa = a1.mantissa + a2.mantissa;
 
 	/* Если требуется нормализация вправо, биты 42:41
 	 * принимают значение 01 или 10. */
-	switch ((acc.ml >> 16) & 3) {
+	switch ((acc.mantissa >> 40) & 3) {
 	case 2:
 	case 1:
-		rnd_rq |= acc.mr & 1;
-		rmr.mr = (rmr.mr >> 1) | (rmr.ml << 23);
-		rmr.ml = (rmr.ml >> 1) | (acc.mr << 15);
-		acc.mr = (acc.mr >> 1) | (acc.ml << 23);
-		acc.ml >>= 1;
+		rnd_rq |= acc.mantissa & 1;
+		rmr.mantissa = (rmr.mantissa >> 1) | ((acc.mantissa & 1) << 39);
+		acc.mantissa >>= 1;
 		++acc.exponent;
 	}
 	normalize_and_round (acc, rmr, rnd_rq);
@@ -369,56 +296,24 @@ void besm6_divide (t_value val)
 	alureg_t acc, word;
 	int neg, o;
 	unsigned long i, c, bias = 0;
-	math_t dividend, divisor, quotient;
+	double dividend, divisor, quotient;
 
-	acc = toalu (ACC);
-	word = toalu (val);
-	RMR = 0;
-	neg = is_negative (acc) != is_negative (word);
-	if (is_negative (acc))
-		acc = negate (acc);
-	if (is_negative (word))
-		word = negate (word);
-	if (! (word.ml & BIT16)) {
+	if (((val ^ (val << 1)) & BIT41) == 0) {
 		/* Ненормализованный делитель: деление на ноль. */
 		longjmp (cpu_halt, STOP_DIVZERO);
 	}
-	if ((acc.ml == 0) && (acc.mr == 0)) {
-qzero:		ACC = 0;
-		return;
+	dividend = besm6_to_ieee(ACC);
+	divisor = besm6_to_ieee(val);
+
+	quotient = nrdiv(dividend, divisor);
+	acc = ieee_to_alu(quotient);
+
+	if ((o = acc.exponent) < 0) {
+	    ACC = 0;
+	    return;
 	}
-	if ((acc.ml & 0x8000) == 0) {   /* normalize */
-		while (acc.ml == 0) {
-			if (! acc.mr)
-				goto qzero;
-			bias += 16;
-			acc.ml = acc.mr >> 8;
-			acc.mr = (acc.mr & 0xff) << 16;
-		}
-		for (i = 0x8000, c = 0; (i & acc.ml) == 0; ++c)
-			i >>= 1;
-		bias += c;
-		acc.ml = ((acc.ml << c) | (acc.mr >> (24 - c))) & 0xffff;
-		acc.mr = (acc.mr << c) & 0xffffff;
-	}
-
-	BESM_TO_IEEE (acc, dividend);
-	dividend.u.left32 -= bias << 20;
-	BESM_TO_IEEE (word, divisor);
-
-	/* quotient.d = dividend.d / divisor.d; */
-	quotient.d = nrdiv (dividend.d, divisor.d);
-
-	o = quotient.u.left32 >> 20;
-	o = o - 1022 + 64;
-	if (o < 0)
-		goto qzero;
 	acc.exponent = o & 0x7f;
-	acc.ml = ((quotient.u.left32 & 0xfffff) | 0x100000) >> 5;
-	acc.mr = ((quotient.u.left32 & 0x1f) << 19) |
-			(quotient.u.right32 >> 13);
-	if (neg)
-		acc = negate (acc);
+
 	normalize_and_round (acc, zeroword, 0);
 
 	if ((o > 0x7f) && ! (RAU & RAU_OVF_DISABLE))
@@ -434,6 +329,8 @@ void besm6_multiply (t_value val)
 {
 	uint8           neg = 0;
 	alureg_t        acc, word, rmr, a, b;
+	t_uint64	alo, blo, ahi, bhi;
+
 	register t_uint64 l;
 
 	if (! ACC || ! val) {
@@ -447,7 +344,7 @@ void besm6_multiply (t_value val)
 
 	a = acc;
 	b = word;
-	rmr = zeroword;
+	rmr.mantissa = rmr.exponent = 0;
 
 	if (is_negative (a)) {
 		neg = 1;
@@ -459,30 +356,27 @@ void besm6_multiply (t_value val)
 	}
 	acc.exponent = a.exponent + b.exponent - 64;
 
- 	l = (t_uint64) a.mr * b.mr;
-	rmr.mr = l & BITS24;
-	l >>= 24;
+	alo = a.mantissa & BITS20;
+	ahi = a.mantissa >> 20;
 
-	l += (t_uint64) a.mr * b.ml + (t_uint64) a.ml * b.mr;
-	rmr.ml = l & BITS16;
-	l >>= 16;
+	blo = b.mantissa & BITS20;
+	bhi = b.mantissa >> 20;
 
-	/* Now l is offset by 40, but a.ml * b.ml is offset by 48 */
-	l += (t_uint64) a.ml * b.ml * 256;
-	acc.mr = l & BITS24;
-	acc.ml = l >> 24;
+	l = alo * blo + ((alo * bhi + ahi * blo) << 20);
+
+	rmr.mantissa = l & BITS40;
+	l >>= 40;
+
+	acc.mantissa = l + ahi * bhi;
 
 	if (neg) {
-		rmr.mr = (~rmr.mr & 0xffffff) + 1;
-		rmr.ml = (~rmr.ml & 0xffff) + (rmr.mr >> 24);
-		rmr.mr &= 0xffffff;
-		acc.mr = (~acc.mr & 0xffffff) + (rmr.ml >> 16);
-		rmr.ml &= 0xffff;
-		acc.ml = ((~acc.ml & 0xffff) + (acc.mr >> 24)) | 0x30000;
-		acc.mr &= 0xffffff;
+		rmr.mantissa = (~rmr.mantissa & BITS40) + 1;
+		acc.mantissa = ((~acc.mantissa & BITS40) + (rmr.mantissa >> 40))
+		    | BIT41 | BIT42;
+		rmr.mantissa &= BITS40;
 	}
 
-	normalize_and_round (acc, rmr, !!(rmr.ml | rmr.mr));
+	normalize_and_round (acc, rmr, rmr.mantissa != 0);
 }
 
 /*
