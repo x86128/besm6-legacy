@@ -306,8 +306,8 @@ char *parse_instruction (char *cptr, uint32 *val)
 			}
 		}
 		cptr = besm6_parse_octal (cptr, &addr);	/* get address */
-		if (! cptr || addr > BITS15 ||
-		    (opcode <= 0177 && addr > BITS12)) {
+		if (! cptr || addr > BITS(15) ||
+		    (opcode <= 0177 && addr > BITS(12))) {
 			/*printf ("Bad address\n");*/
 			return 0;
 		}
@@ -329,19 +329,19 @@ char *parse_instruction (char *cptr, uint32 *val)
 		if (*cptr >= '0' && *cptr <= '7') {
 			/* Восьмеричный адрес. */
 			cptr = besm6_parse_octal (cptr, &addr);
-			if (! cptr || addr > BITS15) {
+			if (! cptr || addr > BITS(15)) {
 				/*printf ("Bad address: %o\n", addr);*/
 				return 0;
 			}
 			if (negate)
-				addr = (- addr) & BITS15;
-			if (opcode <= 077 && addr > BITS12) {
+				addr = (- addr) & BITS(15);
+			if (opcode <= 077 && addr > BITS(12)) {
 				if (addr < 070000) {
 					/*printf ("Bad short address: %o\n", addr);*/
 					return 0;
 				}
 				opcode |= 0100;
-				addr &= BITS12;
+				addr &= BITS(12);
 			}
 		}
 		reg = 0;
@@ -400,13 +400,13 @@ void besm6_fprint_cmd (FILE *of, uint32 cmd)
 	int reg, opcode, addr;
 
 	reg = (cmd >> 20) & 017;
-	if (cmd & BIT20) {
+	if (cmd & BIT(20)) {
 		opcode = (cmd >> 12) & 0370;
-		addr = cmd & BITS15;
+		addr = cmd & BITS(15);
 	} else {
 		opcode = (cmd >> 12) & 077;
 		addr = cmd & 07777;
-		if (cmd & BIT19)
+		if (cmd & BIT(19))
 			addr |= 070000;
 	}
 	fprintf (of, "%s", besm6_opname (opcode));
@@ -429,9 +429,9 @@ void besm6_fprint_cmd (FILE *of, uint32 cmd)
  */
 void besm6_fprint_insn (FILE *of, uint32 insn)
 {
-	if (insn & BIT20)
+	if (insn & BIT(20))
 		fprintf (of, "%02o %02o %05o ",
-			insn >> 20, (insn >> 15) & 037, insn & BITS15);
+			insn >> 20, (insn >> 15) & 037, insn & BITS(15));
 	else
 		fprintf (of, "%02o %03o %04o ",
 			insn >> 20, (insn >> 12) & 0177, insn & 07777);
@@ -470,11 +470,11 @@ t_stat fprint_sym (FILE *of, t_addr addr, t_value *val,
 			fprintf (of, ",\n\t");
 		if (sw & SIM_SW_STOP && addr == PC && (RUU & RUU_RIGHT_INSTR))
 			fprintf (of, "-> ");
-		besm6_fprint_cmd (of, cmd & BITS24);
+		besm6_fprint_cmd (of, cmd & BITS(24));
 
 	} else if (sw & SWMASK ('I')) {
-		besm6_fprint_insn (of, (cmd >> 24) & BITS24);
-		besm6_fprint_insn (of, cmd & BITS24);
+		besm6_fprint_insn (of, (cmd >> 24) & BITS(24));
+		besm6_fprint_insn (of, cmd & BITS(24));
 	} else if (sw & SWMASK ('F')) {
 		fprintf (of, "%#.2g", besm6_to_ieee(cmd));
 	} else if (sw & SWMASK ('B')) {
@@ -519,15 +519,15 @@ t_stat parse_sym (char *cptr, t_addr addr, UNIT *uptr, t_value *val, int32 sw)
 
 	val[0] = 0;
 	for (i=0; i<16; i++) {
-		if (*cptr == 0)
-			return SCPE_OK;
 		if (*cptr < '0' || *cptr > '7')
-			return SCPE_ARG;
+			break;
 		val[0] = (val[0] << 3) | (*cptr - '0');
 		cptr = skip_spaces (cptr+1);		/* next char */
 	}
-	if (*cptr != 0)
-		return SCPE_ARG;
+	if (*cptr != 0 && *cptr != ';' && *cptr != '\n' && *cptr != '\r') {
+		/*printf ("Extra symbols at eoln: %s\n", cptr);*/
+		return SCPE_2MARG;
+	}
 	return SCPE_OK;
 }
 
@@ -679,7 +679,7 @@ t_stat besm6_dump (FILE *of, char *fnam)
 			fprintf (of, "к ");
 			besm6_fprint_cmd (of, word >> 24);
 			fprintf (of, ", ");
-			besm6_fprint_cmd (of, word & BITS24);
+			besm6_fprint_cmd (of, word & BITS(24));
 			fprintf (of, "\n");
 		} else {
 			fprintf (of, "с %04o %04o %04o %04o\n",

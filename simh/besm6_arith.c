@@ -49,15 +49,15 @@ static alureg_t toalu (t_value val)
 	alureg_t ret;
 
 	ret.mantissa = val & BITS41;
-	ret.exponent = (val >> 41) & BITS7;
+	ret.exponent = (val >> 41) & BITS(7);
 	if (ret.mantissa & BIT41)
-		ret.mantissa |= BIT41<<1;
+		ret.mantissa |= BIT42;
 	return ret;
 }
 
 static t_value fromalu (alureg_t reg)
 {
-	return (t_value) (reg.exponent & BITS7) << 41 |
+	return (t_value) (reg.exponent & BITS(7)) << 41 |
 		(t_value) (reg.mantissa & BITS41);
 }
 
@@ -94,21 +94,24 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 		goto chk_rnd;
 	i = (acc.mantissa >> 39) & 3;
 	if (i == 0) {
-		if ((r = acc.mantissa & BITS40)) {
+		r = acc.mantissa & BITS40;
+		if (r) {
 			int cnt;
-			for (cnt = 0; (r & BIT40) == 0;
-						++cnt, r <<= 1);
-			acc.mantissa = r | (rr = rmr.mantissa >> (40 - cnt));
+			for (cnt = 0; (r & BIT40) == 0; ++cnt)
+				r <<= 1;
+			rr = rmr.mantissa >> (40 - cnt);
+			acc.mantissa = r | rr;
 		        /* 41 р. РМР может быть равен 1? */
 			rmr.mantissa <<= cnt;
 			acc.exponent -= cnt;
 			goto chk_zero;
 		}
-		if ((r = rmr.mantissa & BITS40)) {
+		r = rmr.mantissa & BITS40;
+		if (r) {
 			int cnt;
 			rr = rmr.mantissa;
-			for (cnt = 0; (r & BIT40) == 0;
-						++cnt, r <<= 1);
+			for (cnt = 0; (r & BIT40) == 0; ++cnt)
+				r <<= 1;
 			acc.mantissa = r;
 			rmr.mantissa = 0;
 			acc.exponent -= 40 + cnt;
@@ -116,23 +119,25 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 		}
 		goto zero;
 	} else if (i == 3) {
-		if ((r = ~acc.mantissa & BITS40)) {
+		r = ~acc.mantissa & BITS40;
+		if (r) {
 			int cnt;
-			for (cnt = 0; (r & BIT40) == 0;
-						++cnt, r = (r << 1) | 1);
-			acc.mantissa = BIT41 | (~r & BITS40) |
-					(rr = rmr.mantissa >> (40 - cnt));
+			for (cnt = 0; (r & BIT40) == 0; ++cnt)
+				r = (r << 1) | 1;
+			rr = rmr.mantissa >> (40 - cnt);
+			acc.mantissa = BIT41 | (~r & BITS40) | rr;
 		        /* 41 р. РМР не может быть равен 1? */
 			rmr.mantissa = (rmr.mantissa << cnt) & BITS40;
 			acc.exponent -= cnt;
 			goto chk_zero;
 		}
-		if ((r = ~rmr.mantissa & BITS40)) {
+		r = ~rmr.mantissa & BITS40;
+		if (r) {
 			int cnt;
 			rr = rmr.mantissa;
-			for (cnt = 0; (r & BIT40) == 0;
-						++cnt, r = (r << 1) | 1);
-			acc.mantissa = BIT41 | (~r & BITS40); 
+			for (cnt = 0; (r & BIT40) == 0; ++cnt)
+				r = (r << 1) | 1;
+			acc.mantissa = BIT41 | (~r & BITS40);
 			rmr.mantissa = 0;
 			acc.exponent -= 40 + cnt;
 			goto chk_zero;
@@ -145,7 +150,8 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 		}
 	}
 chk_zero:
-	rnd_rq = rnd_rq && !rr;
+	if (rr)
+		rnd_rq = 0;
 chk_rnd:
 	if (acc.exponent & 0x8000)
 		goto zero;
@@ -157,7 +163,7 @@ chk_rnd:
 	if (! (RAU & RAU_ROUND_DISABLE) && rnd_rq)
 		acc.mantissa |= 1;
 
-	if (!acc.mantissa && ! (RAU & RAU_NORM_DISABLE)) {
+	if (! acc.mantissa && ! (RAU & RAU_NORM_DISABLE)) {
 zero:		ACC = 0;
 		RMR = 0;
 		return;
@@ -356,10 +362,10 @@ void besm6_multiply (t_value val)
 	}
 	acc.exponent = a.exponent + b.exponent - 64;
 
-	alo = a.mantissa & BITS20;
+	alo = a.mantissa & BITS(20);
 	ahi = a.mantissa >> 20;
 
-	blo = b.mantissa & BITS20;
+	blo = b.mantissa & BITS(20);
 	bhi = b.mantissa >> 20;
 
 	l = alo * blo + ((alo * bhi + ahi * blo) << 20);
@@ -479,32 +485,32 @@ void besm6_highest_bit (t_value val)
 		RMR = 0;
 		return;
 	}
-	if (ACC >> 24 & BITS24) {
-		if (ACC >> 36 & BITS12) {
-			if (ACC >> 42 & BITS6) {
-				n = highest_of_six_bits [ACC >> 42 & BITS6];
+	if (ACC >> 24 & BITS(24)) {
+		if (ACC >> 36 & BITS(12)) {
+			if (ACC >> 42 & BITS(6)) {
+				n = highest_of_six_bits [ACC >> 42 & BITS(6)];
 			} else {
-				n = 6 + highest_of_six_bits [ACC >> 36 & BITS6];
+				n = 6 + highest_of_six_bits [ACC >> 36 & BITS(6)];
 			}
 		} else {
-			if (ACC >> 30 & BITS6) {
-				n = 12 + highest_of_six_bits [ACC >> 30 & BITS6];
+			if (ACC >> 30 & BITS(6)) {
+				n = 12 + highest_of_six_bits [ACC >> 30 & BITS(6)];
 			} else {
-				n = 18 + highest_of_six_bits [ACC >> 24 & BITS6];
+				n = 18 + highest_of_six_bits [ACC >> 24 & BITS(6)];
 			}
 		}
 	} else {
-		if (ACC >> 12 & BITS12) {
-			if (ACC >> 18 & BITS6) {
-				n = 24 + highest_of_six_bits [ACC >> 18 & BITS6];
+		if (ACC >> 12 & BITS(12)) {
+			if (ACC >> 18 & BITS(6)) {
+				n = 24 + highest_of_six_bits [ACC >> 18 & BITS(6)];
 			} else {
-				n = 30 + highest_of_six_bits [ACC >> 12 & BITS6];
+				n = 30 + highest_of_six_bits [ACC >> 12 & BITS(6)];
 			}
 		} else {
-			if (ACC >> 6 & BITS6) {
-				n = 36 + highest_of_six_bits [ACC >> 6 & BITS6];
+			if (ACC >> 6 & BITS(6)) {
+				n = 36 + highest_of_six_bits [ACC >> 6 & BITS(6)];
 			} else {
-				n = 42 + highest_of_six_bits [ACC & BITS6];
+				n = 42 + highest_of_six_bits [ACC & BITS(6)];
 			}
 		}
 	}
@@ -519,6 +525,7 @@ void besm6_highest_bit (t_value val)
 
 /*
  * Сдвиг сумматора ACC с выдвижением в регистр младших разрядов RMR.
+ * Величина сдвига находится в диапазоне -64..63.
  */
 void besm6_shift (int i)
 {
@@ -529,8 +536,7 @@ void besm6_shift (int i)
 			RMR = (ACC << (48-i)) & BITS48;
 			ACC >>= i;
 		} else {
-			if (i < 96)
-				RMR = ACC >> (i-48);
+			RMR = ACC >> (i-48);
 			ACC = 0;
 		}
 	} else if (i < 0) {
@@ -540,8 +546,7 @@ void besm6_shift (int i)
 			RMR = ACC >> (48-i);
 			ACC = (ACC << i) & BITS48;
 		} else {
-			if (i < 96)
-				RMR = (ACC << (i-48)) & BITS48;
+			RMR = (ACC << (i-48)) & BITS48;
 			ACC = 0;
 		}
 	}

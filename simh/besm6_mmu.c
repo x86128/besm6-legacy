@@ -270,7 +270,7 @@ void mmu_store (int addr, t_value val)
 {
 	int matching;
 
-	addr &= BITS15;
+	addr &= BITS(15);
 	if (addr == 0)
 		return;
 	if (sim_log && mmu_dev.dctrl) {
@@ -316,7 +316,7 @@ t_value mmu_load (int addr)
 	int matching = -1;
 	t_value val;
 
-	addr &= BITS15;
+	addr &= BITS(15);
 	if (addr == 0)
 		return 0;
 
@@ -346,7 +346,7 @@ t_value mmu_load (int addr)
 			val = pult[addr];
 		}
 		if (sim_log && mmu_dev.dctrl) {
-			fprintf (sim_log, "--- %05o: чтение ", addr & BITS15);
+			fprintf (sim_log, "--- %05o: чтение ", addr & BITS(15));
 			fprint_sym (sim_log, 0, &val, 0, 0);
 			fprintf (sim_log, "\n");
 		}
@@ -365,7 +365,7 @@ t_value mmu_load (int addr)
 			set_wins (matching);
 		val = BRZ[matching];
 		if (sim_log && mmu_dev.dctrl) {
-			fprintf (sim_log, "--- %05o: чтение ", addr & BITS15);
+			fprintf (sim_log, "--- %05o: чтение ", addr & BITS(15));
 			fprint_sym (sim_log, 0, &val, 0, 0);
 			fprintf (sim_log, " из БРЗ\n");
 		}
@@ -463,7 +463,7 @@ t_value mmu_prefetch (int addr, int actual)
 		/* Вычисляем физический адрес слова */
 		addr = (addr & 01777) | (page << 10);
 	} else {
-		addr = addr & BITS15;
+		addr = addr & BITS(15);
 	}
 	if (addr < 010)
 		val = pult[addr];
