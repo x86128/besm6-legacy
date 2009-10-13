@@ -345,7 +345,7 @@ t_value mmu_load (int addr)
 				besm6_debug("--- %05o: чтение ТР%o", PC, addr);
 			val = pult[addr];
 		}
-		if (sim_log && mmu_dev.dctrl) {
+		if (sim_log && (mmu_dev.dctrl || cpu_dev.dctrl)) {
 			fprintf (sim_log, "--- %05o: чтение ", addr & BITS(15));
 			fprint_sym (sim_log, 0, &val, 0, 0);
 			fprintf (sim_log, "\n");
@@ -364,7 +364,7 @@ t_value mmu_load (int addr)
 		if (matching != OLDEST)
 			set_wins (matching);
 		val = BRZ[matching];
-		if (sim_log && mmu_dev.dctrl) {
+		if (sim_log && (mmu_dev.dctrl || cpu_dev.dctrl)) {
 			fprintf (sim_log, "--- %05o: чтение ", addr & BITS(15));
 			fprint_sym (sim_log, 0, &val, 0, 0);
 			fprintf (sim_log, " из БРЗ\n");
