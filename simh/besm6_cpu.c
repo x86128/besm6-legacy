@@ -445,6 +445,9 @@ static void cmd_033 ()
 		fprintf (sim_deb, "\tАисп=%04o\n", Aex & 04177);
 	}
 	switch (Aex & 04177) {
+	case 0:
+		/* Задержка для печати на АЦПУ */
+		break;
 	case 1 ... 2:
 		/* Управление обменом с магнитными барабанами */
 		drum (Aex - 1, (uint32) ACC);
@@ -475,8 +478,10 @@ static void cmd_033 ()
 		PRP2GRP;
 		break;
 	case 031:
-		/* имитация сигналов прерывания ГРП (уточнить) */
-		GRP |= GRP_IMITATION;
+		/* имитация сигналов прерывания ГРП */
+		besm6_debug ("*** %05o%s: имитация прерываний ГРП %016llo",
+			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", ACC << 24);
+		GRP |= (ACC & BITS(24)) << 24;
 		break;
 	case 032 ... 033:
 		/* TODO: имитация сигналов из КМБ в КВУ */
@@ -1069,6 +1074,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 	case 050 ... 077:				/* э50...э77 */
 	case 0200:					/* э20 */
 	case 0210:					/* э21 */
+	stop_as_extracode:
 		Aex = ADDR (addr + M[reg]);
 		/* Адрес возврата из экстракода. */
 		M[ERET] = nextpc;
@@ -1205,6 +1211,14 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 	case 0330:					/* стоп, stop */
 		Aex = ADDR (addr + M[reg]);
 		delay = 7;
+		if (!IS_SUPERVISOR(RUU)) {
+			if (M[PSW] & PSW_CHECK_HALT)
+				break;
+			else {
+				opcode = 063;
+				goto stop_as_extracode;
+			}
+		}
 		mmu_print_brz ();
 		longjmp (cpu_halt, STOP_STOP);
 		break;
