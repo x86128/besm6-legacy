@@ -43,6 +43,10 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
+#ifndef SDL_main
+#define besm6_draw_panel() 
+#endif
+
 /*
  * Регистр 027: сохранённые режимы УУ.
  * PSW: saved program status word.
@@ -886,7 +890,20 @@ void cpu_one_inst ()
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		besm6_highest_bit (mmu_load (Aex));
+		if (ACC) {
+			int n = besm6_highest_bit (ACC);
+			/* "Остаток" сумматора, исключая бит,
+			 * номер которого определен, помещается в РМР,
+			 * начиная со старшего бита РМР.
+			 */
+			besm6_shift (48 - n);
+			ACC = n + mmu_load (Aex);
+		} else {
+			RMR = 0;
+			ACC = mmu_load (Aex);
+		}	
+		if (ACC & BIT49)
+			ACC = (ACC + 1) & BITS48;
 		RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (3, 32);
 		break;

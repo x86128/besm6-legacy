@@ -80,6 +80,22 @@ static alureg_t negate (alureg_t word)
 	return word;
 }
 
+/* 48-й разряд -> 1, 47-й -> 2 и т.п.
+ * Единица 1-го разряда и нулевое слово -> 48,
+ * как в первоначальном варианте системы команд.
+ */
+int besm6_highest_bit(t_value val) {
+    int n = 32, cnt = 0;
+    do {
+        t_value tmp = val;
+        if (tmp >>= n) {
+            cnt += n;
+            val = tmp;
+        }
+    } while (n >>= 1);
+    return 48 - cnt;
+}
+
 /*
  * Нормализация и округление.
  * Результат помещается в регистры ACC и RMR.
@@ -96,9 +112,8 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 	if (i == 0) {
 		r = acc.mantissa & BITS40;
 		if (r) {
-			int cnt;
-			for (cnt = 0; (r & BIT40) == 0; ++cnt)
-				r <<= 1;
+			int cnt = besm6_highest_bit (r) - 9;
+			r <<= cnt;
 			rr = rmr.mantissa >> (40 - cnt);
 			acc.mantissa = r | rr;
 		        /* 41 р. РМР может быть равен 1? */
@@ -108,10 +123,9 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 		}
 		r = rmr.mantissa & BITS40;
 		if (r) {
-			int cnt;
+			int cnt = besm6_highest_bit (r) - 9;
 			rr = rmr.mantissa;
-			for (cnt = 0; (r & BIT40) == 0; ++cnt)
-				r <<= 1;
+			r <<= cnt;
 			acc.mantissa = r;
 			rmr.mantissa = 0;
 			acc.exponent -= 40 + cnt;
@@ -121,9 +135,8 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 	} else if (i == 3) {
 		r = ~acc.mantissa & BITS40;
 		if (r) {
-			int cnt;
-			for (cnt = 0; (r & BIT40) == 0; ++cnt)
-				r = (r << 1) | 1;
+			int cnt = besm6_highest_bit (r) - 9;
+			r = (r << cnt) | ((1LL << cnt) - 1);
 			rr = rmr.mantissa >> (40 - cnt);
 			acc.mantissa = BIT41 | (~r & BITS40) | rr;
 		        /* 41 р. РМР не может быть равен 1? */
@@ -133,10 +146,9 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 		}
 		r = ~rmr.mantissa & BITS40;
 		if (r) {
-			int cnt;
+			int cnt = besm6_highest_bit (r) - 9;
 			rr = rmr.mantissa;
-			for (cnt = 0; (r & BIT40) == 0; ++cnt)
-				r = (r << 1) | 1;
+			r = (r << cnt) | ((1LL << cnt) - 1);
 			acc.mantissa = BIT41 | (~r & BITS40);
 			rmr.mantissa = 0;
 			acc.exponent -= 40 + cnt;
@@ -460,67 +472,6 @@ int besm6_count_ones (t_value word)
 	for (c=0; word; ++c)
 		word &= word-1;
 	return c;
-}
-
-/*
- * Вычисление номера старшей единицы сумматора АСС, слева направо, нумеруя с единицы.
- * 48-й разряд сумматора соответствует результату "1" и так далее.
- * К номеру старшей единицы циклически прибавляется слово по Аисп.
- * В регистр младших разрядов помещается исходное значение, придвинутое влево,
- * без старшего бита.
- */
-void besm6_highest_bit (t_value val)
-{
-	static const int highest_of_six_bits [64] = {
-		0,6,5,5,4,4,4,4,3,3,3,3,3,3,3,3,
-		2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-		1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-		1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-	};
-	int n;
-
-	if (! ACC) {
-		/* Нулевой сумматор, возвращаем 0. */
-		ACC = val;
-		RMR = 0;
-		return;
-	}
-	if (ACC >> 24 & BITS(24)) {
-		if (ACC >> 36 & BITS(12)) {
-			if (ACC >> 42 & BITS(6)) {
-				n = highest_of_six_bits [ACC >> 42 & BITS(6)];
-			} else {
-				n = 6 + highest_of_six_bits [ACC >> 36 & BITS(6)];
-			}
-		} else {
-			if (ACC >> 30 & BITS(6)) {
-				n = 12 + highest_of_six_bits [ACC >> 30 & BITS(6)];
-			} else {
-				n = 18 + highest_of_six_bits [ACC >> 24 & BITS(6)];
-			}
-		}
-	} else {
-		if (ACC >> 12 & BITS(12)) {
-			if (ACC >> 18 & BITS(6)) {
-				n = 24 + highest_of_six_bits [ACC >> 18 & BITS(6)];
-			} else {
-				n = 30 + highest_of_six_bits [ACC >> 12 & BITS(6)];
-			}
-		} else {
-			if (ACC >> 6 & BITS(6)) {
-				n = 36 + highest_of_six_bits [ACC >> 6 & BITS(6)];
-			} else {
-				n = 42 + highest_of_six_bits [ACC & BITS(6)];
-			}
-		}
-	}
-	/* Вычисляем РМР: отрезаем старший бит и все левее. */
-	besm6_shift (48 - n);
-
-	/* Циклическое сложение номера старшей единицы с словом по Аисп. */
-	ACC = n + val;
-	if (ACC & BIT49)
-		ACC = (ACC + 1) & BITS48;
 }
 
 /*
