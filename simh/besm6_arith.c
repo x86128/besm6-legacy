@@ -55,12 +55,6 @@ static alureg_t toalu (t_value val)
 	return ret;
 }
 
-static t_value fromalu (alureg_t reg)
-{
-	return (t_value) (reg.exponent & BITS(7)) << 41 |
-		(t_value) (reg.mantissa & BITS41);
-}
-
 static int inline is_negative (alureg_t word)
 {
 	return (word.mantissa & BIT41) != 0;
@@ -98,7 +92,8 @@ int besm6_highest_bit(t_value val) {
 
 /*
  * Нормализация и округление.
- * Результат помещается в регистры ACC и RMR.
+ * Результат помещается в регистры ACC и 40-1 разряды RMR.
+ * 48-41 разряды RMR сохраняются.
  */
 static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 {
@@ -116,7 +111,6 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 			r <<= cnt;
 			rr = rmr.mantissa >> (40 - cnt);
 			acc.mantissa = r | rr;
-		        /* 41 р. РМР может быть равен 1? */
 			rmr.mantissa <<= cnt;
 			acc.exponent -= cnt;
 			goto chk_zero;
@@ -139,8 +133,7 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 			r = (r << cnt) | ((1LL << cnt) - 1);
 			rr = rmr.mantissa >> (40 - cnt);
 			acc.mantissa = BIT41 | (~r & BITS40) | rr;
-		        /* 41 р. РМР не может быть равен 1? */
-			rmr.mantissa = (rmr.mantissa << cnt) & BITS40;
+			rmr.mantissa <<= cnt;
 			acc.exponent -= cnt;
 			goto chk_zero;
 		}
@@ -167,28 +160,29 @@ chk_zero:
 chk_rnd:
 	if (acc.exponent & 0x8000)
 		goto zero;
-	if (acc.exponent & 0x80) {
-		acc.exponent = 0;
-		if (! (RAU & RAU_OVF_DISABLE))
-			longjmp (cpu_halt, STOP_OVFL);
-	}
 	if (! (RAU & RAU_ROUND_DISABLE) && rnd_rq)
 		acc.mantissa |= 1;
 
 	if (! acc.mantissa && ! (RAU & RAU_NORM_DISABLE)) {
 zero:		ACC = 0;
-		RMR = 0;
+		RMR &= ~BITS40;
 		return;
 	}
 
-	ACC = fromalu (acc);
-	RMR = fromalu (rmr);
+	ACC = (t_value) (acc.exponent & BITS(7)) << 41 |
+		(acc.mantissa & BITS41);
+	RMR = RMR & ~BITS40 | rmr.mantissa & BITS40;
+	/* При переполнении мантисса и младшие разряды порядка верны */
+	if (acc.exponent & 0x80) {
+		if (! (RAU & RAU_OVF_DISABLE))
+			longjmp (cpu_halt, STOP_OVFL);
+	}
 }
 
 /*
  * Сложение и все варианты вычитаний.
  * Исходные значения: регистр ACC и аргумент 'val'.
- * Результат помещается в регистры ACC и RMR.
+ * Результат помещается в регистр ACC и 40-1 разряды RMR.
  */
 void besm6_add (t_value val, int negate_acc, int negate_val)
 {
@@ -307,7 +301,7 @@ static double nrdiv (double n, double d)
 /*
  * Деление.
  * Исходные значения: регистр ACC и аргумент 'val'.
- * Результат помещается в регистры ACC и RMR.
+ * Результат помещается в регистр ACC, содержимое RMR не определено.
  */
 void besm6_divide (t_value val)
 {
@@ -326,22 +320,13 @@ void besm6_divide (t_value val)
 	quotient = nrdiv(dividend, divisor);
 	acc = ieee_to_alu(quotient);
 
-	if ((o = acc.exponent) < 0) {
-	    ACC = 0;
-	    return;
-	}
-	acc.exponent = o & 0x7f;
-
 	normalize_and_round (acc, zeroword, 0);
-
-	if ((o > 0x7f) && ! (RAU & RAU_OVF_DISABLE))
-		longjmp (cpu_halt, STOP_OVFL);
 }
 
 /*
  * Умножение.
  * Исходные значения: регистр ACC и аргумент 'val'.
- * Результат помещается в регистры ACC и RMR.
+ * Результат помещается в регистр ACC и 40-1 разряды RMR.
  */
 void besm6_multiply (t_value val)
 {
@@ -354,7 +339,7 @@ void besm6_multiply (t_value val)
 	if (! ACC || ! val) {
 		/* multiplication by zero is zero */
 		ACC = 0;
-		RMR = 0;
+		RMR &= ~BITS40;
 		return;
 	}
 	acc = toalu (ACC);
@@ -399,7 +384,7 @@ void besm6_multiply (t_value val)
 
 /*
  * Изменение знака числа на сумматоре ACC.
- * Результат помещается в регистры ACC и RMR.
+ * Результат помещается в регистр ACC, RMR гасится.
  */
 void besm6_change_sign (int negate_acc)
 {
@@ -408,12 +393,13 @@ void besm6_change_sign (int negate_acc)
 	acc = toalu (ACC);
 	if (negate_acc)
 		acc = negate (acc);
+	RMR = 0;
 	normalize_and_round (acc, zeroword, 0);
 }
 
 /*
  * Изменение порядка числа на сумматоре ACC.
- * Результат помещается в регистры ACC и RMR.
+ * Результат помещается в регистр ACC, RMR гасится.
  */
 void besm6_add_exponent (int val)
 {
@@ -421,6 +407,7 @@ void besm6_add_exponent (int val)
 
 	acc = toalu (ACC);
 	acc.exponent += val;
+	RMR = 0;
 	normalize_and_round (acc, zeroword, 0);
 }
 
