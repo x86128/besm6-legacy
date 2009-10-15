@@ -680,13 +680,19 @@ t_stat besm6_dump (FILE *of, char *fnam)
 			besm6_fprint_cmd (of, word >> 24);
 			fprintf (of, ", ");
 			besm6_fprint_cmd (of, word & BITS(24));
-			fprintf (of, "\n");
-		} else {
-			fprintf (of, "с %04o %04o %04o %04o\n",
+			fprintf (of, "\t\t; %05o - ", addr);
+			fprintf (of, "%04o %04o %04o %04o\n",
 				(int) (word >> 36) & 07777,
 				(int) (word >> 24) & 07777,
 				(int) (word >> 12) & 07777,
 				(int) word & 07777);
+		} else {
+			fprintf (of, "с %04o %04o %04o %04o",
+				(int) (word >> 36) & 07777,
+				(int) (word >> 24) & 07777,
+				(int) (word >> 12) & 07777,
+				(int) word & 07777);
+			fprintf (of, "\t\t; %05o\n", addr);
 		}
 	}
 	return SCPE_OK;

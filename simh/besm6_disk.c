@@ -270,6 +270,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 		if (disk_dev.dctrl)
 			besm6_debug ("::: управление КМД %c слово %04o: выдача адреса дорожки %04o",
 				ctlr + '3', cmd, disk_zone);
+/*disk_op &= ~DISK_READ_SYSDATA;*/
 		if (disk_op & DISK_READ) {
 			if (disk_op & DISK_PAGE_MODE)
 				disk_read (u);

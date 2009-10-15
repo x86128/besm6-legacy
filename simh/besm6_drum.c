@@ -116,6 +116,44 @@ t_stat drum_detach (UNIT *u)
 }
 
 /*
+ * Отладочная печать массива данных обмена.
+ */
+static void log_io (UNIT *u)
+{
+	t_value *data, *sysdata;
+	int i;
+	void print_word (t_value val) {
+		fprintf (sim_log, " %o-%04o-%04o-%04o-%04o",
+			(int) (val >> 48) & 07,
+			(int) (val >> 36) & 07777,
+			(int) (val >> 24) & 07777,
+			(int) (val >> 12) & 07777, (int) val & 07777);
+	}
+
+	data = &memory [drum_memory];
+	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
+	if (drum_nwords == 1024) {
+		fprintf (sim_log, "=== зона МБ %d.%03o:",
+			(u == &drum_unit[0]) ? 1 : 2, drum_zone);
+		for (i=0; i<8; ++i)
+			print_word (sysdata[i]);
+	} else {
+		sysdata += drum_sector*2;
+		fprintf (sim_log, "=== сектор МБ %d.%03o.%o:",
+			(u == &drum_unit[0]) ? 1 : 2,
+			drum_zone, drum_sector);
+		for (i=0; i<2; ++i)
+			print_word (sysdata[i]);
+	}
+	if (! (drum_op & DRUM_READ_SYSDATA)) {
+		fprintf (sim_log, "\n\t\t  ");
+		for (i=0; i<drum_nwords; ++i)
+			print_word (data[i]);
+	}
+        fprintf (sim_log, "\n");
+}
+
+/*
  * Запись на барабан.
  */
 void drum_write (UNIT *u)
@@ -225,18 +263,20 @@ void drum (int ctlr, uint32 cmd)
 		/* Device not attached. */
 		longjmp (cpu_halt, SCPE_UNATT);
 	}
-#if 0
-	if (drum_op & (DRUM_PARITY_FLAG | DRUM_READ_OVERLAY)) {
+	if (drum_op & DRUM_READ_OVERLAY) {
 		/* Not implemented. */
 		longjmp (cpu_halt, SCPE_NOFNC);
 	}
-#endif
 	if (drum_op & DRUM_READ) {
 		if (drum_op & DRUM_PAGE_MODE)
 			drum_read (u);
 		else
 			drum_read_sector (u);
 	} else {
+		if (drum_op & DRUM_PARITY_FLAG) {
+			besm6_log ("*** запись МБ с неправильной чётностью не реализована");
+			longjmp (cpu_halt, SCPE_NOFNC);
+		}
 		if (u->flags & UNIT_RO) {
 			/* Read only. */
 			longjmp (cpu_halt, SCPE_RO);
@@ -246,6 +286,8 @@ void drum (int ctlr, uint32 cmd)
 		else
 			drum_write_sector (u);
 	}
+	/*if (drum_dev.dctrl && sim_log)
+		log_io (u);*/
 
 	/* Гасим главный регистр прерываний. */
 	if (u == &drum_unit[0])
