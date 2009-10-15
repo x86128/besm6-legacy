@@ -379,6 +379,7 @@ static void cmd_002 ()
 	}
 	switch (Aex & 0377) {
 	case 0 ... 7:
+		/* Запись в БРЗ */
 		mmu_setcache (Aex & 7, ACC);
 		break;
 	case 020 ... 027:
@@ -467,7 +468,7 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 014 ... 015:
-		/* управление АЦПУ */
+		/* Управление АЦПУ */
 		printer_control (Aex - 014, (uint32) (ACC & 017));
 		break;
 	case 023 ... 024:
@@ -475,12 +476,12 @@ static void cmd_033 ()
 		disk_ctl (Aex - 023, (uint32) ACC);
 		break;
 	case 030:
-		/* гашение ПРП */
+		/* Гашение ПРП */
 		PRP &= ACC | PRP_WIRED_BITS;
 		PRP2GRP;
 		break;
 	case 031:
-		/* имитация сигналов прерывания ГРП */
+		/* Имитация сигналов прерывания ГРП */
 		/*besm6_debug ("*** %05o%s: имитация прерываний ГРП %016llo",
 			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", ACC << 24);*/
 		GRP |= (ACC & BITS(24)) << 24;
@@ -490,7 +491,7 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 034:
-		/* запись в МПРП */
+		/* Запись в МПРП */
 		MPRP = ACC & 077777777;
 		PRP2GRP;
 		break;
@@ -500,7 +501,7 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 040 ... 057:
-		/* управление молоточками АЦПУ */
+		/* Управление молоточками АЦПУ */
 		printer_hammer (Aex >= 050, Aex & 7, (uint32) (ACC & BITS(16)));
 		break;
 	case 0100 ... 0137:
@@ -510,7 +511,7 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0140:
-		/* запись в регистр телеграфных каналов */
+		/* Запись в регистр телеграфных каналов */
 		tty_send ((uint32) ACC & BITS(24));
 		break;
 	case 0141:
@@ -522,7 +523,7 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 0147:
-		/* запись в регистр управления электропитанием */
+		/* Запись в регистр управления электропитанием, */
 		/* не оказывает видимого эффекта на выполнение */
 		break;
 	case 0150 ... 0151:
@@ -574,15 +575,15 @@ static void cmd_033 ()
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	case 04030:
-		/* чтение старшей половины ПРП */
+		/* Чтение старшей половины ПРП */
 		ACC = PRP & 077770000;
 		break;
 	case 04031:
-		/* опрос сигналов готовности (АЦПУ и пр.) */
+		/* Опрос сигналов готовности (АЦПУ и пр.) */
 		ACC = READY;
 		break;
 	case 04034:
-		/* чтение младшей половины ПРП */
+		/* Чтение младшей половины ПРП */
 		ACC = (PRP & 07777) | 0377;
 		break;
 	case 04035:
@@ -667,7 +668,10 @@ void cpu_one_inst ()
 		besm6_fprint_cmd (sim_deb, RK);
 		fprintf (sim_deb, "\tСМ=");
 		fprint_sym (sim_deb, 0, &ACC, 0, 0);
-		fprintf (sim_deb, "\tРАУ=%02o\n", RAU);
+		fprintf (sim_deb, "\tРАУ=%02o", RAU);
+		if (reg)
+			fprintf (sim_deb, "\tМ[%o]=%05o", reg, M[reg]);
+		fprintf (sim_deb, "\n");
 	}
 	nextpc = ADDR(PC + 1);
 	if (RUU & RUU_RIGHT_INSTR) {
@@ -888,18 +892,20 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		if (ACC) {
 			int n = besm6_highest_bit (ACC);
+
 			/* "Остаток" сумматора, исключая бит,
 			 * номер которого определен, помещается в РМР,
-			 * начиная со старшего бита РМР.
-			 */
+			 * начиная со старшего бита РМР. */
 			besm6_shift (48 - n);
+
+			/* Циклическое сложение номера со словом по Аисп. */
 			ACC = n + mmu_load (Aex);
+			if (ACC & BIT49)
+				ACC = (ACC + 1) & BITS48;
 		} else {
 			RMR = 0;
 			ACC = mmu_load (Aex);
 		}
-		if (ACC & BIT49)
-			ACC = (ACC + 1) & BITS48;
 		RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (3, 32);
 		break;
