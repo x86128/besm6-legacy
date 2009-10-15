@@ -53,23 +53,22 @@ static alureg_t toalu (t_value val)
 	return ret;
 }
 
-static int inline is_negative (alureg_t word)
+static int inline is_negative (alureg_t *word)
 {
-	return (word.mantissa & BIT41) != 0;
+	return (word->mantissa & BIT41) != 0;
 }
 
-static alureg_t negate (alureg_t word)
+static void negate (alureg_t *val)
 {
-	if (is_negative (word))
-		word.mantissa |= BIT42;
-	word.mantissa = (~word.mantissa + 1) & BITS42;
-	if (((word.mantissa >> 1) ^ word.mantissa) & BIT41) {
-		word.mantissa >>= 1;
-		++word.exponent;
+	if (is_negative (val))
+		val->mantissa |= BIT42;
+	val->mantissa = (~val->mantissa + 1) & BITS42;
+	if (((val->mantissa >> 1) ^ val->mantissa) & BIT41) {
+		val->mantissa >>= 1;
+		++val->exponent;
 	}
-	if (is_negative (word))
-		word.mantissa |= BIT42;
-	return word;
+	if (is_negative (val))
+		val->mantissa |= BIT42;
 }
 
 /*
@@ -197,18 +196,18 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 			/* Сложение */
 		} else {
 			/* Вычитание */
-			word = negate (word);
+			negate (&word);
 		}
 	} else {
 		if (! negate_val) {
 			/* Обратное вычитание */
-			acc = negate (acc);
+			negate (&acc);
 		} else {
 			/* Вычитание модулей */
-			if (is_negative (acc))
-				acc = negate (acc);
-			if (! is_negative (word))
-				word = negate (word);
+			if (is_negative (&acc))
+				negate (&acc);
+			if (! is_negative (&word))
+				negate (&word);
 		}
 	}
 
@@ -222,7 +221,7 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 		a2 = acc;
 	}
 	mr = 0;
-	neg = is_negative (a1);
+	neg = is_negative (&a1);
 	if (diff == 0) {
 		/* Nothing to do. */
 	} else if (diff <= 40) {
@@ -350,13 +349,13 @@ void besm6_multiply (t_value val)
 	b = word;
 	mr = 0;
 
-	if (is_negative (a)) {
+	if (is_negative (&a)) {
 		neg = 1;
-		a = negate (a);
+		negate (&a);
 	}
-	if (is_negative (b)) {
+	if (is_negative (&b)) {
 		neg ^= 1;
-		b = negate (b);
+		negate (&b);
 	}
 	acc.exponent = a.exponent + b.exponent - 64;
 
@@ -393,7 +392,7 @@ void besm6_change_sign (int negate_acc)
 
 	acc = toalu (ACC);
 	if (negate_acc)
-		acc = negate (acc);
+		negate (&acc);
 	RMR = 0;
 	normalize_and_round (acc, 0, 0);
 }
