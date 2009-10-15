@@ -100,7 +100,8 @@ MTAB mmu_mod[] = {
 
 t_stat mmu_reset (DEVICE *dptr);
 
-t_stat mmu_examine(t_value *vptr, t_addr addr, UNIT *uptr, int32 sw) {
+t_stat mmu_examine (t_value *vptr, t_addr addr, UNIT *uptr, int32 sw)
+{
 	mmu_print_brz();
 	return SCPE_NOFNC;
 }
@@ -183,12 +184,13 @@ void mmu_protection_check (int addr)
 	if (! tmp_prot_disabled && (RZ & (1 << (addr >> 10)))) {
 		iintr_data = addr >> 10;
 		if (mmu_dev.dctrl)
-			besm6_debug ("--- %05o: защита числа", addr);
+			besm6_debug ("--- (%05o) защита числа", addr);
 		longjmp (cpu_halt, STOP_OPERAND_PROT);
 	}
 }
 
-void mmu_flush (int idx) {
+void mmu_flush (int idx)
+{
 	if (! BAZ[idx]) {
 		/* Был пуст после сброса или выталкивания */
 		return;
@@ -198,10 +200,14 @@ void mmu_flush (int idx) {
 	waddr = (waddr > 0100000) ? (waddr - 0100000) :
 		(waddr & 01777) | (TLB[waddr >> 10] << 10);
 	memory[waddr] = BRZ[idx];
+	BAZ[idx] = 0;
+/*if (sim_log && mmu_dev.dctrl) besm6_log ("    memory[%o] := %016llo", waddr, BRZ[idx]);*/
 }
 
-void mmu_update_oldest () {
+void mmu_update_oldest ()
+{
 	int i;
+
 	for (i = 0; i < 8; ++i) {
 		if (loses_to_all(i)) {
 			OLDEST = i;
@@ -211,8 +217,10 @@ void mmu_update_oldest () {
 	}
 }
 
-int mmu_match(int addr, int fail) {
+int mmu_match (int addr, int fail)
+{
 	int i;
+
 	for (i = 0; i < 8; ++i) {
 		if (addr == BAZ[i]) {
 			return i;
@@ -226,7 +234,8 @@ int mmu_match(int addr, int fail) {
  * по адресам пультовых регистров. Тест УУ проходит дальше всего
  * с mmu_flush_by_age().
  */
-void mmu_flush_by_age() {
+void mmu_flush_by_age()
+{
 	switch (FLUSH) {
 	case 0:
 		break;
@@ -244,7 +253,8 @@ void mmu_flush_by_age() {
 	++FLUSH;
 }
 
-void mmu_flush_by_number() {
+void mmu_flush_by_number()
+{
 	switch (FLUSH) {
 	case 0:
 		break;
@@ -253,7 +263,7 @@ void mmu_flush_by_number() {
 		set_wins (FLUSH-1);
 		if (FLUSH-1 == OLDEST)
 			mmu_update_oldest ();
-		BAZ[FLUSH-1] = 0;
+/*		BAZ[FLUSH-1] = 0;*/
 		if (FLUSH == 7) {
 			TABST = 0;
 			OLDEST = 0;
@@ -274,7 +284,7 @@ void mmu_store (int addr, t_value val)
 	if (addr == 0)
 		return;
 	if (sim_log && mmu_dev.dctrl) {
-		fprintf (sim_log, "--- %05o: запись ", addr);
+		fprintf (sim_log, "--- (%05o) запись ", addr);
 		fprint_sym (sim_log, 0, &val, 0, 0);
 		fprintf (sim_log, "\n");
 	}
@@ -342,11 +352,11 @@ t_value mmu_load (int addr)
 		} else {
 			/* С тумблерных регистров */
 			if (mmu_dev.dctrl)
-				besm6_debug("--- %05o: чтение ТР%o", PC, addr);
+				besm6_debug("--- (%05o) чтение ТР%o", PC, addr);
 			val = pult[addr];
 		}
 		if (sim_log && (mmu_dev.dctrl || cpu_dev.dctrl)) {
-			fprintf (sim_log, "--- %05o: чтение ", addr & BITS(15));
+			fprintf (sim_log, "--- (%05o) чтение ", addr & BITS(15));
 			fprint_sym (sim_log, 0, &val, 0, 0);
 			fprintf (sim_log, "\n");
 		}
@@ -354,7 +364,7 @@ t_value mmu_load (int addr)
 		/* На тумблерных регистрах контроля числа не бывает */
 		if (addr >= 010 && ! IS_NUMBER (val)) {
 			iintr_data = addr & 7;
-			besm6_debug ("--- %05o: контроль числа", addr);
+			besm6_debug ("--- (%05o) контроль числа", addr);
 			longjmp (cpu_halt, STOP_RAM_CHECK);
 		}
 	} else {
@@ -365,13 +375,13 @@ t_value mmu_load (int addr)
 			set_wins (matching);
 		val = BRZ[matching];
 		if (sim_log && (mmu_dev.dctrl || cpu_dev.dctrl)) {
-			fprintf (sim_log, "--- %05o: чтение ", addr & BITS(15));
+			fprintf (sim_log, "--- (%05o) чтение ", addr & BITS(15));
 			fprint_sym (sim_log, 0, &val, 0, 0);
 			fprintf (sim_log, " из БРЗ\n");
 		}
 		if (! IS_NUMBER (val)) {
 			iintr_data = matching;
-			besm6_debug ("--- %05o: контроль числа БРЗ", addr);
+			besm6_debug ("--- (%05o) контроль числа БРЗ", addr);
 			longjmp (cpu_halt, STOP_CACHE_CHECK);
 		}
 	}
@@ -419,7 +429,7 @@ void mmu_fetch_check (int addr)
 		if (page == 0) {
 			iintr_data = addr >> 10;
 			if (mmu_dev.dctrl)
-				besm6_debug ("--- %05o: защита команды", addr);
+				besm6_debug ("--- (%05o) защита команды", addr);
 			longjmp (cpu_halt, STOP_INSN_PROT);
 		}
 	}
@@ -504,14 +514,14 @@ t_value mmu_fetch (int addr)
 	val = mmu_prefetch(addr, 1);
 
 	if (sim_log && mmu_dev.dctrl) {
-		fprintf (sim_log, "--- %05o: выборка ", addr);
+		fprintf (sim_log, "--- (%05o) выборка ", addr);
 		fprint_sym (sim_log, 0, &val, 0, SWMASK ('I'));
 		fprintf (sim_log, "\n");
 	}
 
 	/* Тумблерные регистры пока только с командной сверткой */
 	if (addr >= 010 && ! IS_INSN (val)) {
-		besm6_debug ("--- %05o: контроль команды", addr);
+		besm6_debug ("--- (%05o) контроль команды", addr);
 		longjmp (cpu_halt, STOP_INSN_CHECK);
 	}
 	return val & BITS48;

@@ -242,7 +242,7 @@ void drum (int ctlr, uint32 cmd)
 		drum_sector = 0;
 		drum_memory = (cmd & DRUM_PAGE) >> 2 | (cmd & DRUM_BLOCK) >> 8;
 		if (drum_dev.dctrl)
-			besm6_debug ("*** %s МБ %c%d зона %02o память %05o-%05o",
+			besm6_debug ("### %s МБ %c%d зона %02o память %05o-%05o",
 				(drum_op & DRUM_READ) ? "чтение" : "запись",
 				ctlr + '1', (drum_zone >> 5 & 7), drum_zone & 037,
 				drum_memory, drum_memory + drum_nwords - 1);
@@ -253,7 +253,7 @@ void drum (int ctlr, uint32 cmd)
 		drum_sector = cmd & DRUM_SECTOR;
 		drum_memory = (cmd & (DRUM_PAGE | DRUM_PARAGRAF)) >> 2 | (cmd & DRUM_BLOCK) >> 8;
 		if (drum_dev.dctrl)
-			besm6_debug ("*** %s МБ %c%d зона %02o сектор %d память %05o-%05o",
+			besm6_debug ("### %s МБ %c%d зона %02o сектор %d память %05o-%05o",
 				(drum_op & DRUM_READ) ? "чтение" : "запись",
 				ctlr + '1', (drum_zone >> 5 & 7), drum_zone & 037,
 				drum_sector & 3,
@@ -274,7 +274,7 @@ void drum (int ctlr, uint32 cmd)
 			drum_read_sector (u);
 	} else {
 		if (drum_op & DRUM_PARITY_FLAG) {
-			besm6_log ("*** запись МБ с неправильной чётностью не реализована");
+			besm6_log ("### запись МБ с неправильной чётностью не реализована");
 			longjmp (cpu_halt, SCPE_NOFNC);
 		}
 		if (u->flags & UNIT_RO) {
