@@ -43,10 +43,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-#ifndef SDL_main
-#define besm6_draw_panel() 
-#endif
-
 /*
  * Регистр 027: сохранённые режимы УУ.
  * PSW: saved program status word.
@@ -337,7 +333,7 @@ t_stat cpu_reset (DEVICE *dptr)
 
 	GRP = MGRP = 0;
 	sim_brk_types = sim_brk_dflt = SWMASK ('E');
-	return sim_activate (&cpu_unit, 10000);
+	return sim_activate (&cpu_unit, 50000);
 }
 
 /*
@@ -346,7 +342,7 @@ t_stat cpu_reset (DEVICE *dptr)
 t_stat cpu_panel (UNIT * this)
 {
 	besm6_draw_panel();
-	return sim_activate (this, 10000);
+	return sim_activate (this, 50000);
 }
 
 /*
@@ -485,8 +481,8 @@ static void cmd_033 ()
 		break;
 	case 031:
 		/* имитация сигналов прерывания ГРП */
-		besm6_debug ("*** %05o%s: имитация прерываний ГРП %016llo",
-			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", ACC << 24);
+		/*besm6_debug ("*** %05o%s: имитация прерываний ГРП %016llo",
+			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", ACC << 24);*/
 		GRP |= (ACC & BITS(24)) << 24;
 		break;
 	case 032 ... 033:
@@ -901,7 +897,7 @@ void cpu_one_inst ()
 		} else {
 			RMR = 0;
 			ACC = mmu_load (Aex);
-		}	
+		}
 		if (ACC & BIT49)
 			ACC = (ACC + 1) & BITS48;
 		RAU = SET_LOGICAL (RAU);

@@ -21,8 +21,6 @@ typedef struct {
 	unsigned exponent;		/* offset by 64 */
 } alureg_t;				/* ALU register type */
 
-static alureg_t zeroword;
-
 static alureg_t ieee_to_alu (double d)
 {
 	alureg_t res;
@@ -74,20 +72,22 @@ static alureg_t negate (alureg_t word)
 	return word;
 }
 
-/* 48-й разряд -> 1, 47-й -> 2 и т.п.
+/*
+ * 48-й разряд -> 1, 47-й -> 2 и т.п.
  * Единица 1-го разряда и нулевое слово -> 48,
  * как в первоначальном варианте системы команд.
  */
-int besm6_highest_bit(t_value val) {
-    int n = 32, cnt = 0;
-    do {
-        t_value tmp = val;
-        if (tmp >>= n) {
-            cnt += n;
-            val = tmp;
-        }
-    } while (n >>= 1);
-    return 48 - cnt;
+int besm6_highest_bit (t_value val)
+{
+	int n = 32, cnt = 0;
+	do {
+		t_value tmp = val;
+		if (tmp >>= n) {
+			cnt += n;
+			val = tmp;
+		}
+	} while (n >>= 1);
+	return 48 - cnt;
 }
 
 /*
@@ -95,7 +95,7 @@ int besm6_highest_bit(t_value val) {
  * Результат помещается в регистры ACC и 40-1 разряды RMR.
  * 48-41 разряды RMR сохраняются.
  */
-static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
+static void normalize_and_round (alureg_t acc, t_uint64 mr, int rnd_rq)
 {
 	t_uint64 rr = 0;
 	int i;
@@ -109,19 +109,19 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 		if (r) {
 			int cnt = besm6_highest_bit (r) - 9;
 			r <<= cnt;
-			rr = rmr.mantissa >> (40 - cnt);
+			rr = mr >> (40 - cnt);
 			acc.mantissa = r | rr;
-			rmr.mantissa <<= cnt;
+			mr <<= cnt;
 			acc.exponent -= cnt;
 			goto chk_zero;
 		}
-		r = rmr.mantissa & BITS40;
+		r = mr & BITS40;
 		if (r) {
 			int cnt = besm6_highest_bit (r) - 9;
-			rr = rmr.mantissa;
+			rr = mr;
 			r <<= cnt;
 			acc.mantissa = r;
-			rmr.mantissa = 0;
+			mr = 0;
 			acc.exponent -= 40 + cnt;
 			goto chk_zero;
 		}
@@ -131,25 +131,25 @@ static void normalize_and_round (alureg_t acc, alureg_t rmr, int rnd_rq)
 		if (r) {
 			int cnt = besm6_highest_bit (r) - 9;
 			r = (r << cnt) | ((1LL << cnt) - 1);
-			rr = rmr.mantissa >> (40 - cnt);
+			rr = mr >> (40 - cnt);
 			acc.mantissa = BIT41 | (~r & BITS40) | rr;
-			rmr.mantissa <<= cnt;
+			mr <<= cnt;
 			acc.exponent -= cnt;
 			goto chk_zero;
 		}
-		r = ~rmr.mantissa & BITS40;
+		r = ~mr & BITS40;
 		if (r) {
 			int cnt = besm6_highest_bit (r) - 9;
-			rr = rmr.mantissa;
+			rr = mr;
 			r = (r << cnt) | ((1LL << cnt) - 1);
 			acc.mantissa = BIT41 | (~r & BITS40);
-			rmr.mantissa = 0;
+			mr = 0;
 			acc.exponent -= 40 + cnt;
 			goto chk_zero;
 		} else {
 			rr = 1;
 			acc.mantissa = BIT41;
-			rmr.mantissa = 0;
+			mr = 0;
 			acc.exponent -= 80;
 			goto chk_zero;
 		}
@@ -171,7 +171,7 @@ zero:		ACC = 0;
 
 	ACC = (t_value) (acc.exponent & BITS(7)) << 41 |
 		(acc.mantissa & BITS41);
-	RMR = RMR & ~BITS40 | rmr.mantissa & BITS40;
+	RMR = RMR & ~BITS40 | mr & BITS40;
 	/* При переполнении мантисса и младшие разряды порядка верны */
 	if (acc.exponent & 0x80) {
 		if (! (RAU & RAU_OVF_DISABLE))
@@ -186,7 +186,8 @@ zero:		ACC = 0;
  */
 void besm6_add (t_value val, int negate_acc, int negate_val)
 {
-	alureg_t acc, word, rmr, a1, a2;
+	t_uint64 mr;
+	alureg_t acc, word, a1, a2;
 	int diff, neg, rnd_rq = 0;
 
 	acc = toalu (ACC);
@@ -220,18 +221,18 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 		a1 = word;
 		a2 = acc;
 	}
-	rmr.exponent = rmr.mantissa = 0;
+	mr = 0;
 	neg = is_negative (a1);
 	if (diff == 0) {
 		/* Nothing to do. */
 	} else if (diff <= 40) {
-		rnd_rq = (rmr.mantissa = (a1.mantissa << (40 - diff)) & BITS40) != 0;
+		rnd_rq = (mr = (a1.mantissa << (40 - diff)) & BITS40) != 0;
 		a1.mantissa = ((a1.mantissa >> diff) |
 				(neg ? (~0ll << (40 - diff)) : 0)) & BITS42;
 	} else if (diff <= 80) {
 		diff -= 40;
 		rnd_rq = a1.mantissa != 0;
-		rmr.mantissa = ((a1.mantissa >> diff) |
+		mr = ((a1.mantissa >> diff) |
 				(neg ? (~0ll << (40 - diff)) : 0)) & BITS40;
 		if (neg) {
 			a1.mantissa = BITS42;
@@ -240,10 +241,10 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 	} else {
 		rnd_rq = a1.mantissa != 0;
 		if (neg) {
-			rmr.mantissa = BITS40;
+			mr = BITS40;
 			a1.mantissa = BITS42;
 		} else
-			rmr.mantissa = a1.mantissa = 0;
+			mr = a1.mantissa = 0;
 	}
 	acc.exponent = a2.exponent;
 	acc.mantissa = a1.mantissa + a2.mantissa;
@@ -254,11 +255,11 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 	case 2:
 	case 1:
 		rnd_rq |= acc.mantissa & 1;
-		rmr.mantissa = (rmr.mantissa >> 1) | ((acc.mantissa & 1) << 39);
+		mr = (mr >> 1) | ((acc.mantissa & 1) << 39);
 		acc.mantissa >>= 1;
 		++acc.exponent;
 	}
-	normalize_and_round (acc, rmr, rnd_rq);
+	normalize_and_round (acc, mr, rnd_rq);
 }
 
 /*
@@ -320,7 +321,7 @@ void besm6_divide (t_value val)
 	quotient = nrdiv(dividend, divisor);
 	acc = ieee_to_alu(quotient);
 
-	normalize_and_round (acc, zeroword, 0);
+	normalize_and_round (acc, 0, 0);
 }
 
 /*
@@ -331,8 +332,8 @@ void besm6_divide (t_value val)
 void besm6_multiply (t_value val)
 {
 	uint8           neg = 0;
-	alureg_t        acc, word, rmr, a, b;
-	t_uint64	alo, blo, ahi, bhi;
+	alureg_t        acc, word, a, b;
+	t_uint64	mr, alo, blo, ahi, bhi;
 
 	register t_uint64 l;
 
@@ -347,7 +348,7 @@ void besm6_multiply (t_value val)
 
 	a = acc;
 	b = word;
-	rmr.mantissa = rmr.exponent = 0;
+	mr = 0;
 
 	if (is_negative (a)) {
 		neg = 1;
@@ -367,19 +368,19 @@ void besm6_multiply (t_value val)
 
 	l = alo * blo + ((alo * bhi + ahi * blo) << 20);
 
-	rmr.mantissa = l & BITS40;
+	mr = l & BITS40;
 	l >>= 40;
 
 	acc.mantissa = l + ahi * bhi;
 
 	if (neg) {
-		rmr.mantissa = (~rmr.mantissa & BITS40) + 1;
-		acc.mantissa = ((~acc.mantissa & BITS40) + (rmr.mantissa >> 40))
+		mr = (~mr & BITS40) + 1;
+		acc.mantissa = ((~acc.mantissa & BITS40) + (mr >> 40))
 		    | BIT41 | BIT42;
-		rmr.mantissa &= BITS40;
+		mr &= BITS40;
 	}
 
-	normalize_and_round (acc, rmr, rmr.mantissa != 0);
+	normalize_and_round (acc, mr, mr != 0);
 }
 
 /*
@@ -394,7 +395,7 @@ void besm6_change_sign (int negate_acc)
 	if (negate_acc)
 		acc = negate (acc);
 	RMR = 0;
-	normalize_and_round (acc, zeroword, 0);
+	normalize_and_round (acc, 0, 0);
 }
 
 /*
@@ -408,7 +409,7 @@ void besm6_add_exponent (int val)
 	acc = toalu (ACC);
 	acc.exponent += val;
 	RMR = 0;
-	normalize_and_round (acc, zeroword, 0);
+	normalize_and_round (acc, 0, 0);
 }
 
 /*

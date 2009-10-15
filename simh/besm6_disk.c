@@ -266,7 +266,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 		UNIT *u = &disk_unit[disk_no];
 
 		/* Выдача в КМД адреса дорожки. */
-		disk_zone = cmd & BITS(11);
+		disk_zone = (cmd >> 1) & BITS(10);
 		if (disk_dev.dctrl)
 			besm6_debug ("::: управление КМД %c слово %04o: выдача адреса дорожки %04o",
 				ctlr + '3', cmd, disk_zone);
