@@ -13,6 +13,7 @@
  * either version 2 of the License, or (at your discretion) any later version.
  * See the accompanying file "COPYING" for more details.
  */
+#ifdef HAVE_LIBSDL
 #include <stdlib.h>
 #include <ftw.h>
 #include <SDL/SDL.h>
@@ -125,12 +126,11 @@ static void draw_lamp (int left, int top, int on)
 /*
  * Периодическая отрисовка: мигание лампочек.
  */
-static int draw_periodic()
+static void draw_periodic()
 {
-	int x, y, changed;
+	int x, y;
 	t_value val;
 
-	changed = 0;
 	for (y=0; y<8; ++y) {
 		val = BRZ [7-y];
 		if (val == old_BRZ [7-y])
@@ -139,9 +139,8 @@ static int draw_periodic()
 			draw_lamp (100 + x*12, 34 + 24*y, val >> (47-x) & 1);
 		}
 		old_BRZ [7-y] = val;
-		changed = 1;
+		SDL_UpdateRect (screen, 100, 34 + 24*y, 48*12, 58 + 24*y);
 	}
-	return changed;
 }
 
 /*
@@ -176,6 +175,8 @@ static void draw_static()
 		sprintf (message, "%d", 48-x);
 		render_utf8 (font_small, 106 + x*12, 10, 0, message);
 	}
+	/* Tell SDL to update the whole screen */
+	SDL_UpdateRect (screen, 0, 0, WIDTH, HEIGHT);
 }
 
 /*
@@ -266,18 +267,19 @@ void besm6_draw_panel ()
 	/* Lock surface if needed */
 	if (SDL_MUSTLOCK (screen) && SDL_LockSurface (screen) < 0)
 		return;
-	int changed = draw_periodic();
+	draw_periodic();
 
 	/* Unlock if needed */
 	if (SDL_MUSTLOCK (screen))
 		SDL_UnlockSurface (screen);
-
-	/* Tell SDL to update the whole screen */
-	if (changed)
-		SDL_UpdateRect (screen, 0, 0, WIDTH, HEIGHT);
 
 	/* Exit SIMH when window closed.*/
 	SDL_Event event;
 	if (SDL_PollEvent (&event) && event.type == SDL_QUIT)
 		longjmp (cpu_halt, SCPE_EXIT);
 }
+#else /* HAVE_LIBSDL */
+void besm6_draw_panel ()
+{
+}
+#endif /* HAVE_LIBSDL */

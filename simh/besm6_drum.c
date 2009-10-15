@@ -225,10 +225,12 @@ void drum (int ctlr, uint32 cmd)
 		/* Device not attached. */
 		longjmp (cpu_halt, SCPE_UNATT);
 	}
+#if 0
 	if (drum_op & (DRUM_PARITY_FLAG | DRUM_READ_OVERLAY)) {
 		/* Not implemented. */
 		longjmp (cpu_halt, SCPE_NOFNC);
 	}
+#endif
 	if (drum_op & DRUM_READ) {
 		if (drum_op & DRUM_PAGE_MODE)
 			drum_read (u);
