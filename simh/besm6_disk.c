@@ -366,6 +366,8 @@ void disk_ctl (int ctlr, uint32 cmd)
 			if (disk_dev.dctrl)
 				besm6_debug ("::: управление КМД %c слово %04o: опрос младших разрядов состояния",
 					ctlr + '3', cmd);
+/* Вычислено по текстам ОС Дубна.
+ * Диспак доволен. */
 #define STATUS_GOOD	0600001
 			if (disk_unit[disk_no].fileref)
 				disk_status = (STATUS_GOOD << 8) & BITS(12);

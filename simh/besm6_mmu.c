@@ -201,7 +201,8 @@ void mmu_flush (int idx)
 		(waddr & 01777) | (TLB[waddr >> 10] << 10);
 	memory[waddr] = BRZ[idx];
 	BAZ[idx] = 0;
-/*if (sim_log && mmu_dev.dctrl) besm6_log ("    memory[%o] := %016llo", waddr, BRZ[idx]);*/
+	/*if (sim_log && mmu_dev.dctrl)
+		besm6_log ("    memory[%o] := %016llo", waddr, BRZ[idx]);*/
 }
 
 void mmu_update_oldest ()
@@ -243,7 +244,6 @@ void mmu_flush_by_age()
 		set_wins (OLDEST);
 		mmu_update_oldest ();
 		mmu_flush (OLDEST);
-		BAZ[OLDEST] = 0;
 		if (FLUSH == 7) {
 			TABST = 0;
 			OLDEST = 0;
@@ -263,7 +263,6 @@ void mmu_flush_by_number()
 		set_wins (FLUSH-1);
 		if (FLUSH-1 == OLDEST)
 			mmu_update_oldest ();
-/*		BAZ[FLUSH-1] = 0;*/
 		if (FLUSH == 7) {
 			TABST = 0;
 			OLDEST = 0;
