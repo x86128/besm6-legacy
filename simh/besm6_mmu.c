@@ -440,25 +440,19 @@ void mmu_fetch_check (int addr)
 t_value mmu_prefetch (int addr, int actual)
 {
 	t_value val;
-	int i, matching = -1;
+	int i;
 
 	for (i = 0; i < 4; ++i) {
 		if (BAS[i] == addr) {
 			if (actual) {
 				brs_set_wins (i);
 			}
-			val = BRS[i];
-			matching = i;
-			break;
+			return BRS[i];
 		}
 	}
 
-	if (matching != -1)
-		return val;
-
 	for (i = 0; i < 4; ++i) {
 		if (brs_loses_to_all (i)) {
-			matching = i;
 			BAS[i] = addr;
 			if (actual) {
 				brs_set_wins (i);
@@ -478,7 +472,7 @@ t_value mmu_prefetch (int addr, int actual)
 		val = pult[addr];
 	else
     		val = memory[addr];
-	BRS[matching] = val;
+	BRS[i] = val;
 	return val;
 }
 
@@ -529,14 +523,25 @@ t_value mmu_fetch (int addr)
 void mmu_setrp (int idx, t_value val)
 {
 	uint32 p0, p1, p2, p3;
+        const uint32 mask = (MEMSIZE >> 10) - 1;
 
 	/* Младшие 5 разрядов 4-х регистров приписки упакованы
-	 * по 5 в 1-20 рр, 6-е разряды - в 29-32 рр, 7-е разряды - в 33-36 рр
+	 * по 5 в 1-20 рр, 6-е разряды - в 29-32 рр, 7-е разряды - в 33-36 рр и т.п.
 	 */
-	p0 = (val       & 037) | (((val>>28) & 1) << 5) | (((val>>32) & 1) << 6);
-	p1 = ((val>>5)  & 037) | (((val>>29) & 1) << 5) | (((val>>33) & 1) << 6);
-	p2 = ((val>>10) & 037) | (((val>>30) & 1) << 5) | (((val>>34) & 1) << 6);
-	p3 = ((val>>15) & 037) | (((val>>31) & 1) << 5) | (((val>>35) & 1) << 6);
+	p0 = (val       & 037) | (((val>>28) & 1) << 5) | (((val>>32) & 1) << 6) |
+       (((val>>36) &  1) << 7) | (((val>>40) & 1) << 8) | (((val>>44) & 1) << 9);
+	p1 = ((val>>5)  & 037) | (((val>>29) & 1) << 5) | (((val>>33) & 1) << 6) |
+       (((val>>37) &  1) << 7) | (((val>>41) & 1) << 8) | (((val>>45) & 1) << 9);
+	p2 = ((val>>10) & 037) | (((val>>30) & 1) << 5) | (((val>>34) & 1) << 6) |
+       (((val>>38) &  1) << 7) | (((val>>42) & 1) << 8) | (((val>>46) & 1) << 9);
+	p3 = ((val>>15) & 037) | (((val>>31) & 1) << 5) | (((val>>35) & 1) << 6) |
+       (((val>>39) &  1) << 7) | (((val>>43) & 1) << 8) | (((val>>47) & 1) << 9);
+
+        p0 &= mask;
+        p1 &= mask;
+        p2 &= mask;
+        p3 &= mask;
+
 	RP[idx] = p0 | p1 << 12 | p2 << 24 | (t_value) p3 << 36;
 	TLB[idx*4] = p0;
 	TLB[idx*4+1] = p1;
@@ -546,14 +551,15 @@ void mmu_setrp (int idx, t_value val)
 
 void mmu_setup ()
 {
+	const uint32 mask = (MEMSIZE >> 10) - 1;
 	int i;
 
 	/* Перепись РПi в TLBj. */
 	for (i=0; i<8; ++i) {
-		TLB[i*4] = RP[i] & 0177;
-		TLB[i*4+1] = RP[i] >> 12 & 0177;
-		TLB[i*4+2] = RP[i] >> 24 & 0177;
-		TLB[i*4+3] = RP[i] >> 36 & 0177;
+		TLB[i*4] = RP[i] & mask;
+		TLB[i*4+1] = RP[i] >> 12 & mask;
+		TLB[i*4+2] = RP[i] >> 24 & mask;
+		TLB[i*4+3] = RP[i] >> 36 & mask;
 	}
 }
 
