@@ -23,9 +23,13 @@
 /*
  * Use a 640x480 window with 32 bit pixels.
  */
-#define WIDTH		720
-#define HEIGHT		240
+#define WIDTH		800
+#define HEIGHT		400
 #define DEPTH		32
+
+#define STEPX		14
+#define STEPY		16
+
 #define FONTNAME	"LucidaSansRegular.ttf"
 #define FONTPATH1	"/usr/share/fonts"
 #define FONTPATH2	"/usr/lib/jvm"
@@ -40,8 +44,14 @@ static SDL_Color background;
 static const SDL_Color white = { 255, 255, 255, 0 };
 static const SDL_Color black = { 0,   0,   0,   0 };
 static const SDL_Color cyan  = { 0,   128, 128, 0 };
-static const SDL_Color grey  = { 32,  32,  32,  0 };
+static const SDL_Color grey  = { 64,  64,  64,  0 };
 static t_value old_BRZ [8];
+static t_value old_M [NREGS];
+
+static const int regnum[] = {
+	013, 012, 011, 010, 7, 6, 5, 4,
+	027, 016, 015, 014, 3, 2, 1, 020,
+};
 
 /*
  * Рисование текста в кодировке UTF-8, с антиалиасингом.
@@ -124,9 +134,29 @@ static void draw_lamp (int left, int top, int on)
 }
 
 /*
- * Периодическая отрисовка: мигание лампочек.
+ * Отрисовка лампочек БРЗ.
  */
-static void draw_periodic()
+static void draw_modifiers_periodic (int group, int left, int top)
+{
+	int x, y, reg, val;
+
+	for (y=0; y<8; ++y) {
+		reg = regnum [y + group*8];
+		val = M [reg];
+		if (val == old_M [reg])
+			continue;
+		old_M [reg] = val;
+		for (x=0; x<15; ++x) {
+			draw_lamp (left+76 + x*STEPX, top+28 + y*STEPY, val >> (14-x) & 1);
+		}
+		SDL_UpdateRect (screen, left+76, top+28 + y*STEPY, 15*STEPX, 58 + y*STEPY);
+	}
+}
+
+/*
+ * Отрисовка лампочек БРЗ.
+ */
+static void draw_brz_periodic (int top)
 {
 	int x, y;
 	t_value val;
@@ -135,18 +165,54 @@ static void draw_periodic()
 		val = BRZ [7-y];
 		if (val == old_BRZ [7-y])
 			continue;
-		for (x=0; x<48; ++x) {
-			draw_lamp (100 + x*12, 34 + 24*y, val >> (47-x) & 1);
-		}
 		old_BRZ [7-y] = val;
-		SDL_UpdateRect (screen, 100, 34 + 24*y, 48*12, 58 + 24*y);
+		for (x=0; x<48; ++x) {
+			draw_lamp (100 + x*STEPX, top+28 + y*STEPY, val >> (47-x) & 1);
+		}
+		SDL_UpdateRect (screen, 100, top+28 + y*STEPY, 48*STEPX, 58 + y*STEPY);
 	}
 }
 
 /*
- * Отрисовка статичной части панели БЭСМ-6.
+ * Отрисовка статичной части регистров-модификаторов.
  */
-static void draw_static()
+static void draw_modifiers_static (int group, int left, int top)
+{
+	int x, y, color, reg;
+	char message [40];
+	SDL_Rect area;
+
+	background = black;
+	foreground = cyan;
+
+	/* Оттеняем группы разрядов. */
+	color = grey.r << 16 | grey.g << 8 | grey.b;
+	for (x=3; x<15; x+=3) {
+		area.x = left + 74 + x*STEPX;
+		area.y = top + 26;
+		area.w = 2;
+		area.h = 8*STEPY + 2;
+		SDL_FillRect (screen, &area, color);
+	}
+	/* Названия регистров. */
+	for (y=0; y<8; ++y) {
+		reg = regnum [y + group*8];
+		sprintf (message, "М%2o", reg);
+		render_utf8 (font_big, left, top + 24 + y*STEPY, 1, message);
+		old_M [reg] = ~0;
+	}
+	/* Номера битов. */
+	for (x=0; x<15; ++x) {
+		sprintf (message, "%d", 15-x);
+		render_utf8 (font_small, left+82 + x*STEPX,
+			(x & 1) ? top+4 : top+10, 0, message);
+	}
+}
+
+/*
+ * Отрисовка статичной части регистров БРЗ.
+ */
+static void draw_brz_static (int top)
 {
 	int x, y, color;
 	char message [40];
@@ -158,25 +224,24 @@ static void draw_static()
 	/* Оттеняем группы разрядов. */
 	color = grey.r << 16 | grey.g << 8 | grey.b;
 	for (x=3; x<48; x+=3) {
-		area.x = 99 + x*12;
-		area.y = 26;
+		area.x = 98 + x*STEPX;
+		area.y = top + 26;
 		area.w = 2;
-		area.h = 24*8 + 2;
+		area.h = 8*STEPY + 2;
 		SDL_FillRect (screen, &area, color);
 	}
 	/* Названия регистров. */
 	for (y=7; y>=0; --y) {
-		sprintf (message, "брз %d", 7-y);
-		render_utf8 (font_big, 24, 24 + 24*y, 1, message);
+		sprintf (message, "БРЗ %d", 7-y);
+		render_utf8 (font_big, 24, top + 24 + y*STEPY, 1, message);
 		old_BRZ[y] = ~0;
 	}
 	/* Номера битов. */
 	for (x=0; x<48; ++x) {
 		sprintf (message, "%d", 48-x);
-		render_utf8 (font_small, 106 + x*12, 10, 0, message);
+		render_utf8 (font_small, 106 + x*STEPX,
+			(x & 1) ? top+10 : top+4, 0, message);
 	}
-	/* Tell SDL to update the whole screen */
-	SDL_UpdateRect (screen, 0, 0, WIDTH, HEIGHT);
 }
 
 /*
@@ -244,8 +309,8 @@ static void init_panel ()
 	}
 
 	/* Open the font file with the requested point size */
-	font_big = TTF_OpenFont (font_path, 24);
-	font_small = TTF_OpenFont (font_path, 8);
+	font_big = TTF_OpenFont (font_path, 16);
+	font_small = TTF_OpenFont (font_path, 9);
 	if (! font_big || ! font_small) {
 		fprintf(stderr, "SDL: couldn't load font %s: %s\n",
 			FONTNAME, SDL_GetError());
@@ -253,7 +318,14 @@ static void init_panel ()
 		exit (1);
 	}
 	atexit (besm6_close_panel);
-	draw_static();
+
+	/* Отрисовка статичной части панели БЭСМ-6. */
+	draw_modifiers_static (0, 24, 10);
+	draw_modifiers_static (1, 400, 10);
+	draw_brz_static (230);
+
+	/* Tell SDL to update the whole screen */
+	SDL_UpdateRect (screen, 0, 0, WIDTH, HEIGHT);
 }
 
 /*
@@ -267,7 +339,11 @@ void besm6_draw_panel ()
 	/* Lock surface if needed */
 	if (SDL_MUSTLOCK (screen) && SDL_LockSurface (screen) < 0)
 		return;
-	draw_periodic();
+
+	/* Периодическая отрисовка: мигание лампочек. */
+	draw_modifiers_periodic (0, 24, 10);
+	draw_modifiers_periodic (1, 400, 10);
+	draw_brz_periodic (230);
 
 	/* Unlock if needed */
 	if (SDL_MUSTLOCK (screen))
