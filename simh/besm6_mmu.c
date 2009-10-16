@@ -201,8 +201,11 @@ void mmu_flush (int idx)
 		(waddr & 01777) | (TLB[waddr >> 10] << 10);
 	memory[waddr] = BRZ[idx];
 	BAZ[idx] = 0;
-	/*if (sim_log && mmu_dev.dctrl)
-		besm6_log ("    memory[%o] := %016llo", waddr, BRZ[idx]);*/
+	if (sim_log && mmu_dev.dctrl) {
+		fprintf (sim_log, "--- (%05o) запись ", waddr);
+		fprint_sym (sim_log, 0, &BRZ[idx], 0, 0);
+		fprintf (sim_log, " из БРЗ[%d]\n", idx);
+	}
 }
 
 void mmu_update_oldest ()
