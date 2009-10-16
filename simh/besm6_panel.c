@@ -149,7 +149,7 @@ static void draw_modifiers_periodic (int group, int left, int top)
 		for (x=0; x<15; ++x) {
 			draw_lamp (left+76 + x*STEPX, top+28 + y*STEPY, val >> (14-x) & 1);
 		}
-		SDL_UpdateRect (screen, left+76, top+28 + y*STEPY, 15*STEPX, 58 + y*STEPY);
+		SDL_UpdateRect (screen, left+76, top+28 + y*STEPY, 15*STEPX, 12);
 	}
 }
 
@@ -169,7 +169,7 @@ static void draw_brz_periodic (int top)
 		for (x=0; x<48; ++x) {
 			draw_lamp (100 + x*STEPX, top+28 + y*STEPY, val >> (47-x) & 1);
 		}
-		SDL_UpdateRect (screen, 100, top+28 + y*STEPY, 48*STEPX, 58 + y*STEPY);
+		SDL_UpdateRect (screen, 100, top+28 + y*STEPY, 48*STEPX, 12);
 	}
 }
 

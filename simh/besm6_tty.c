@@ -30,7 +30,8 @@ char * dig[] = { 0, "5", "\r", "9", " ", "Щ", ",", ".", "\n", ")", "4", "Ш", "
 
 char ** reg = 0;
 
-void process(int sym) {
+void process (int sym)
+{
 	/* Требуется инверсия */
 	sym ^= 31;
 	switch (sym) {
@@ -44,36 +45,37 @@ void process(int sym) {
 		reg = lat;
 		break;
 	default:
-		fputs(reg[sym], stdout);
+		fputs (reg[sym], stdout);
 	}
 }
 
 int active = 0;
 int sym = 0;
 
-void tty_send(uint32 mask) {
+void tty_send (uint32 mask)
+{
 	/* Пока работаем только с одним (любым) устройством */
 	int c = mask != 0;
-	switch(active*2+c) {
+	switch (active*2+c) {
 	case 0:	/* idle */
 		break;
 	case 1: /* start bit */
 		active = 1;
 		break;
 	case 12: /* stop bit */
-		process(sym);
-		fflush(stdout);
+		process (sym);
+		fflush (stdout);
 		active = 0;
 		sym = 0;
 		break;
 	case 13: /* framing error */
-		putchar('#');
-		fflush(stdout);
+		putchar ('#');
+		fflush (stdout);
 		break;
 	default:
 		/* big endian ordering */
 		if (c) {
-			 sym |= 1<<(5-active);
+			 sym |= 1 << (5-active);
 		}
 		++active;
 		break;

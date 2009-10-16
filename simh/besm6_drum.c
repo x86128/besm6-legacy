@@ -118,6 +118,7 @@ t_stat drum_detach (UNIT *u)
 /*
  * Отладочная печать массива данных обмена.
  */
+#if 0
 static void log_io (UNIT *u)
 {
 	t_value *data, *sysdata;
@@ -152,6 +153,7 @@ static void log_io (UNIT *u)
 	}
         fprintf (sim_log, "\n");
 }
+#endif
 
 /*
  * Запись на барабан.
