@@ -24,7 +24,7 @@
 #define DRUM_PAGE_MODE		001000000	/* обмен целой страницей */
 #define DRUM_READ		000400000	/* чтение с барабана в память */
 #define DRUM_PAGE		000370000	/* номер страницы памяти */
-#define DRUM_BLOCK	       0140000000	/* номер блока памяти - 25-24 рр */
+#define DRUM_BLOCK	       0740000000	/* номер блока памяти - 27-24 рр */
 #define DRUM_PARAGRAF		000006000	/* номер абзаца */
 #define DRUM_UNIT		000001600	/* номер барабана */
 #define DRUM_CYLINDER		000000174	/* номер тракта на барабане */
