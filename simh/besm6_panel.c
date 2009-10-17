@@ -45,7 +45,7 @@ static const SDL_Color white = { 255, 255, 255, 0 };
 static const SDL_Color black = { 0,   0,   0,   0 };
 static const SDL_Color cyan  = { 0,   128, 128, 0 };
 static const SDL_Color grey  = { 64,  64,  64,  0 };
-static t_value old_BRZ [8];
+static t_value old_BRZ [8], old_GRP [2];
 static t_value old_M [NREGS];
 
 static const int regnum[] = {
@@ -154,6 +154,26 @@ static void draw_modifiers_periodic (int group, int left, int top)
 }
 
 /*
+ * Отрисовка лампочек ГРП и МГРП.
+ */
+static void draw_grp_periodic (int top)
+{
+	int x, y;
+	t_value val;
+
+	for (y=0; y<2; ++y) {
+		val = y ? MGRP : GRP;
+		if (val == old_GRP [y])
+			continue;
+		old_GRP [y] = val;
+		for (x=0; x<48; ++x) {
+			draw_lamp (100 + x*STEPX, top+28 + y*STEPY, val >> (47-x) & 1);
+		}
+		SDL_UpdateRect (screen, 100, top+28 + y*STEPY, 48*STEPX, 12);
+	}
+}
+
+/*
  * Отрисовка лампочек БРЗ.
  */
 static void draw_brz_periodic (int top)
@@ -210,6 +230,40 @@ static void draw_modifiers_static (int group, int left, int top)
 }
 
 /*
+ * Отрисовка статичной части регистров ГРП и МГРП.
+ */
+static void draw_grp_static (int top)
+{
+	int x, y, color;
+	char message [40];
+	SDL_Rect area;
+
+	background = black;
+	foreground = cyan;
+
+	/* Оттеняем группы разрядов. */
+	color = grey.r << 16 | grey.g << 8 | grey.b;
+	for (x=3; x<48; x+=3) {
+		area.x = 98 + x*STEPX;
+		area.y = top + 26;
+		area.w = 2;
+		area.h = 2*STEPY + 2;
+		SDL_FillRect (screen, &area, color);
+	}
+	/* Названия регистров. */
+	for (y=0; y<2; ++y) {
+		render_utf8 (font_big, 24, top + 24 + y*STEPY, 1, y ? "МГРП" : "ГРП");
+		old_GRP[y] = ~0;
+	}
+	/* Номера битов. */
+	for (x=0; x<48; ++x) {
+		sprintf (message, "%d", 48-x);
+		render_utf8 (font_small, 106 + x*STEPX,
+			(x & 1) ? top+10 : top+4, 0, message);
+	}
+}
+
+/*
  * Отрисовка статичной части регистров БРЗ.
  */
 static void draw_brz_static (int top)
@@ -235,12 +289,6 @@ static void draw_brz_static (int top)
 		sprintf (message, "БРЗ %d", 7-y);
 		render_utf8 (font_big, 24, top + 24 + y*STEPY, 1, message);
 		old_BRZ[y] = ~0;
-	}
-	/* Номера битов. */
-	for (x=0; x<48; ++x) {
-		sprintf (message, "%d", 48-x);
-		render_utf8 (font_small, 106 + x*STEPX,
-			(x & 1) ? top+10 : top+4, 0, message);
 	}
 }
 
@@ -322,6 +370,7 @@ static void init_panel ()
 	/* Отрисовка статичной части панели БЭСМ-6. */
 	draw_modifiers_static (0, 24, 10);
 	draw_modifiers_static (1, 400, 10);
+	draw_grp_static (180);
 	draw_brz_static (230);
 
 	/* Tell SDL to update the whole screen */
@@ -343,6 +392,7 @@ void besm6_draw_panel ()
 	/* Периодическая отрисовка: мигание лампочек. */
 	draw_modifiers_periodic (0, 24, 10);
 	draw_modifiers_periodic (1, 400, 10);
+	draw_grp_periodic (180);
 	draw_brz_periodic (230);
 
 	/* Unlock if needed */
