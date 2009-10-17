@@ -67,7 +67,7 @@ t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
 t_value ACC, RMR, GRP, MGRP;
 uint32 PRP, MPRP;
-uint32 READY; /* ready flags of various devices */
+uint32 READY, READY2; /* ready flags of various devices */
 
 extern const char *scp_error_messages[];
 
@@ -77,10 +77,6 @@ extern const char *scp_error_messages[];
 #define GRP_WIRED_BITS 01400743700000000LL
 
 #define PRP_WIRED_BITS 0	/* unknown? */
-
-/* после каждого изменения PRP или MPRP нужно выполнять PRP2GRP */
-#define PRP2GRP	do if (PRP&MPRP) GRP |= GRP_SLAVE; \
-		 else GRP &= ~GRP_SLAVE; while (0)
 
 int corr_stack;
 uint32 delay;
@@ -186,6 +182,8 @@ REG reg_reg[] = {
 { "RUU",   &RUU,        2, 9,  0, 1 },		/* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
 { "GRP",   &GRP,	8, 48, 0, 1, REG_VMIO},	/* главный регистр прерываний */
 { "MGRP",  &MGRP,	8, 48, 0, 1, REG_VMIO},	/* маска ГРП */
+{ "PRP",   &PRP,	8, 24, 0, 1 },		/* периферийный регистр прерываний */
+{ "MPRP",  &MPRP,	8, 24, 0, 1 },		/* маска ПРП */
 
 { "BRZ0",  &BRZ[0],	8, 50, 0, 1, REG_VMIO },
 { "BRZ1",  &BRZ[1],	8, 50, 0, 1, REG_VMIO },
@@ -257,6 +255,7 @@ DEVICE *sim_devices[] = {
 	&mmu_dev,
 	&clock_dev,
 	&printer_dev,
+	&console_dev,
 	0
 };
 
@@ -481,7 +480,6 @@ static void cmd_033 ()
 	case 030:
 		/* Гашение ПРП */
 		PRP &= ACC | PRP_WIRED_BITS;
-		PRP2GRP;
 		break;
 	case 031:
 		/* Имитация сигналов прерывания ГРП */
@@ -496,7 +494,6 @@ static void cmd_033 ()
 	case 034:
 		/* Запись в МПРП */
 		MPRP = ACC & 077777777;
-		PRP2GRP;
 		break;
 	case 035:
 		/* TODO: управление режимом имитации обмена
@@ -583,6 +580,7 @@ static void cmd_033 ()
 		break;
 	case 04031:
 		/* Опрос сигналов готовности (АЦПУ и пр.) */
+		besm6_debug("Reading READY");
 		ACC = READY;
 		break;
 	case 04034:
@@ -599,9 +597,9 @@ static void cmd_033 ()
 		ACC = 0;
 		break;
 	case 04102:
-		/* TODO: опрос сигналов готовности
-		 * перфокарт и перфолент */
-		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
+		/* Опрос сигналов готовности перфокарт и перфолент */
+		besm6_debug("Reading punchcard/punchtape READY @%05o", PC);
+		ACC = READY2;
 		break;
 	case 04103 ... 04106:
 		/* TODO: опрос состояния лентопротяжных механизмов */
@@ -1504,6 +1502,12 @@ t_stat sim_instr (void)
 		    sim_brk_test (PC, SWMASK ('E'))) {
 			besm6_draw_panel();
 			return STOP_IBKPT;		/* stop simulation */
+		}
+
+		if (PRP & MPRP) {
+			GRP |= GRP_SLAVE;
+		} else {
+			GRP &= ~GRP_SLAVE;
 		}
 
 		if (! iintr && ! (RUU & RUU_RIGHT_INSTR) &&

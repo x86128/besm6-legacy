@@ -81,3 +81,51 @@ void tty_send (uint32 mask)
 		break;
 	}
 }
+
+t_stat console_event (UNIT *u) {
+}
+
+UNIT console_unit [] = {
+	{ UDATA (console_event, UNIT_FIX, 0) },
+	{ UDATA (console_event, UNIT_FIX, 0) },
+};
+
+REG console_reg[] = {
+{ 0 }
+};
+
+MTAB console_mod[] = {
+	{ 0 }
+};
+
+t_stat console_reset (DEVICE *dptr);
+
+DEVICE console_dev = {
+	"CONS", console_unit, console_reg, console_mod,
+	2, 8, 19, 1, 8, 50,
+	NULL, NULL, &console_reset, NULL, NULL, NULL,
+	NULL, DEV_DEBUG
+};
+
+#define CONS_READY 0200
+#define CONS_ERROR 0100
+
+#define CONS_CAN_PRINT 01000
+
+/*
+ * Reset routine
+ */
+t_stat console_reset (DEVICE *dptr)
+{
+	sim_cancel (&console_unit[0]);
+	sim_cancel (&console_unit[1]);
+	READY2 = CONS_READY;
+	PRP |= CONS_CAN_PRINT;
+	return SCPE_OK;
+}
+
+void console_print (uint32 cmd)
+{
+	besm6_debug(">>> CONSUL: %03o", cmd & 0377);
+	 PRP |= CONS_CAN_PRINT;
+}
