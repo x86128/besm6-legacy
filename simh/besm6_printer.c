@@ -38,8 +38,8 @@ char line[2][128];
 #define PRN1_LINEFEED (1<<23)
 #define PRN2_LINEFEED (1<<22)
 
-#define SLOW_START	1000000
-#define FAST_START	10000
+#define SLOW_START	100*MSEC
+#define FAST_START	1*MSEC
 #define LINEFEED_SYNC	17	/* 20-25 мс / 1.4 мс */
 
 REG printer_reg[] = {
@@ -163,7 +163,7 @@ t_stat printer_event (UNIT *u)
 		GRP |= GRP_PRN1_SYNC >> num;
 		++curchar[num];
 		/* For next char */
-		sim_activate (u, 1400);
+		sim_activate (u, 140*USEC);
 		if (feed[num] && --feed[num] == 0) {
 			READY &= ~(040000000 >> num);
 		}
@@ -175,7 +175,7 @@ t_stat printer_event (UNIT *u)
 		if (printer_dev.dctrl)
 			besm6_debug(">>> АЦПУ%d 'ноль'", num);
 		/* For first sync after "zero" */
-		sim_activate (u, 1000);
+		sim_activate (u, 100*USEC);
 		break;
 	}
 	return SCPE_OK;

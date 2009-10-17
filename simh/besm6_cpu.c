@@ -338,7 +338,7 @@ t_stat cpu_reset (DEVICE *dptr)
 	GRP = MGRP = 0;
 	sim_brk_types = SWMASK ('E') | SWMASK('R') | SWMASK('W');
 	sim_brk_dflt = SWMASK ('E');
-	return sim_activate (&cpu_unit, 200000);
+	return sim_activate (&cpu_unit, 20*MSEC);
 }
 
 /*
@@ -347,7 +347,7 @@ t_stat cpu_reset (DEVICE *dptr)
 t_stat cpu_panel (UNIT * this)
 {
 	besm6_draw_panel();
-	return sim_activate (this, 200000);
+	return sim_activate (this, 20*MSEC);
 }
 
 /*
@@ -593,7 +593,7 @@ static void cmd_033 ()
 		break;
 	case 04031:
 		/* Опрос сигналов готовности (АЦПУ и пр.) */
-		besm6_debug("Reading READY");
+/*		besm6_debug("Reading READY");*/
 		ACC = READY;
 		break;
 	case 04034:
@@ -1556,7 +1556,7 @@ t_stat sim_instr (void)
 t_stat slow_clk (UNIT * this)
 {
 	GRP |= GRP_WATCHDOG;
-	return sim_activate (this, 80000);
+	return sim_activate (this, 8*MSEC);
 }
 
 /*
@@ -1566,7 +1566,7 @@ t_stat slow_clk (UNIT * this)
 t_stat fast_clk (UNIT * this)
 {
 	GRP |= GRP_TIMER;
-	return sim_activate (this, 20000);
+	return sim_activate (this, 2*MSEC);
 }
 
 
@@ -1578,8 +1578,8 @@ UNIT clocks[] = {
 t_stat clk_reset(DEVICE * dev)
 {
 	/* Схема автозапуска включается по нереализованной кнопке "МР" */
-	/*sim_activate (&clocks[0], 80000);*/
-	return sim_activate (&clocks[1], 20000);
+	/*sim_activate (&clocks[0], 80*MSEC);*/
+	return sim_activate (&clocks[1], 2*MSEC);
 }
 
 DEVICE clock_dev = {
