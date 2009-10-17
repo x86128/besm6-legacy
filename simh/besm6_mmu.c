@@ -301,6 +301,10 @@ void mmu_store (int addr, t_value val)
 	if (M[DWP] == addr && (M[PSW] & PSW_WRITE_WATCH))
 		longjmp(cpu_halt, STOP_STORE_ADDR_MATCH);
 
+	if (sim_brk_summ & SWMASK('W') &&
+	    sim_brk_test (addr, SWMASK('W')))
+		longjmp(cpu_halt, STOP_WWATCH);
+
 	/* Запись в тумблерные регистры - выталкивание БРЗ */
 	if (addr > 0100000 && addr < 0100010) {
 		mmu_flush_by_age();
@@ -341,6 +345,10 @@ t_value mmu_load (int addr)
 	/* ЗПСЧ: СЧ */
 	if (M[DWP] == addr && !(M[PSW] & PSW_WRITE_WATCH))
 		longjmp(cpu_halt, STOP_LOAD_ADDR_MATCH);
+
+	if (sim_brk_summ & SWMASK('R') &&
+	    sim_brk_test (addr, SWMASK('R')))
+		longjmp(cpu_halt, STOP_RWATCH);
 
 	matching = mmu_match(addr, -1);
 
