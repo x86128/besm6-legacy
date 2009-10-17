@@ -263,6 +263,8 @@ const char *sim_stop_messages[] = {
 	"Неизвестная ошибка",				/* Unknown error */
 	"Останов",					/* STOP */
 	"Точка останова",				/* Emulator breakpoint */
+	"Точка останова по считыванию",			/* Emulator read watchpoint */
+	"Точка останова по записи",			/* Emulator write watchpoint */
 	"Выход за пределы памяти",			/* Run out end of memory */
 	"Неверный код команды",				/* Invalid instruction */
 	"Контроль команды",				/* A data-tagged word fetched */
@@ -334,8 +336,9 @@ t_stat cpu_reset (DEVICE *dptr)
 		SPSW_INTR_DISABLE;
 
 	GRP = MGRP = 0;
-	sim_brk_types = sim_brk_dflt = SWMASK ('E');
-	return sim_activate (&cpu_unit, 50000);
+	sim_brk_types = SWMASK ('E') | SWMASK('R') | SWMASK('W');
+	sim_brk_dflt = SWMASK ('E');
+	return sim_activate (&cpu_unit, 200000);
 }
 
 /*
@@ -344,7 +347,7 @@ t_stat cpu_reset (DEVICE *dptr)
 t_stat cpu_panel (UNIT * this)
 {
 	besm6_draw_panel();
-	return sim_activate (this, 50000);
+	return sim_activate (this, 200000);
 }
 
 /*
@@ -479,6 +482,7 @@ static void cmd_033 ()
 		break;
 	case 030:
 		/* Гашение ПРП */
+		besm6_debug(">>> гашение ПРП");
 		PRP &= ACC | PRP_WIRED_BITS;
 		break;
 	case 031:
@@ -493,6 +497,7 @@ static void cmd_033 ()
 		break;
 	case 034:
 		/* Запись в МПРП */
+		besm6_debug(">>> запись в МПРП");
 		MPRP = ACC & 077777777;
 		break;
 	case 035:
@@ -530,6 +535,10 @@ static void cmd_033 ()
 		/* TODO: управление вводом с перфокарт */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
 		break;
+	case 0153:
+		/* гашение аппаратуры сопряжения с терминалами */
+		besm6_debug(">>> гашение АС: %08o", (uint32) ACC & BITS(24));
+		break;
 	case 0154 ... 0155:
 		/* TODO: управление выводом на перфокарты */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
@@ -545,6 +554,10 @@ static void cmd_033 ()
 	case 0174:
 		/* TODO: выдача кода в пульт оператора */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
+		break;
+	case 0177:
+		/* управление табло ГПВЦ СО АН СССР */
+		besm6_debug(">>> ТАБЛО: %08o", (uint32) ACC & BITS(24));
 		break;
 	case 04001 ... 04002:
 		/* TODO: считывание слога в режиме имитации обмена */
@@ -625,6 +638,10 @@ static void cmd_033 ()
 	case 04174:
 		/* TODO: считывание кода с пульта оператора */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
+		break;
+	case 04177:
+		/* чтение табло ГПВЦ СО АН СССР */
+		ACC = 0;
 		break;
 	default:
 		/* Неиспользуемые адреса */
@@ -1370,6 +1387,14 @@ t_stat sim_instr (void)
 		switch (r) {
 		default:
 			return r;
+		case STOP_RWATCH:
+		case STOP_WWATCH:
+			/* Step back one insn to reexecute it */
+			if (! (RUU & RUU_RIGHT_INSTR)) {
+                                --PC;
+                        }
+                        RUU ^= RUU_RIGHT_INSTR;
+			return r;
 		case STOP_BADCMD:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
 				return r;
@@ -1498,7 +1523,7 @@ t_stat sim_instr (void)
 			return STOP_RUNOUT;		/* stop simulation */
 		}
 
-		if (sim_brk_summ &&			/* breakpoint? */
+		if (sim_brk_summ & SWMASK('E') &&	/* breakpoint? */
 		    sim_brk_test (PC, SWMASK ('E'))) {
 			besm6_draw_panel();
 			return STOP_IBKPT;		/* stop simulation */
