@@ -170,7 +170,7 @@ zero:		ACC = 0;
 
 	ACC = (t_value) (acc.exponent & BITS(7)) << 41 |
 		(acc.mantissa & BITS41);
-	RMR = RMR & ~BITS40 | mr & BITS40;
+	RMR = (RMR & ~BITS40) | (mr & BITS40);
 	/* При переполнении мантисса и младшие разряды порядка верны */
 	if (acc.exponent & 0x80) {
 		if (! (RAU & RAU_OVF_DISABLE))
@@ -305,9 +305,7 @@ static double nrdiv (double n, double d)
  */
 void besm6_divide (t_value val)
 {
-	alureg_t acc, word;
-	int neg, o;
-	unsigned long i, c, bias = 0;
+	alureg_t acc;
 	double dividend, divisor, quotient;
 
 	if (((val ^ (val << 1)) & BIT41) == 0) {

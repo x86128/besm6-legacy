@@ -82,7 +82,9 @@ void tty_send (uint32 mask)
 	}
 }
 
-t_stat console_event (UNIT *u) {
+t_stat console_event (UNIT *u)
+{
+	return 0;
 }
 
 UNIT console_unit [] = {
