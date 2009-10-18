@@ -1232,8 +1232,8 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			longjmp (cpu_halt, STOP_BADCMD);
 		}
 		M[PSW] = (M[PSW] & PSW_WRITE_WATCH) |
-			M[SPSW] & (SPSW_INTR_DISABLE |
-			SPSW_MMAP_DISABLE | SPSW_PROT_DISABLE);
+			(M[SPSW] & (SPSW_INTR_DISABLE |
+			SPSW_MMAP_DISABLE | SPSW_PROT_DISABLE));
 		PC = M[(reg & 3) | 030];
 		RUU &= ~RUU_RIGHT_INSTR;
 		if (M[SPSW] & SPSW_RIGHT_INSTR)

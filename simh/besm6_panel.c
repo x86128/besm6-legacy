@@ -41,10 +41,10 @@ static TTF_Font *font_big;
 static TTF_Font *font_small;
 static SDL_Color foreground;
 static SDL_Color background;
-static const SDL_Color white = { 255, 255, 255, 0 };
-static const SDL_Color black = { 0,   0,   0,   0 };
-static const SDL_Color cyan  = { 0,   128, 128, 0 };
-static const SDL_Color grey  = { 64,  64,  64,  0 };
+static const SDL_Color white = { 255, 255, 255 };
+static const SDL_Color black = { 0,   0,   0   };
+static const SDL_Color cyan  = { 0,   128, 128 };
+static const SDL_Color grey  = { 64,  64,  64  };
 static t_value old_BRZ [8], old_GRP [2];
 static t_value old_M [NREGS];
 
@@ -78,6 +78,31 @@ static void render_utf8 (TTF_Font *font, int x, int y, int halign, char *message
 	/* Put text image to screen */
 	SDL_BlitSurface (text, 0, screen, &area);
 	SDL_FreeSurface (text);
+}
+
+static SDL_Surface *sprite_from_data (int width, int height,
+	const unsigned char *data)
+{
+	SDL_Surface *sprite, *optimized;
+	unsigned *s, r, g, b, y, x;
+
+	sprite = SDL_CreateRGBSurface (SDL_SWSURFACE,
+		width, height, DEPTH, 0, 0, 0, 0);
+	optimized = SDL_DisplayFormat (sprite);
+	SDL_FreeSurface (sprite);
+	sprite = optimized;
+	SDL_LockSurface (sprite);
+	for (y=0; y<height; ++y) {
+		s = (unsigned*) (sprite->pixels + y * sprite->pitch);
+		for (x=0; x<width; ++x) {
+			r = *data++;
+			g = *data++;
+			b = *data++;
+			*s++ = SDL_MapRGB (sprite->format, r, g, b);
+		}
+	}
+	SDL_UnlockSurface (sprite);
+	return sprite;
 }
 
 /*
@@ -117,20 +142,22 @@ static void draw_lamp (int left, int top, int on)
 	  "\0\0\0\25\5\5A\21\21h\32\32c\30\30c\30\30h\32\32A\21\21\25\5\5\0\0\0\0\0"
 	  "\0\0\0\0\0\0\0\0\0\0\0\0\0\14\2\2\14\2\2\14\2\2\14\2\2\0\0\0\0\0\0\0\0\0"
 	  "\0\0\0";
-	const unsigned char *p;
-	unsigned int *screenp, r, g, b, y, x;
+	static SDL_Surface *sprite_on, *sprite_off;
+	SDL_Rect area;
 
-	p = on ? lamp_on : lamp_off;
-	for (y=0; y<lamp_height; ++y) {
-		screenp = ((unsigned*) screen->pixels) +
-			(top + y) * WIDTH + left;
-		for (x=0; x<lamp_width; ++x) {
-			r = *p++;
-			g = *p++;
-			b = *p++;
-			*screenp++ = r<<16 | g<<8 | b;
-		}
+	if (! sprite_on) {
+		sprite_on = sprite_from_data (lamp_width, lamp_height,
+			lamp_on);
 	}
+	if (! sprite_off) {
+		sprite_off = sprite_from_data (lamp_width, lamp_height,
+			lamp_off);
+	}
+	area.x = left;
+	area.y = top;
+	area.w = lamp_width;
+	area.h = lamp_height;
+	SDL_BlitSurface (on ? sprite_on : sprite_off, 0, screen, &area);
 }
 
 /*
@@ -149,7 +176,6 @@ static void draw_modifiers_periodic (int group, int left, int top)
 		for (x=0; x<15; ++x) {
 			draw_lamp (left+76 + x*STEPX, top+28 + y*STEPY, val >> (14-x) & 1);
 		}
-		SDL_UpdateRect (screen, left+76, top+28 + y*STEPY, 15*STEPX, 12);
 	}
 }
 
@@ -169,7 +195,6 @@ static void draw_grp_periodic (int top)
 		for (x=0; x<48; ++x) {
 			draw_lamp (100 + x*STEPX, top+28 + y*STEPY, val >> (47-x) & 1);
 		}
-		SDL_UpdateRect (screen, 100, top+28 + y*STEPY, 48*STEPX, 12);
 	}
 }
 
@@ -189,7 +214,6 @@ static void draw_brz_periodic (int top)
 		for (x=0; x<48; ++x) {
 			draw_lamp (100 + x*STEPX, top+28 + y*STEPY, val >> (47-x) & 1);
 		}
-		SDL_UpdateRect (screen, 100, top+28 + y*STEPY, 48*STEPX, 12);
 	}
 }
 
@@ -385,19 +409,14 @@ void besm6_draw_panel ()
 	if (! screen)
 		init_panel ();
 
-	/* Lock surface if needed */
-	if (SDL_MUSTLOCK (screen) && SDL_LockSurface (screen) < 0)
-		return;
-
 	/* Периодическая отрисовка: мигание лампочек. */
 	draw_modifiers_periodic (0, 24, 10);
 	draw_modifiers_periodic (1, 400, 10);
 	draw_grp_periodic (180);
 	draw_brz_periodic (230);
 
-	/* Unlock if needed */
-	if (SDL_MUSTLOCK (screen))
-		SDL_UnlockSurface (screen);
+	/* Tell SDL to update the whole screen */
+	SDL_UpdateRect (screen, 0, 0, WIDTH, HEIGHT);
 
 	/* Exit SIMH when window closed.*/
 	SDL_Event event;
