@@ -379,9 +379,9 @@ utf8_putc (unsigned ch, FILE *fout)
  */
 static void cmd_002 ()
 {
-	if (sim_deb && cpu_dev.dctrl) {
-		fprintf (sim_deb, "\tАисп=%03o\n", Aex & 0377);
-	}
+#if 0
+	besm6_debug ("*** рег %03o", Aex & 0377);
+#endif
 	switch (Aex & 0377) {
 	case 0 ... 7:
 		/* Запись в БРЗ */
@@ -447,9 +447,10 @@ static void cmd_002 ()
  */
 static void cmd_033 ()
 {
-	if (sim_deb && cpu_dev.dctrl) {
-		fprintf (sim_deb, "\tАисп=%04o\n", Aex & 04177);
-	}
+#if 0
+	besm6_debug ("*** увв %04o, СМ[24:1]=%08o",
+		Aex & 04177, (uint32) ACC & BITS(24));
+#endif
 	switch (Aex & 04177) {
 	case 0:
 		/* Точно неизвестно, что это такое, но драйвер МД
@@ -510,10 +511,9 @@ static void cmd_033 ()
 		printer_hammer (Aex >= 050, Aex & 7, (uint32) (ACC & BITS(16)));
 		break;
 	case 0100 ... 0137:
-		/* TODO: управление лентопротяжными механизмами
+		/* Управление лентопротяжными механизмами
 		 * и гашение разрядов регистров признаков
-		 * окончания подвода зоны */
-		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
+		 * окончания подвода зоны. Игнорируем. */
 		break;
 	case 0140:
 		/* Запись в регистр телеграфных каналов */
@@ -607,7 +607,7 @@ static void cmd_033 ()
 		break;
 	case 04100:
 		/* TODO: опрос телеграфных каналов связи */
-		ACC = 0;
+		ACC = tty_query ();
 		break;
 	case 04102:
 		/* Опрос сигналов готовности перфокарт и перфолент */
@@ -615,8 +615,9 @@ static void cmd_033 ()
 		ACC = READY2;
 		break;
 	case 04103 ... 04106:
-		/* TODO: опрос состояния лентопротяжных механизмов */
-		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
+		/* Опрос состояния лентопротяжных механизмов.
+		 * Все устройства не готовы. */
+		ACC = BITS(24);
 		break;
 	case 04107:
 		/* TODO: опрос схемы контроля записи на МЛ */
@@ -647,6 +648,7 @@ static void cmd_033 ()
 		/* Неиспользуемые адреса */
 		besm6_debug ("*** %05o%s: УВВ %o - неправильный адрес ввода-вывода",
 			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", Aex);
+		ACC = 0;
 		break;
 	}
 }
@@ -1555,8 +1557,10 @@ t_stat sim_instr (void)
 
 t_stat slow_clk (UNIT * this)
 {
-	GRP |= GRP_WATCHDOG;
-	return sim_activate (this, 8*MSEC);
+	/*besm6_debug ("*** таймер 80 мсек");*/
+/*	GRP |= GRP_WATCHDOG;*/
+	GRP |= BIT(10);
+	return sim_activate (this, MSEC*125/2);
 }
 
 /*
@@ -1565,8 +1569,9 @@ t_stat slow_clk (UNIT * this)
  */
 t_stat fast_clk (UNIT * this)
 {
+	/*besm6_debug ("*** таймер 20 мсек");*/
 	GRP |= GRP_TIMER;
-	return sim_activate (this, 2*MSEC);
+	return sim_activate (this, 20*MSEC);
 }
 
 
@@ -1575,11 +1580,11 @@ UNIT clocks[] = {
 	{ UDATA(fast_clk, UNIT_FIX, 0) }
 };
 
-t_stat clk_reset(DEVICE * dev)
+t_stat clk_reset (DEVICE * dev)
 {
 	/* Схема автозапуска включается по нереализованной кнопке "МР" */
-	/*sim_activate (&clocks[0], 80*MSEC);*/
-	return sim_activate (&clocks[1], 2*MSEC);
+	sim_activate (&clocks[0], MSEC*125/2);
+	return sim_activate (&clocks[1], 20*MSEC);
 }
 
 DEVICE clock_dev = {

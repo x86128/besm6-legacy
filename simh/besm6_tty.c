@@ -54,6 +54,8 @@ int sym = 0;
 
 void tty_send (uint32 mask)
 {
+/*	besm6_debug ("*** телетайпы: передача %08o", mask);*/
+
 	/* Пока работаем только с одним (любым) устройством */
 	int c = mask != 0;
 	switch (active*2+c) {
@@ -80,6 +82,11 @@ void tty_send (uint32 mask)
 		++active;
 		break;
 	}
+}
+
+int tty_query ()
+{
+/*	besm6_debug ("*** телетайпы: приём");*/
 }
 
 t_stat console_event (UNIT *u)
@@ -129,5 +136,5 @@ t_stat console_reset (DEVICE *dptr)
 void console_print (uint32 cmd)
 {
 	besm6_debug(">>> CONSUL: %03o", cmd & 0377);
-	 PRP |= CONS_CAN_PRINT;
+	PRP |= CONS_CAN_PRINT;
 }
