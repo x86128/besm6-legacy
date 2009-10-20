@@ -49,26 +49,32 @@ void process (int sym)
 	}
 }
 
-int active = 0;
-int sym = 0;
+int tt_active = 0, vt_active = 0;
+int tt_sym = 0, vt_sym = 0;
+uint32 TTY = 0;
 
 void tty_send (uint32 mask)
 {
-/*	besm6_debug ("*** телетайпы: передача %08o", mask);*/
+	/* besm6_debug ("*** телетайпы: передача %08o", mask); */
 
+	TTY = mask;
+}
+
+void tt_print()
+{
 	/* Пока работаем только с одним (любым) устройством */
-	int c = mask != 0;
-	switch (active*2+c) {
+	int c = TTY != 0;
+	switch (tt_active*2+c) {
 	case 0:	/* idle */
 		break;
 	case 1: /* start bit */
-		active = 1;
+		tt_active = 1;
 		break;
 	case 12: /* stop bit */
-		process (sym);
+		process (tt_sym);
 		fflush (stdout);
-		active = 0;
-		sym = 0;
+		tt_active = 0;
+		tt_sym = 0;
 		break;
 	case 13: /* framing error */
 		putchar ('#');
@@ -77,16 +83,59 @@ void tty_send (uint32 mask)
 	default:
 		/* big endian ordering */
 		if (c) {
-			 sym |= 1 << (5-active);
+			 tt_sym |= 1 << (5-tt_active);
 		}
-		++active;
+		++tt_active;
 		break;
 	}
+}
+
+const char * koi7_rus_to_unicode [32] = {
+        "Ю", "А", "Б", "Ц", "Д", "Е", "Ф", "Г",
+        "Х", "И", "Й", "К", "Л", "М", "Н", "О",
+        "П", "Я", "Р", "С", "Т", "У", "Ж", "В",
+        "Ь", "Ы", "З", "Ш", "Э", "Щ", "Ч", "\0x7f",
+};
+
+
+
+void vt_print()
+{
+        /* Пока работаем только с одним (любым) устройством */
+        int c = TTY != 0;
+        switch (vt_active*2+c) {
+        case 0: /* idle */
+                break;
+        case 1: /* start bit */
+                vt_active = 1;
+                break;
+        case 18: /* stop bit */
+		vt_sym = ~vt_sym & 0x7f;
+		if (vt_sym < 0x60)
+	                fputc(vt_sym, stdout);
+		else
+			fputs(koi7_rus_to_unicode[vt_sym - 0x60], stdout);
+                vt_active = 0;
+                vt_sym = 0;
+                break;
+        case 19: /* framing error */
+                putchar ('#');
+                fflush (stdout);
+                break;
+        default:
+                /* little endian ordering */
+                if (c) {
+                         vt_sym |= 1 << (vt_active-1);
+                }
+                ++vt_active;
+                break;
+        }
 }
 
 int tty_query ()
 {
 /*	besm6_debug ("*** телетайпы: приём");*/
+	return 0;
 }
 
 t_stat console_event (UNIT *u)
