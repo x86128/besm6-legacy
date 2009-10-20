@@ -76,7 +76,7 @@ extern const char *scp_error_messages[];
  */
 #define GRP_WIRED_BITS 01400743700000000LL
 
-#define PRP_WIRED_BITS 0	/* unknown? */
+#define PRP_WIRED_BITS 0770000
 
 int corr_stack;
 uint32 delay;
@@ -606,7 +606,7 @@ static void cmd_033 ()
 		ACC = 0;
 		break;
 	case 04100:
-		/* TODO: опрос телеграфных каналов связи */
+		/* Опрос телеграфных каналов связи */
 		ACC = tty_query ();
 		break;
 	case 04102:
@@ -1533,9 +1533,8 @@ t_stat sim_instr (void)
 		}
 
 		if (PRP & MPRP) {
+			/* регистр хранящий, сбрасывается программно */
 			GRP |= GRP_SLAVE;
-		} else {
-			GRP &= ~GRP_SLAVE;
 		}
 
 		if (! iintr && ! (RUU & RUU_RIGHT_INSTR) &&
@@ -1559,8 +1558,7 @@ t_stat sim_instr (void)
 t_stat slow_clk (UNIT * this)
 {
 	/*besm6_debug ("*** таймер 80 мсек");*/
-/*	GRP |= GRP_WATCHDOG;*/
-	GRP |= BIT(10);
+	GRP |= GRP_SLOW_CLK;
 	return sim_activate (this, MSEC*125/2);
 }
 
