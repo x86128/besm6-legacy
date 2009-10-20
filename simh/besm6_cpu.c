@@ -1543,6 +1543,7 @@ t_stat sim_instr (void)
 		}
 
 		if (! iintr && ! (RUU & RUU_RIGHT_INSTR) &&
+		    ! (RUU & RUU_MOD_RK) &&
 		    ! (M[PSW] & PSW_INTR_DISABLE) && (GRP & MGRP)) {
 			/* external interrupt */
 			op_int_2();
