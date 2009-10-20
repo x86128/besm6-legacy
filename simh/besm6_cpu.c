@@ -43,26 +43,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-/*
- * Регистр 027: сохранённые режимы УУ.
- * PSW: saved program status word.
- */
-#define SPSW_MMAP_DISABLE	000001	/* БлП - блокировка приписки */
-#define SPSW_PROT_DISABLE	000002	/* БлЗ - блокировка защиты */
-#define SPSW_EXTRACODE		000004	/* РежЭ - режим экстракода */
-#define SPSW_INTERRUPT		000010	/* РежПр - режим прерывания */
-#define SPSW_MOD_RK		000020	/* ПрИК(РК) - на регистр РК принята
-					   команда, которая должна быть
-					   модифицирована регистром М[16] */
-#define SPSW_MOD_RR		000040	/* ПрИК(РР) - на регистре РР находится
-					   команда, выполненная с модификацией */
-#define SPSW_UNKNOWN		000100	/* НОК? вписано карандашом в 9 томе */
-#define SPSW_RIGHT_INSTR	000400	/* ПрК - признак правой команды */
-#define SPSW_NEXT_RK		001000	/* ГД./ДК2 - на регистр РК принята
-					   команда, следующая после вызвавшей
-					   прерывание */
-#define SPSW_INTR_DISABLE	002000	/* БлПр - блокировка внешнего прерывания */
-
 t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
 t_value ACC, RMR, GRP, MGRP;
@@ -268,10 +248,10 @@ const char *sim_stop_messages[] = {
 	"Выход за пределы памяти",			/* Run out end of memory */
 	"Неверный код команды",				/* Invalid instruction */
 	"Контроль команды",				/* A data-tagged word fetched */
-        "Команда в чужом листе",			/* Paging error during fetch */
-        "Число в чужом листе",				/* Paging error during load/store */
-        "Контроль числа МОЗУ",				/* RAM parity error */
-        "Контроль числа БРЗ",				/* Write cache parity error */
+	"Команда в чужом листе",			/* Paging error during fetch */
+	"Число в чужом листе",				/* Paging error during load/store */
+	"Контроль числа МОЗУ",				/* RAM parity error */
+	"Контроль числа БРЗ",				/* Write cache parity error */
 	"Переполнение АУ",				/* Arith. overflow */
 	"Деление на нуль",				/* Division by zero or denorm */
 	"Двойное внутреннее прерывание",		/* SIMH: Double internal interrupt */
@@ -347,7 +327,7 @@ t_stat cpu_reset (DEVICE *dptr)
 t_stat cpu_panel (UNIT * this)
 {
 	besm6_draw_panel();
-	return sim_activate (this, 20*MSEC);
+	return sim_activate (this, 200*MSEC);
 }
 
 /*
@@ -372,6 +352,35 @@ utf8_putc (unsigned ch, FILE *fout)
 	putc (ch >> 12 | 0xe0, fout);
 	putc (((ch >> 6) & 0x3f) | 0x80, fout);
 	putc ((ch & 0x3f) | 0x80, fout);
+}
+
+/*
+ * *call ОКНО - так называлась служебная подпрограмма в мониторной
+ * системе "Дубна", которая печатала полное состояние всех регистров.
+ */
+void besm6_okno (const char *message)
+{
+	besm6_log_cont ("_%%%%%% %s: ", message);
+	if (sim_log)
+		besm6_fprint_cmd (sim_log, RK);
+	besm6_log ("_");
+
+	/* СчАС, системные индекс-регистры 020-035. */
+	besm6_log ("_    СчАС:%05o  20:%05o  21:%05o  27:%05o  32:%05o  33:%05o  34:%05o  35:%05o",
+		PC, M[020], M[021], M[027], M[032], M[033], M[034], M[035]);
+	/* Индекс-регистры 1-7. */
+	besm6_log ("_       1:%05o   2:%05o   3:%05o   4:%05o   5:%05o   6:%05o   7:%05o",
+		M[1], M[2], M[3], M[4], M[5], M[6], M[7]);
+	/* Индекс-регистры 010-017. */
+	besm6_log ("_      10:%05o  11:%05o  12:%05o  13:%05o  14:%05o  15:%05o  16:%05o  17:%05o",
+		M[010], M[011], M[012], M[013], M[014], M[015], M[016], M[017]);
+	/* Сумматор, РМР, режимы АУ и УУ. */
+	besm6_log ("_      СМ:%04o %04o %04o %04o  РМР:%04o %04o %04o %04o  РАУ:%02o    РУУ:%03o",
+		(int) (ACC >> 36) & BITS(12), (int) (ACC >> 24) & BITS(12),
+		(int) (ACC >> 12) & BITS(12), (int) ACC & BITS(12),
+		(int) (RMR >> 36) & BITS(12), (int) (RMR >> 24) & BITS(12),
+		(int) (RMR >> 12) & BITS(12), (int) RMR & BITS(12),
+		RAU, RUU);
 }
 
 /*
@@ -666,7 +675,7 @@ static void cmd_033 ()
  */
 void cpu_one_inst ()
 {
-	int reg, opcode, addr, nextpc, nextaddrmod = 0;
+	int reg, opcode, addr, nextpc;
 
 	corr_stack = 0;
 	t_value word = mmu_fetch (PC);
@@ -709,8 +718,9 @@ void cpu_one_inst ()
 	}
 
 	if (RUU & RUU_MOD_RK) {
-                addr = ADDR (addr + M[MOD]);
-        }
+		addr = ADDR (addr + M[MOD]);
+		RUU &= ~RUU_MOD_RK;
+	}
 
 	delay = 0;
 
@@ -1057,9 +1067,8 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		rg = Aex & (IS_SUPERVISOR (RUU) ? 037 : 017);
 		ad = ADDR (ACC);
-		if ((M[PSW] & PSW_MMAP_DISABLE) &&
-                                 (rg == IBP || rg == DWP))
-                                M[rg] |= BIT(16);
+		if ((M[PSW] & PSW_MMAP_DISABLE) && (rg == IBP || rg == DWP))
+			M[rg] |= BIT(16);
 		M[0] = 0;
 		if (rg != 017) {
 			M[017] = ADDR (M[017] - 1);
@@ -1088,7 +1097,7 @@ load_modifier:	Aex = ADDR (addr + M[reg]);
 transfer_modifier:	M[Aex & 037] = M[reg];
 			if ((M[PSW] & PSW_MMAP_DISABLE) &&
 			    ((Aex & 037) == IBP || (Aex & 037) == DWP))
-                                M[Aex & 037] |= BIT(16);
+				M[Aex & 037] |= BIT(16);
 
 		} else
 			M[Aex & 017] = M[reg];
@@ -1124,6 +1133,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 	case 0210:					/* э21 */
 	stop_as_extracode:
 		Aex = ADDR (addr + M[reg]);
+		/*besm6_okno ("экстракод");*/
 		/* Адрес возврата из экстракода. */
 		M[ERET] = nextpc;
 		/* Сохранённые режимы УУ. */
@@ -1145,7 +1155,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 	case 0220:					/* мода, utc */
 		Aex = ADDR (addr + M[reg]);
 		M[MOD] = Aex;
-		nextaddrmod = 1;
+		RUU |= RUU_MOD_RK;
 		delay = 4;
 		break;
 	case 0230:					/* мод, wtc */
@@ -1155,7 +1165,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 		}
 		Aex = ADDR (addr + M[reg]);
 		M[MOD] = ADDR (mmu_load (Aex));
-		nextaddrmod = 1;
+		RUU |= RUU_MOD_RK;
 		delay = MEAN_TIME (13, 3);
 		break;
 	case 0240:					/* уиа, vtm */
@@ -1254,6 +1264,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			RUU |= RUU_MOD_RK;
 		else
 			RUU &= ~RUU_MOD_RK;
+		/*besm6_okno ("Выход из прерывания");*/
 		delay = 7;
 		break;
 	case 0330:					/* стоп, stop */
@@ -1305,24 +1316,15 @@ branch_zero:	Aex = addr;
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	}
-
-	/*
-	 * Команда выполнилась успешно: можно сбросить признаки
-	 * модификации адреса, если они не были только что установлены.
-	 */
-	if (nextaddrmod)
-		RUU |= RUU_MOD_RK;
-	else {
-		RUU &= ~RUU_MOD_RK;
-	}
 }
 
 /*
  * Операция прерывания 1: внутреннее прерывание.
  * Описана в 9-м томе технического описания БЭСМ-6, страница 119.
  */
-void op_int_1 ()
+void op_int_1 (const char *msg)
 {
+	/*besm6_okno (msg);*/
 	M[SPSW] = (M[PSW] & (PSW_INTR_DISABLE | PSW_MMAP_DISABLE |
 		PSW_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
 	if (RUU & RUU_RIGHT_INSTR)
@@ -1344,6 +1346,7 @@ void op_int_1 ()
  */
 void op_int_2 ()
 {
+	/*besm6_okno ("Внешнее прерывание");*/
 	M[SPSW] = (M[PSW] & (PSW_INTR_DISABLE | PSW_MMAP_DISABLE |
 		PSW_PROT_DISABLE)) | IS_SUPERVISOR (RUU);
 	M[IRET] = PC;
@@ -1399,21 +1402,21 @@ t_stat sim_instr (void)
 		case STOP_WWATCH:
 			/* Step back one insn to reexecute it */
 			if (! (RUU & RUU_RIGHT_INSTR)) {
-                                --PC;
-                        }
-                        RUU ^= RUU_RIGHT_INSTR;
+				--PC;
+			}
+			RUU ^= RUU_RIGHT_INSTR;
 			return r;
 		case STOP_BADCMD:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
 				return r;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			// SPSW_NEXT_RK is not important for this interrupt
 			GRP |= GRP_ILL_INSN;
 			break;
 		case STOP_INSN_CHECK:
 			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
 				return r;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			// SPSW_NEXT_RK must be 0 for this interrupt; it is already
 			GRP |= GRP_INSN_CHECK;
 			break;
@@ -1424,7 +1427,7 @@ t_stat sim_instr (void)
 				++PC;
 			}
 			RUU ^= RUU_RIGHT_INSTR;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			// SPSW_NEXT_RK must be 1 for this interrupt
 			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_INSN_PROT;
@@ -1436,7 +1439,7 @@ t_stat sim_instr (void)
 				++PC;
 			}
 			RUU ^= RUU_RIGHT_INSTR;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			M[SPSW] |= SPSW_NEXT_RK;
 			// The offending virtual page is in bits 5-9
 			GRP |= GRP_OPRND_PROT;
@@ -1445,7 +1448,7 @@ t_stat sim_instr (void)
 		case STOP_RAM_CHECK:
 			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
 				return r;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			// The offending interleaved block # is in bits 1-3.
 			GRP |= GRP_CHECK | GRP_RAM_CHECK;
 			GRP = GRP_SET_BLOCK (GRP, iintr_data);
@@ -1453,7 +1456,7 @@ t_stat sim_instr (void)
 		case STOP_CACHE_CHECK:
 			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
 				return r;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			// The offending BRZ # is in bits 1-3.
 			GRP |= GRP_CHECK;
 			GRP &= ~GRP_RAM_CHECK;
@@ -1466,7 +1469,7 @@ t_stat sim_instr (void)
 				++PC;
 			}
 			RUU ^= RUU_RIGHT_INSTR;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_BREAKPOINT;
 			break;
@@ -1477,7 +1480,7 @@ t_stat sim_instr (void)
 				++PC;
 			}
 			RUU ^= RUU_RIGHT_INSTR;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_WATCHPT_R;
 			break;
@@ -1488,7 +1491,7 @@ t_stat sim_instr (void)
 				++PC;
 			}
 			RUU ^= RUU_RIGHT_INSTR;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			M[SPSW] |= SPSW_NEXT_RK;
 			GRP |= GRP_WATCHPT_W;
 			break;
@@ -1500,7 +1503,7 @@ t_stat sim_instr (void)
 			    ((M[PSW] & PSW_INTR_HALT) ||	/* ПоП */
 			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
 				return r;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			GRP |= GRP_OVERFLOW|GRP_RAM_CHECK;
 			break;
 		case STOP_DIVZERO:
@@ -1508,7 +1511,7 @@ t_stat sim_instr (void)
 			    ((M[PSW] & PSW_INTR_HALT) ||	/* ПоП */
 			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
 				return r;
-			op_int_1();
+			op_int_1 (sim_stop_messages[r]);
 			GRP |= GRP_DIVZERO|GRP_RAM_CHECK;
 			break;
 		}
@@ -1543,7 +1546,6 @@ t_stat sim_instr (void)
 		}
 
 		if (! iintr && ! (RUU & RUU_RIGHT_INSTR) &&
-		    ! (RUU & RUU_MOD_RK) &&
 		    ! (M[PSW] & PSW_INTR_DISABLE) && (GRP & MGRP)) {
 			/* external interrupt */
 			op_int_2();
@@ -1580,8 +1582,6 @@ t_stat fast_clk (UNIT * this)
 }
 
 extern uint32 TTY;
-
-static int sym = 0, active = 0;
 
 t_stat vt_clk (UNIT * this)
 {
