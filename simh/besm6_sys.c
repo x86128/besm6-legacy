@@ -95,6 +95,7 @@ int besm6_opcode (char *instr)
 
 /*
  * Выдача на консоль и в файл протокола.
+ * Если первый символ формата - подчерк, на консоль не печатаем.
  * Добавляет перевод строки.
  */
 void besm6_log (const char *fmt, ...)
@@ -102,18 +103,20 @@ void besm6_log (const char *fmt, ...)
 	va_list args;
 
 	va_start (args, fmt);
-	vprintf (fmt, args);
-	printf ("\r\n");
-	va_end (args);
+	if (*fmt == '_')
+		++fmt;
+	else {
+		vprintf (fmt, args);
+		printf ("\r\n");
+	}
 	if (sim_log) {
-		va_start (args, fmt);
 		vfprintf (sim_log, fmt, args);
 		if (sim_log == stdout)
 			fprintf (sim_log, "\r");
 		fprintf (sim_log, "\n");
 		fflush (sim_log);
-		va_end (args);
 	}
+	va_end (args);
 }
 
 /*
@@ -124,14 +127,15 @@ void besm6_log_cont (const char *fmt, ...)
 	va_list args;
 
 	va_start (args, fmt);
-	vprintf (fmt, args);
-	va_end (args);
+	if (*fmt == '_')
+		++fmt;
+	else
+		vprintf (fmt, args);
 	if (sim_log) {
-		va_start (args, fmt);
 		vfprintf (sim_log, fmt, args);
 		fflush (sim_log);
-		va_end (args);
 	}
+	va_end (args);
 }
 
 /*
@@ -145,14 +149,12 @@ void besm6_debug (const char *fmt, ...)
 	va_start (args, fmt);
 	vprintf (fmt, args);
 	printf ("\r\n");
-	va_end (args);
 	if (sim_deb && sim_deb != stdout) {
-		va_start (args, fmt);
 		vfprintf (sim_deb, fmt, args);
 		fprintf (sim_deb, "\n");
 		fflush (sim_deb);
-		va_end(args);
 	}
+	va_end (args);
 }
 
 /*
