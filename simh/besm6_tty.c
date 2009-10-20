@@ -113,10 +113,25 @@ void vt_print()
                 break;
         case 18: /* stop bit */
 		vt_sym = ~vt_sym & 0x7f;
-		if (vt_sym < 0x60)
-	                fputc(vt_sym, stdout);
-		else
-			fputs(koi7_rus_to_unicode[vt_sym - 0x60], stdout);
+		if (vt_sym < 0x60) {
+			if (vt_sym < ' ')
+				switch (vt_sym) {
+				case '\a':
+				case '\b':
+				case '\t':
+				case '\n':
+				case '\v':
+				case '\f':
+				case '\r':
+				case '\033':
+					break;
+				default:
+					/* Пропускаем нетекстовые символы */
+					vt_sym = ' ';
+				}
+			fputc (vt_sym, stdout);
+		} else
+			fputs (koi7_rus_to_unicode[vt_sym - 0x60], stdout);
 		fflush(stdout);
                 vt_active = 0;
                 vt_sym = 0;
@@ -237,6 +252,8 @@ void vt_receive()
 		if (vt_typed < 0) {
 			sim_interval = 0;
 		} else if (vt_typed <= 0177) {
+			if (vt_typed == '\r')
+				vt_typed = 3;	/* ^C - конец строки */
 			vt_instate = 1;
 			TTY_IN = OPER;		/* start bit */
 			GRP |= GRP_TTY_START;	/* не используется ? */
