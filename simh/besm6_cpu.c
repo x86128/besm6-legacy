@@ -646,6 +646,7 @@ static void cmd_033 ()
 		break;
 	default:
 		/* Неиспользуемые адреса */
+		if (sim_deb && cpu_dev.dctrl)
 		besm6_debug ("*** %05o%s: УВВ %o - неправильный адрес ввода-вывода",
 			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", Aex);
 		ACC = 0;
@@ -1582,6 +1583,7 @@ t_stat vt_clk (UNIT * this)
 {
 	GRP |= MGRP & BIT(19);
 	vt_print();
+	vt_receive();
 	return sim_activate (this, 1000*MSEC/300);
 }
 

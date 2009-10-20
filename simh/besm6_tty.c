@@ -51,19 +51,21 @@ void process (int sym)
 
 int tt_active = 0, vt_active = 0;
 int tt_sym = 0, vt_sym = 0;
-uint32 TTY = 0;
+int vt_typed = 0, vt_instate = 0;
+
+uint32 TTY_OUT = 0, TTY_IN = 0;
 
 void tty_send (uint32 mask)
 {
 	/* besm6_debug ("*** телетайпы: передача %08o", mask); */
 
-	TTY = mask;
+	TTY_OUT = mask;
 }
 
 void tt_print()
 {
 	/* Пока работаем только с одним (любым) устройством */
-	int c = TTY != 0;
+	int c = TTY_OUT != 0;
 	switch (tt_active*2+c) {
 	case 0:	/* idle */
 		break;
@@ -102,7 +104,7 @@ const char * koi7_rus_to_unicode [32] = {
 void vt_print()
 {
         /* Пока работаем только с одним (любым) устройством */
-        int c = TTY != 0;
+        int c = TTY_OUT != 0;
         switch (vt_active*2+c) {
         case 0: /* idle */
                 break;
@@ -115,6 +117,7 @@ void vt_print()
 	                fputc(vt_sym, stdout);
 		else
 			fputs(koi7_rus_to_unicode[vt_sym - 0x60], stdout);
+		fflush(stdout);
                 vt_active = 0;
                 vt_sym = 0;
                 break;
@@ -132,10 +135,49 @@ void vt_print()
         }
 }
 
+/* Терминал Ф4 - операторский */
+#define OPER 004000000
+
+void vt_receive()
+{
+	t_stat r;
+	switch (vt_instate) {
+	case 0:
+		r = sim_poll_kbd();
+		if (r == SCPE_STOP) {
+			sim_interval = 0;
+		} else if (r != SCPE_OK) {
+			vt_typed = r - SCPE_KFLAG;
+			vt_instate = 1;
+			TTY_IN = OPER;		/* start bit */
+			GRP |= GRP_TTY_START;	/* не используется ? */
+		}
+		break;
+	case 1 ... 7:
+		TTY_IN = (vt_typed & (1 << (vt_instate-1))) ? 0 : OPER;
+		vt_instate++;
+		break;
+	case 8:
+		vt_typed = (vt_typed & 0x55) + ((vt_typed >> 1) & 0x55);
+		vt_typed = (vt_typed & 0x33) + ((vt_typed >> 2) & 0x33);
+		vt_typed = (vt_typed & 0x0F) + ((vt_typed >> 4) & 0x0F);
+		TTY_IN = vt_typed & 1 ? 0 : OPER;	/* even parity */
+		vt_instate++;
+		break;
+	case 9 ... 11:
+		TTY_IN = 0;	/* stop bits */
+		vt_instate++;
+		break;
+	case 12:
+		vt_instate = 0;	/* ready for the next char */
+		break;
+	}
+}
+
 int tty_query ()
 {
 /*	besm6_debug ("*** телетайпы: приём");*/
-	return 0;
+	return TTY_IN;
 }
 
 t_stat console_event (UNIT *u)
