@@ -35,6 +35,7 @@ char line[2][128];
 #define PRN1_NOT_READY (1<<19)
 #define PRN2_NOT_READY (1<<18)
 
+/* 1 = можно пользоваться молоточками, 0 - бумага в процессе протяжки */
 #define PRN1_LINEFEED (1<<23)
 #define PRN2_LINEFEED (1<<22)
 
@@ -116,7 +117,7 @@ void printer_control (int num, uint32 cmd)
 	}
 	switch (cmd) {
 	case 1:		/* linefeed */
-		READY |= PRN1_LINEFEED >> num;
+		READY &= ~(PRN1_LINEFEED >> num);
 		feed[num] = LINEFEED_SYNC;
 		offset_gost_write (line[num], 128, stdout);
 		puts("\r\n");
@@ -125,6 +126,7 @@ void printer_control (int num, uint32 cmd)
 	case 4: 	/* start */
 		/* стартуем из состояния прогона для надежности */
 		feed[num] = LINEFEED_SYNC;
+		READY &= ~(PRN1_LINEFEED >> num);
 		if (rampup[num])
 			sim_activate (u, rampup[num]);
 		rampup[num] = 0;
@@ -163,9 +165,9 @@ t_stat printer_event (UNIT *u)
 		GRP |= GRP_PRN1_SYNC >> num;
 		++curchar[num];
 		/* For next char */
-		sim_activate (u, 140*USEC);
+		sim_activate (u, 1400*USEC);
 		if (feed[num] && --feed[num] == 0) {
-			READY &= ~(040000000 >> num);
+			READY |= PRN1_LINEFEED >> num;
 		}
 		break;
 	case 0140:
@@ -175,7 +177,7 @@ t_stat printer_event (UNIT *u)
 		if (printer_dev.dctrl)
 			besm6_debug(">>> АЦПУ%d 'ноль'", num);
 		/* For first sync after "zero" */
-		sim_activate (u, 100*USEC);
+		sim_activate (u, 1000*USEC);
 		break;
 	}
 	return SCPE_OK;
