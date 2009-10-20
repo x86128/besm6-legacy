@@ -135,19 +135,108 @@ void vt_print()
         }
 }
 
+static int unicode_to_koi7 (unsigned val)
+{
+	switch (val >> 8) {
+	case 0x00:
+		if (val <= '_' || val == 0x7f)
+			return val;
+		if (val >= 'a' && val <= 'z')
+			return val + 'Z' - 'z';
+		break;
+	case 0x04:
+		switch ((unsigned char) val) {
+		case 0x10: case 0x30: return 0x61;
+		case 0x11: case 0x31: return 0x62;
+		case 0x12: case 0x32: return 0x77;
+		case 0x13: case 0x33: return 0x67;
+		case 0x14: case 0x34: return 0x64;
+		case 0x15: case 0x35: return 0x65;
+		case 0x16: case 0x36: return 0x76;
+		case 0x17: case 0x37: return 0x7a;
+		case 0x18: case 0x38: return 0x69;
+		case 0x19: case 0x39: return 0x6a;
+		case 0x1a: case 0x3a: return 0x6b;
+		case 0x1b: case 0x3b: return 0x6c;
+		case 0x1c: case 0x3c: return 0x6d;
+		case 0x1d: case 0x3d: return 0x6e;
+		case 0x1e: case 0x3e: return 0x6f;
+		case 0x1f: case 0x3f: return 0x70;
+		case 0x20: case 0x40: return 0x72;
+		case 0x21: case 0x41: return 0x73;
+		case 0x22: case 0x42: return 0x74;
+		case 0x23: case 0x43: return 0x75;
+		case 0x24: case 0x44: return 0x66;
+		case 0x25: case 0x45: return 0x68;
+		case 0x26: case 0x46: return 0x63;
+		case 0x27: case 0x47: return 0x7e;
+		case 0x28: case 0x48: return 0x7b;
+		case 0x29: case 0x49: return 0x7d;
+		case 0x2b: case 0x4b: return 0x79;
+		case 0x2c: case 0x4c: return 0x78;
+		case 0x2d: case 0x4d: return 0x7c;
+		case 0x2e: case 0x4e: return 0x60;
+		case 0x2f: case 0x4f: return 0x71;
+		}
+		break;
+	}
+	return -1;
+}
+
+/*
+ * Ввод символа с клавиатуры.
+ * Перекодировка из UTF-8 в КОИ-7.
+ * Полученный символ находится в диапазоне 0..0177.
+ * Если нет ввода, возвращает -1.
+ * В случае прерывания (^E) возвращает 0400.
+ */
+static int vt_kbd_input ()
+{
+	int c1, c2, c3, r;
+again:
+	r = sim_poll_kbd();
+	if (r == SCPE_STOP)
+		return 0400;
+	if (! (r & SCPE_KFLAG))
+		return -1;
+	c1 = r & 0377;
+	if (! (c1 & 0x80))
+		return unicode_to_koi7 (c1);
+
+	r = sim_poll_kbd();
+	if (r == SCPE_STOP)
+		return 0400;
+	if (! (r & SCPE_KFLAG))
+		return -1;
+	c2 = r & 0377;
+	if (! (c1 & 0x20))
+		return unicode_to_koi7 ((c1 & 0x1f) << 6 | (c2 & 0x3f));
+
+	r = sim_poll_kbd();
+	if (r == SCPE_STOP)
+		return 0400;
+	if (! (r & SCPE_KFLAG))
+		return -1;
+	c3 = r & 0377;
+	if (c1 == 0xEF && c2 == 0xBB && c3 == 0xBF) {
+		/* Skip zero width no-break space. */
+		goto again;
+	}
+	return unicode_to_koi7 ((c1 & 0x0f) << 12 | (c2 & 0x3f) << 6 |
+		(c3 & 0x3f));
+}
+
 /* Терминал Ф4 - операторский */
 #define OPER 004000000
 
 void vt_receive()
 {
-	t_stat r;
 	switch (vt_instate) {
 	case 0:
-		r = sim_poll_kbd();
-		if (r == SCPE_STOP) {
+		vt_typed = vt_kbd_input();
+		if (vt_typed < 0) {
 			sim_interval = 0;
-		} else if (r != SCPE_OK) {
-			vt_typed = r - SCPE_KFLAG;
+		} else if (vt_typed <= 0177) {
 			vt_instate = 1;
 			TTY_IN = OPER;		/* start bit */
 			GRP |= GRP_TTY_START;	/* не используется ? */

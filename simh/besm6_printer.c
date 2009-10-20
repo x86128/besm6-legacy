@@ -183,9 +183,6 @@ t_stat printer_event (UNIT *u)
 
 int gost_latin = 0; /* default cyrillics */
 
-static int (*local_getc) (FILE *fin);
-static void (*local_putc) (unsigned short ch, FILE *fout);
-
 /*
  * GOST-10859 encoding.
  * Documentation: http://en.wikipedia.org/wiki/GOST_10859
