@@ -41,7 +41,9 @@
 #include <float.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
@@ -294,11 +296,21 @@ t_stat cpu_deposit (t_value val, t_addr addr, UNIT *uptr, int32 sw)
 }
 
 /*
+ * Функция вызывается каждые 4 миллисекунды реального времени.
+ */
+static void cpu_sigalarm (int signum)
+{
+	GRP |= GRP_TIMER;
+	GRP |= GRP_SLOW_CLK;
+}
+
+/*
  * Reset routine
  */
 t_stat cpu_reset (DEVICE *dptr)
 {
 	int i;
+	struct itimerval itv;
 
 	ACC = 0;
 	RMR = 0;
@@ -318,6 +330,18 @@ t_stat cpu_reset (DEVICE *dptr)
 	GRP = MGRP = 0;
 	sim_brk_types = SWMASK ('E') | SWMASK('R') | SWMASK('W');
 	sim_brk_dflt = SWMASK ('E');
+
+	/* Чтобы ход часов в ДИСПАКе соответствал реальному времени,
+	 * используем сигналы от системного таймера. */
+	signal (SIGALRM, cpu_sigalarm);
+	itv.it_interval.tv_sec = 0;
+	itv.it_interval.tv_usec = 4000;
+	itv.it_value.tv_sec = 0;
+	itv.it_value.tv_usec = 4000;
+	if (setitimer (ITIMER_REAL, &itv, 0) < 0) {
+		perror ("setitimer");
+		return SCPE_TIMER;
+	}
 	return sim_activate (&cpu_unit, 20*MSEC);
 }
 
@@ -1600,10 +1624,10 @@ UNIT clocks[] = {
 
 t_stat clk_reset (DEVICE * dev)
 {
-	sim_activate (&clocks[2], 1000*MSEC/300);
+	return sim_activate (&clocks[2], 1000*MSEC/300);
 	/* Схема автозапуска включается по нереализованной кнопке "МР" */
-	sim_activate (&clocks[0], MSEC*125/2);
-	return sim_activate (&clocks[1], 20*MSEC);
+/*	sim_activate (&clocks[0], MSEC*125/2);*/
+/*	return sim_activate (&clocks[1], 20*MSEC);*/
 }
 
 DEVICE clock_dev = {
