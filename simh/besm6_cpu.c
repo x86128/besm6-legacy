@@ -699,7 +699,7 @@ static void cmd_033 ()
  */
 void cpu_one_inst ()
 {
-	int reg, opcode, addr, nextpc;
+	int reg, opcode, addr, nextpc, next_mod;
 
 	corr_stack = 0;
 	t_value word = mmu_fetch (PC);
@@ -743,9 +743,8 @@ void cpu_one_inst ()
 
 	if (RUU & RUU_MOD_RK) {
 		addr = ADDR (addr + M[MOD]);
-		RUU &= ~RUU_MOD_RK;
 	}
-
+	next_mod = 0;
 	delay = 0;
 
 	switch (opcode) {
@@ -1178,8 +1177,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 		break;
 	case 0220:					/* мода, utc */
 		Aex = ADDR (addr + M[reg]);
-		M[MOD] = Aex;
-		RUU |= RUU_MOD_RK;
+		next_mod = Aex;
 		delay = 4;
 		break;
 	case 0230:					/* мод, wtc */
@@ -1188,8 +1186,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			corr_stack = 1;
 		}
 		Aex = ADDR (addr + M[reg]);
-		M[MOD] = ADDR (mmu_load (Aex));
-		RUU |= RUU_MOD_RK;
+		next_mod = ADDR (mmu_load (Aex));
 		delay = MEAN_TIME (13, 3);
 		break;
 	case 0240:					/* уиа, vtm */
@@ -1285,9 +1282,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 		RUU = SET_SUPERVISOR (RUU,
 			M[SPSW] & (SPSW_EXTRACODE | SPSW_INTERRUPT));
 		if (M[SPSW] & SPSW_MOD_RK)
-			RUU |= RUU_MOD_RK;
-		else
-			RUU &= ~RUU_MOD_RK;
+			next_mod = M[MOD];
 		/*besm6_okno ("Выход из прерывания");*/
 		delay = 7;
 		break;
@@ -1340,6 +1335,12 @@ branch_zero:	Aex = addr;
 		longjmp (cpu_halt, STOP_STOP);
 		break;
 	}
+	if (next_mod) {
+		/* Модификация адреса следующей команды. */
+		M[MOD] = next_mod;
+		RUU |= RUU_MOD_RK;
+	} else
+		RUU &= ~RUU_MOD_RK;
 }
 
 /*
