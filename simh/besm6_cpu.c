@@ -623,6 +623,11 @@ static void cmd_033 ()
 		/* TODO: опрос схемы контроля записи на МЛ */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
 		break;
+	case 04115:
+		/* Неизвестное обращение. ДИСПАК выдаёт эту команду
+		 * группами по 8 штук каждые несколько секунд. */
+		ACC = 0;
+		break;
 	case 04140 ... 04157:
 		/* TODO: считывание строки перфокарты */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
@@ -646,7 +651,7 @@ static void cmd_033 ()
 		break;
 	default:
 		/* Неиспользуемые адреса */
-		if (sim_deb && cpu_dev.dctrl)
+/*		if (sim_deb && cpu_dev.dctrl)*/
 		besm6_debug ("*** %05o%s: УВВ %o - неправильный адрес ввода-вывода",
 			PC, (RUU & RUU_RIGHT_INSTR) ? "п" : "л", Aex);
 		ACC = 0;

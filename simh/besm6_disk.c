@@ -388,7 +388,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 					ctlr + '3', cmd);
 			break;
 		default:
-			if (disk_dev.dctrl)
+/*			if (disk_dev.dctrl)*/
 				besm6_debug ("::: управление КМД %c слово %04o: неизвестная команда %02o",
 					ctlr + '3', cmd, cmd & 077);
 			break;
