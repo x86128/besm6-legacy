@@ -1244,7 +1244,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 			RUU &= ~RUU_RIGHT_INSTR;
 		RUU = SET_SUPERVISOR (RUU,
 			M[SPSW] & (SPSW_EXTRACODE | SPSW_INTERRUPT));
-		if (M[SPSW] & SPSW_NEXT_RK)
+		if (M[SPSW] & SPSW_MOD_RK)
 			RUU |= RUU_MOD_RK;
 		else
 			RUU &= ~RUU_MOD_RK;
@@ -1574,14 +1574,27 @@ t_stat fast_clk (UNIT * this)
 	return sim_activate (this, 20*MSEC);
 }
 
+extern uint32 TTY;
+
+static int sym = 0, active = 0;
+
+t_stat vt_clk (UNIT * this)
+{
+	GRP |= MGRP & BIT(19);
+	vt_print();
+	return sim_activate (this, 1000*MSEC/300);
+}
+
 
 UNIT clocks[] = {
-	{ UDATA(slow_clk, UNIT_FIX, 0) },
-	{ UDATA(fast_clk, UNIT_FIX, 0) }
+	{ UDATA(slow_clk, UNIT_FIX, 0) },	/* 10 р, 16 Гц */
+	{ UDATA(fast_clk, UNIT_FIX, 0) },	/* 40 р, 50 Гц */
+	{ UDATA(vt_clk, UNIT_FIX, 0) },		/* 19 р, 300 Гц */
 };
 
 t_stat clk_reset (DEVICE * dev)
 {
+	sim_activate (&clocks[2], 1000*MSEC/300);
 	/* Схема автозапуска включается по нереализованной кнопке "МР" */
 	sim_activate (&clocks[0], MSEC*125/2);
 	return sim_activate (&clocks[1], 20*MSEC);
