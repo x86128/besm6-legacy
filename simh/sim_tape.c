@@ -404,7 +404,7 @@ t_addr opos;
 t_stat st;
 
 opos = uptr->pos;                                       /* old position */
-if (st = sim_tape_rdlntf (uptr, &tbc))                  /* read rec lnt */
+if ((st = sim_tape_rdlntf (uptr, &tbc)))                /* read rec lnt */
     return st;
 *bc = rbc = MTR_L (tbc);                                /* strip error flag */
 if (rbc > max) {                                        /* rec out of range? */
@@ -453,7 +453,7 @@ uint32 f = MT_GET_FMT (uptr);
 t_mtrlnt i, rbc, tbc;
 t_stat st;
 
-if (st = sim_tape_rdlntr (uptr, &tbc))                  /* read rec lnt */
+if ((st = sim_tape_rdlntr (uptr, &tbc)))                /* read rec lnt */
     return st;
 *bc = rbc = MTR_L (tbc);                                /* strip error flag */
 if (rbc > max)                                          /* rec out of range? */
@@ -720,7 +720,7 @@ do {
         gap_needed = gap_needed - meta_size / 2;        /* reduce requirement */
         }
 
-    else if (uptr->pos + 
+    else if (uptr->pos +
              MTR_L (meta) + meta_size > file_size) {    /* rec len out of range? */
         gap_alloc = gap_alloc + gap_needed;             /* presume overwritten tape */
         gap_needed = 0;                                 /* allocate remainder */

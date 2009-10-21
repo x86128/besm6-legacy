@@ -66,18 +66,18 @@
   HP/UX                     ??
   Compaq Tru64 Unix         ??
   VMS                       Alpha/Itanium VMS only, needs VMS libpcap
-  
-  WinPcap is available from: 
+
+  WinPcap is available from:
                         http://winpcap.polito.it/
-  libpcap for VMS is available from: 
+  libpcap for VMS is available from:
                         http://simh.trailing-edge.com/sources/vms-pcap.zip
-  libpcap for other Unix platforms is available at: 
+  libpcap for other Unix platforms is available at:
         Current Version:  http://www.tcpdump.org/daily/libpcap-current.tar.gz
         Released Version: http://www.tcpdump.org/release/
-        Note: You can only use the released version if it is at least 
+        Note: You can only use the released version if it is at least
               version 0.9
 
-        
+
         We've gotten the tarball, unpacked, built and installed it with:
             gzip -dc libpcap-current.tar.gz | tar xvf -
             cd libpcap-directory-name
@@ -86,51 +86,51 @@
             make install
         Note:  The "make install" step generally will have to be done as root.
         This will install libpcap in /usr/local/lib and /usr/local/include
-        It is then important to make sure that you get the just installed 
-        libpcap components referenced during your build.  This is generally 
-        achieved by invoking gcc with: 
+        It is then important to make sure that you get the just installed
+        libpcap components referenced during your build.  This is generally
+        achieved by invoking gcc with:
              -isystem /usr/local/include -L /usr/local/lib
 
 
-  Note: Building for the platforms indicated above, with the indicated libpcap, 
-  should automatically leverage the appropriate mechanisms contained here.  
-  Things are structured so that it is likely to work for any other as yet 
-  untested platform.  If it works for you, please let the author know so we 
-  can update the table above.  If it doesn't work, then the following #define 
+  Note: Building for the platforms indicated above, with the indicated libpcap,
+  should automatically leverage the appropriate mechanisms contained here.
+  Things are structured so that it is likely to work for any other as yet
+  untested platform.  If it works for you, please let the author know so we
+  can update the table above.  If it doesn't work, then the following #define
   variables can influence the operation on an untested platform.
 
-  USE_BPF           - Determines if this code leverages a libpcap/WinPcap 
-                      provided bpf packet filtering facility.  All tested 
-                      environments have bpf facilities that work the way we 
-                      need them to.  However a new one might not.  undefine 
+  USE_BPF           - Determines if this code leverages a libpcap/WinPcap
+                      provided bpf packet filtering facility.  All tested
+                      environments have bpf facilities that work the way we
+                      need them to.  However a new one might not.  undefine
                       this variable to let this code do its own filtering.
-  USE_SETNONBLOCK   - Specifies whether the libpcap environment's non-blocking 
-                      semantics are to be leveraged.  This helps to manage the 
-                      varying behaviours of the kernel packet facilities 
+  USE_SETNONBLOCK   - Specifies whether the libpcap environment's non-blocking
+                      semantics are to be leveraged.  This helps to manage the
+                      varying behaviours of the kernel packet facilities
                       leveraged by libpcap.
-  USE_READER_THREAD - Specifies that packet reading should be done in the 
-                      context of a separate thread.  The Posix threading 
+  USE_READER_THREAD - Specifies that packet reading should be done in the
+                      context of a separate thread.  The Posix threading
                       APIs are used.  This option is less efficient than the
-                      default non-threaded approach, but it exists since some 
-                      platforms don't want to work with nonblocking libpcap 
-                      semantics.   OpenBSD and NetBSD either don't have pthread 
-                      APIs available, or they are too buggy to be useful. 
-                      Using the threaded approach may require special compile 
-                      and/or link time switches (i.e. -lpthread or -pthread, 
-                      etc.) Consult the documentation for your platform as 
+                      default non-threaded approach, but it exists since some
+                      platforms don't want to work with nonblocking libpcap
+                      semantics.   OpenBSD and NetBSD either don't have pthread
+                      APIs available, or they are too buggy to be useful.
+                      Using the threaded approach may require special compile
+                      and/or link time switches (i.e. -lpthread or -pthread,
+                      etc.) Consult the documentation for your platform as
                       needed.
-  MUST_DO_SELECT    - Specifies that when USE_READER_THREAD is active, that 
-                      select() should be used to determin when available 
-                      packets are ready for reading.  Otherwise, we depend 
-                      on the libpcap/kernel packet timeout specified on 
-                      pcap_open_live.  If USE_READER_THREAD is not set, then 
+  MUST_DO_SELECT    - Specifies that when USE_READER_THREAD is active, that
+                      select() should be used to determin when available
+                      packets are ready for reading.  Otherwise, we depend
+                      on the libpcap/kernel packet timeout specified on
+                      pcap_open_live.  If USE_READER_THREAD is not set, then
                       MUST_DO_SELECT is irrelevant
 
   NEED_PCAP_SENDPACKET
                     - Specifies that you are using an older version of libpcap
                       which doesn't provide a pcap_sendpacket API.
 
-  NOTE: Changing these defines is done in either sim_ether.h OR on the global 
+  NOTE: Changing these defines is done in either sim_ether.h OR on the global
         compiler command line which builds all of the modules included in a
         simulator.
 
@@ -156,10 +156,10 @@
   25-Mar-04  MP   Revised comments and minor #defines to deal with updated
                   libpcap which now provides pcap_sendpacket on all platforms.
   04-Feb-04  MP   Returned success/fail status from eth_write to support
-                  determining if the current libpcap connection can successfully 
+                  determining if the current libpcap connection can successfully
                   write packets.
                   Added threaded approach to reading packets since
-                  this works better on some platforms (solaris intel) than the 
+                  this works better on some platforms (solaris intel) than the
                   inconsistently implemented non-blocking read approach.
   04-Feb-04  DTH  Converted ETH_DEBUG to sim_debug
   13-Jan-04  MP   tested and fixed on OpenBSD, NetBS and FreeBSD.
@@ -269,7 +269,7 @@ t_stat eth_mac_scan (ETH_MAC* mac, char* strmac)
 
   /* make sure byte separators are OK */
   for (i=2; i<len; i=i+3) {
-    if ((cptr[i] != '-') && 
+    if ((cptr[i] != '-') &&
         (cptr[i] != '.') &&
         (cptr[i] != ':')) return SCPE_ARG;
     cptr[i] = '\0';
@@ -1070,7 +1070,7 @@ t_stat eth_write(ETH_DEV* dev, ETH_PACK* packet, ETH_PCALLBACK routine)
     status = pcap_sendpacket((pcap_t*)dev->handle, (u_char*)packet->msg, packet->len);
 
     /* detect sending of decnet loopback packet */
-    if ((status == 0) && DECNET_SELF_FRAME(dev->decnet_addr, packet->msg)) 
+    if ((status == 0) && DECNET_SELF_FRAME(dev->decnet_addr, packet->msg))
       dev->decnet_self_sent += dev->reflections;
 
   } /* if packet->len */
@@ -1113,7 +1113,7 @@ void eth_callback(u_char* info, const struct pcap_pkthdr* header, const u_char* 
     if (dev->decnet_self_sent > 0) {
       dev->decnet_self_sent--;
       to_me = 0;
-    } 
+    }
 #ifndef USE_BPF
     else
       from_me = 0;
@@ -1191,7 +1191,7 @@ t_stat eth_read(ETH_DEV* dev, ETH_PACK* packet, ETH_PCALLBACK routine)
           routine(status);
       ethq_remove(&dev->read_queue);
     }
-    pthread_mutex_unlock (&dev->lock);  
+    pthread_mutex_unlock (&dev->lock);
 #endif
 
   return SCPE_OK;
@@ -1264,9 +1264,9 @@ t_stat eth_filter(ETH_DEV* dev, int addr_count, ETH_MAC* addresses,
       sprintf(&buf[strlen(buf)], "%s(ether multicast)", (*buf) ? " or " : "");
   }
 
-  /* construct source filters - this prevents packets from being reflected back 
+  /* construct source filters - this prevents packets from being reflected back
      by systems where WinPcap and libpcap cause packet reflections. Note that
-     some systems do not reflect packets at all. This *assumes* that the 
+     some systems do not reflect packets at all. This *assumes* that the
      simulated NIC will not send out packets with multicast source fields. */
   if ((addr_count > 0) && (dev->reflections > 0)) {
     if (strlen(buf) > 0)
@@ -1348,8 +1348,8 @@ t_stat eth_filter(ETH_DEV* dev, int addr_count, ETH_MAC* addresses,
 }
 
 /*
-     The libpcap provided API pcap_findalldevs() on most platforms, will 
-     leverage the getifaddrs() API if it is available in preference to 
+     The libpcap provided API pcap_findalldevs() on most platforms, will
+     leverage the getifaddrs() API if it is available in preference to
      alternate platform specific methods of determining the interface list.
 
      A limitation of getifaddrs() is that it returns only interfaces which
@@ -1357,11 +1357,11 @@ t_stat eth_filter(ETH_DEV* dev, int addr_count, ETH_MAC* addresses,
      interfaces that we are interested in since a host may have dedicated
      interfaces for a simulator, which is otherwise unused by the host.
 
-     One could hand craft the the build of libpcap to specifically use 
-     alternate methods to implement pcap_findalldevs().  However, this can 
+     One could hand craft the the build of libpcap to specifically use
+     alternate methods to implement pcap_findalldevs().  However, this can
      get tricky, and would then result in a sort of deviant libpcap.
 
-     This routine exists to allow platform specific code to validate and/or 
+     This routine exists to allow platform specific code to validate and/or
      extend the set of available interfaces to include any that are not
      returned by pcap_findalldevs.
 
@@ -1408,7 +1408,7 @@ int eth_host_devices(int used, int max, ETH_LIST* list)
               }
         reglen = sizeof(regval);
 
-      /* look for user-defined adapter name, bail if not found */    
+      /* look for user-defined adapter name, bail if not found */
         /* same comment about Windows XP x64 (above) using RegQueryValueEx */
       if((status = RegQueryValueExA (reghnd, "Name", NULL, &regtype, regval, &reglen)) != ERROR_SUCCESS) {
               RegCloseKey (reghnd);
