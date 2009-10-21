@@ -78,7 +78,7 @@ t_stat cpu_panel (UNIT *this);
  * cpu_mod      CPU modifiers list
  */
 
-UNIT cpu_unit = { UDATA (cpu_panel, UNIT_FIX, MEMSIZE) };
+UNIT cpu_unit = { UDATA (NULL, UNIT_FIX, MEMSIZE) };
 
 REG cpu_reg[] = {
 { "СчАС",  &PC,		8, 15, 0, 1 },		/* счётчик адреса команды */
@@ -301,8 +301,22 @@ t_stat cpu_deposit (t_value val, t_addr addr, UNIT *uptr, int32 sw)
  */
 static void cpu_sigalarm (int signum)
 {
+	static unsigned counter;
+
+	++counter;
+
+	/* В 9-й части частота таймера 250 Гц (4 мс). */
 	GRP |= GRP_TIMER;
+
+	/* Медленный таймер: должен быть 16 Гц.
+	 * Но от него почему-то зависит вывод на терминалы,
+	 * поэтому ускорим. */
 	GRP |= GRP_SLOW_CLK;
+
+	/* Перерисовка панели каждые 64 миллисекунды. */
+	if ((counter & 15) == 0) {
+		besm6_draw_panel();
+	}
 }
 
 /*
@@ -343,16 +357,7 @@ t_stat cpu_reset (DEVICE *dptr)
 		perror ("setitimer");
 		return SCPE_TIMER;
 	}
-	return sim_activate (&cpu_unit, 20*MSEC);
-}
-
-/*
- * Перерисовка панели каждые N циклов.
- */
-t_stat cpu_panel (UNIT * this)
-{
-	besm6_draw_panel();
-	return sim_activate (this, 200*MSEC);
+	return SCPE_OK;
 }
 
 /*
@@ -718,6 +723,14 @@ void cpu_one_inst ()
 		RK = word >> 24;	/* get left instruction */
 
 	RK &= BITS(24);
+
+	/* Если мы в цикле "ЖДУ" диспака, а терминалы ничего не выдают
+	 * и не принимают, засыпаем до очередного прерывания от таймера. */
+	if (RUU == 047 && PC == 04440 && RK == 067704440 && vt_idle > 10) {
+		pause ();
+		delay = sim_interval;
+		return;
+	}
 
 	reg = RK >> 20;
 	if (RK & BIT(20)) {
@@ -1298,7 +1311,7 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 	case 0330:					/* стоп, stop */
 		Aex = ADDR (addr + M[reg]);
 		delay = 7;
-		if (!IS_SUPERVISOR(RUU)) {
+		if (! IS_SUPERVISOR(RUU)) {
 			if (M[PSW] & PSW_CHECK_HALT)
 				break;
 			else {
@@ -1419,7 +1432,6 @@ t_stat sim_instr (void)
 				(RUU & RUU_RIGHT_INSTR) ? "п" : "л",
 				message);
 		}
-		besm6_draw_panel();
 
 		/*
 		 * ПоП и ПоК вызывают останов при любом внутреннем прерывании
@@ -1431,6 +1443,7 @@ t_stat sim_instr (void)
 		 */
 		switch (r) {
 		default:
+ret:			besm6_draw_panel();
 			return r;
 		case STOP_RWATCH:
 		case STOP_WWATCH:
@@ -1439,24 +1452,24 @@ t_stat sim_instr (void)
 				--PC;
 			}
 			RUU ^= RUU_RIGHT_INSTR;
-			return r;
+			goto ret;
 		case STOP_BADCMD:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
-				return r;
+				goto ret;
 			op_int_1 (sim_stop_messages[r]);
 			// SPSW_NEXT_RK is not important for this interrupt
 			GRP |= GRP_ILL_INSN;
 			break;
 		case STOP_INSN_CHECK:
 			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
-				return r;
+				goto ret;
 			op_int_1 (sim_stop_messages[r]);
 			// SPSW_NEXT_RK must be 0 for this interrupt; it is already
 			GRP |= GRP_INSN_CHECK;
 			break;
 		case STOP_INSN_PROT:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
-				return r;
+				goto ret;
 			if (RUU & RUU_RIGHT_INSTR) {
 				++PC;
 			}
@@ -1467,8 +1480,12 @@ t_stat sim_instr (void)
 			GRP |= GRP_INSN_PROT;
 			break;
 		case STOP_OPERAND_PROT:
+#if 0
+/* ДИСПАК держит признак ПоП установленным.
+ * При запуске СЕРП возникает обращение к чужому листу. */
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
-				return r;
+				goto ret;
+#endif
 			if (RUU & RUU_RIGHT_INSTR) {
 				++PC;
 			}
@@ -1481,7 +1498,7 @@ t_stat sim_instr (void)
 			break;
 		case STOP_RAM_CHECK:
 			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
-				return r;
+				goto ret;
 			op_int_1 (sim_stop_messages[r]);
 			// The offending interleaved block # is in bits 1-3.
 			GRP |= GRP_CHECK | GRP_RAM_CHECK;
@@ -1489,7 +1506,7 @@ t_stat sim_instr (void)
 			break;
 		case STOP_CACHE_CHECK:
 			if (M[PSW] & PSW_CHECK_HALT)		/* ПоК */
-				return r;
+				goto ret;
 			op_int_1 (sim_stop_messages[r]);
 			// The offending BRZ # is in bits 1-3.
 			GRP |= GRP_CHECK;
@@ -1498,7 +1515,7 @@ t_stat sim_instr (void)
 			break;
 		case STOP_INSN_ADDR_MATCH:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
-				return r;
+				goto ret;
 			if (RUU & RUU_RIGHT_INSTR) {
 				++PC;
 			}
@@ -1509,7 +1526,7 @@ t_stat sim_instr (void)
 			break;
 		case STOP_LOAD_ADDR_MATCH:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
-				return r;
+				goto ret;
 			if (RUU & RUU_RIGHT_INSTR) {
 				++PC;
 			}
@@ -1520,7 +1537,7 @@ t_stat sim_instr (void)
 			break;
 		case STOP_STORE_ADDR_MATCH:
 			if (M[PSW] & PSW_INTR_HALT)		/* ПоП */
-				return r;
+				goto ret;
 			if (RUU & RUU_RIGHT_INSTR) {
 				++PC;
 			}
@@ -1536,7 +1553,7 @@ t_stat sim_instr (void)
 			if (! (RUU & RUU_AVOST_DISABLE) &&	/* ! БРО */
 			    ((M[PSW] & PSW_INTR_HALT) ||	/* ПоП */
 			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
-				return r;
+				goto ret;
 			op_int_1 (sim_stop_messages[r]);
 			GRP |= GRP_OVERFLOW|GRP_RAM_CHECK;
 			break;
@@ -1544,7 +1561,7 @@ t_stat sim_instr (void)
 			if (! (RUU & RUU_AVOST_DISABLE) &&	/* ! БРО */
 			    ((M[PSW] & PSW_INTR_HALT) ||	/* ПоП */
 			     (M[PSW] & PSW_CHECK_HALT)))	/* ПоК */
-				return r;
+				goto ret;
 			op_int_1 (sim_stop_messages[r]);
 			GRP |= GRP_DIVZERO|GRP_RAM_CHECK;
 			break;
@@ -1552,19 +1569,22 @@ t_stat sim_instr (void)
 		++iintr;
 	}
 
-	if (iintr > 1)
+	if (iintr > 1) {
+		besm6_draw_panel();
 		return STOP_DOUBLE_INTR;
-
+	}
 	/* Main instruction fetch/decode loop */
 	for (;;) {
 		if (sim_interval <= 0) {		/* check clock queue */
-			besm6_draw_panel();
 			r = sim_process_event ();
-			if (r)
+			if (r) {
+				besm6_draw_panel();
 				return r;
+			}
 		}
 
 		if (PC > BITS(15)) {			/* выход за пределы памяти */
+			besm6_draw_panel();
 			return STOP_RUNOUT;		/* stop simulation */
 		}
 

@@ -52,8 +52,7 @@ void process (int sym)
 int tt_active = 0, vt_active = 0;
 int tt_sym = 0, vt_sym = 0;
 int vt_typed = 0, vt_instate = 0;
-
-uint32 TTY_OUT = 0, TTY_IN = 0;
+uint32 TTY_OUT = 0, TTY_IN = 0, vt_idle = 0;
 
 void tty_send (uint32 mask)
 {
@@ -85,7 +84,7 @@ void tt_print()
 	default:
 		/* big endian ordering */
 		if (c) {
-			 tt_sym |= 1 << (5-tt_active);
+			tt_sym |= 1 << (5-tt_active);
 		}
 		++tt_active;
 		break;
@@ -93,25 +92,26 @@ void tt_print()
 }
 
 const char * koi7_rus_to_unicode [32] = {
-        "Ю", "А", "Б", "Ц", "Д", "Е", "Ф", "Г",
-        "Х", "И", "Й", "К", "Л", "М", "Н", "О",
-        "П", "Я", "Р", "С", "Т", "У", "Ж", "В",
-        "Ь", "Ы", "З", "Ш", "Э", "Щ", "Ч", "\0x7f",
+	"Ю", "А", "Б", "Ц", "Д", "Е", "Ф", "Г",
+	"Х", "И", "Й", "К", "Л", "М", "Н", "О",
+	"П", "Я", "Р", "С", "Т", "У", "Ж", "В",
+	"Ь", "Ы", "З", "Ш", "Э", "Щ", "Ч", "\0x7f",
 };
 
 
 
 void vt_print()
 {
-        /* Пока работаем только с одним (любым) устройством */
-        int c = TTY_OUT != 0;
-        switch (vt_active*2+c) {
-        case 0: /* idle */
-                break;
-        case 1: /* start bit */
-                vt_active = 1;
-                break;
-        case 18: /* stop bit */
+	/* Пока работаем только с одним (любым) устройством */
+	int c = TTY_OUT != 0;
+	switch (vt_active*2+c) {
+	case 0: /* idle */
+		++vt_idle;
+		return;
+	case 1: /* start bit */
+		vt_active = 1;
+		break;
+	case 18: /* stop bit */
 		vt_sym = ~vt_sym & 0x7f;
 		if (vt_sym < 0x60) {
 			if (vt_sym < ' ')
@@ -133,21 +133,22 @@ void vt_print()
 		} else
 			fputs (koi7_rus_to_unicode[vt_sym - 0x60], stdout);
 		fflush(stdout);
-                vt_active = 0;
-                vt_sym = 0;
-                break;
-        case 19: /* framing error */
-                putchar ('#');
-                fflush (stdout);
-                break;
-        default:
-                /* little endian ordering */
-                if (c) {
-                         vt_sym |= 1 << (vt_active-1);
-                }
-                ++vt_active;
-                break;
-        }
+		vt_active = 0;
+		vt_sym = 0;
+		break;
+	case 19: /* framing error */
+		putchar ('#');
+		fflush (stdout);
+		break;
+	default:
+		/* little endian ordering */
+		if (c) {
+			vt_sym |= 1 << (vt_active-1);
+		}
+		++vt_active;
+		break;
+	}
+	vt_idle = 0;
 }
 
 static int unicode_to_koi7 (unsigned val)
@@ -251,7 +252,9 @@ void vt_receive()
 		vt_typed = vt_kbd_input();
 		if (vt_typed < 0) {
 			sim_interval = 0;
-		} else if (vt_typed <= 0177) {
+			return;
+		}
+		if (vt_typed <= 0177) {
 			if (vt_typed == '\r')
 				vt_typed = 3;	/* ^C - конец строки */
 			vt_instate = 1;
@@ -278,6 +281,7 @@ void vt_receive()
 		vt_instate = 0;	/* ready for the next char */
 		break;
 	}
+	vt_idle = 0;
 }
 
 int tty_query ()
