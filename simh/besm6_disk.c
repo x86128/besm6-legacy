@@ -342,6 +342,11 @@ void disk_ctl (int ctlr, uint32 cmd)
 	} else {
 		/* Команда, выдаваемая в КМД. */
 		switch (cmd & 077) {
+		case 000: /* диспак выдаёт эту команду один раз в начале загрузки */
+			if (disk_dev.dctrl)
+				besm6_debug ("::: КМД %c: недокументированная команда 00",
+					ctlr + '3');
+			break;
 		case 001: /* сброс на 0 цилиндр */
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: сброс на 0 цилиндр",
