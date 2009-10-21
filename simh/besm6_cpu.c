@@ -238,6 +238,7 @@ DEVICE *sim_devices[] = {
 	&clock_dev,
 	&printer_dev,
 	&console_dev,
+	&fs_dev,
 	0
 };
 
@@ -502,8 +503,12 @@ static void cmd_033 ()
 		/* TODO: управление обменом с магнитными лентами */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
 		break;
-	case 010 ... 013:
-		/* TODO: управление устройствами ввода с перфоленты */
+	case 010 ... 011:
+		/* управление устройствами ввода с перфоленты */
+		fs_control (Aex - 010, (uint32) (ACC & 07));
+		break;
+	case 012 ... 013:
+		/* TODO: управление устройствами ввода с перфоленты по запаянной программе */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
 		break;
 	case 014 ... 015:
@@ -610,7 +615,11 @@ static void cmd_033 ()
 		 * в запаянной программе ввода с перфоленты */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
 		break;
-	case 04014 ... 04017:
+	case 04014 ... 04015:
+		/* считывание строки с устройства ввода с перфоленты */
+		ACC = fs_read (Aex - 04014);
+		break;
+	case 04016 ... 04017:
 		/* TODO: считывание строки с устройства
 		 * ввода с перфоленты */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
