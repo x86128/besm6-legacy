@@ -38,6 +38,7 @@ int drum_zone;			/* Номер зоны на барабане */
 int drum_sector;		/* Начальный номер сектора на барабане */
 int drum_memory;		/* Начальный адрес памяти */
 int drum_nwords;		/* Количество слов обмена */
+int drum_fail;			/* Маска ошибок по направлениям */
 
 t_stat drum_event (UNIT *u);
 
@@ -160,9 +161,11 @@ static void log_io (UNIT *u)
  */
 void drum_write (UNIT *u)
 {
+	int ctlr;
 	t_value *sysdata;
 
-	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
+	ctlr = (u == &drum_unit[1]);
+	sysdata = ctlr ? &memory [020] : &memory [010];
 	fseek (u->fileref, ZONE_SIZE * drum_zone * 8, SEEK_SET);
 	sim_fwrite (sysdata, 8, 8, u->fileref);
 	sim_fwrite (&memory [drum_memory], 8, 1024, u->fileref);
@@ -172,9 +175,11 @@ void drum_write (UNIT *u)
 
 void drum_write_sector (UNIT *u)
 {
+	int ctlr;
 	t_value *sysdata;
 
-	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
+	ctlr = (u == &drum_unit[1]);
+	sysdata = ctlr ? &memory [020] : &memory [010];
 	fseek (u->fileref, (ZONE_SIZE*drum_zone + drum_sector*2) * 8,
 		SEEK_SET);
 	sim_fwrite (&sysdata [drum_sector*2], 8, 2, u->fileref);
@@ -190,18 +195,22 @@ void drum_write_sector (UNIT *u)
  */
 void drum_read (UNIT *u)
 {
+	int ctlr;
 	t_value *sysdata;
 
-	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
+	ctlr = (u == &drum_unit[1]);
+	sysdata = ctlr ? &memory [020] : &memory [010];
 	fseek (u->fileref, ZONE_SIZE * drum_zone * 8, SEEK_SET);
 	if (sim_fread (sysdata, 8, 8, u->fileref) != 8) {
 		/* Чтение неинициализированного барабана */
-		longjmp (cpu_halt, STOP_DRUMINVDATA);
+		drum_fail |= 0100 >> ctlr;
+		return;
 	}
 	if (! (drum_op & DRUM_READ_SYSDATA) &&
 	    sim_fread (&memory[drum_memory], 8, 1024, u->fileref) != 1024) {
 		/* Чтение неинициализированного барабана */
-		longjmp (cpu_halt, STOP_DRUMINVDATA);
+		drum_fail |= 0100 >> ctlr;
+		return;
 	}
 	if (ferror (u->fileref))
 		longjmp (cpu_halt, SCPE_IOERR);
@@ -209,24 +218,34 @@ void drum_read (UNIT *u)
 
 void drum_read_sector (UNIT *u)
 {
+	int ctlr;
 	t_value *sysdata;
 
-	sysdata = (u == &drum_unit[0]) ? &memory [010] : &memory [020];
+	ctlr = (u == &drum_unit[1]);
+	sysdata = ctlr ? &memory [020] : &memory [010];
 	fseek (u->fileref, (ZONE_SIZE*drum_zone + drum_sector*2) * 8, SEEK_SET);
 	if (sim_fread (&sysdata [drum_sector*2], 8, 2, u->fileref) != 2) {
 		/* Чтение неинициализированного барабана */
-		longjmp (cpu_halt, STOP_DRUMINVDATA);
+		drum_fail |= 0100 >> ctlr;
+		return;
 	}
 	if (! (drum_op & DRUM_READ_SYSDATA)) {
 		fseek (u->fileref, (ZONE_SIZE*drum_zone + 8 + drum_sector*256) * 8,
 			SEEK_SET);
 		if (sim_fread (&memory[drum_memory], 8, 256, u->fileref) != 256) {
 			/* Чтение неинициализированного барабана */
-			longjmp (cpu_halt, STOP_DRUMINVDATA);
+			drum_fail |= 0100 >> ctlr;
+			return;
 		}
 	}
 	if (ferror (u->fileref))
 		longjmp (cpu_halt, SCPE_IOERR);
+}
+
+static void clear_memory (t_value *p, int nwords)
+{
+	while (nwords-- > 0)
+		*p++ = SET_CONVOL (0, CONVOL_NUMBER);
 }
 
 /*
@@ -248,6 +267,11 @@ void drum (int ctlr, uint32 cmd)
 				(drum_op & DRUM_READ) ? "чтение" : "запись",
 				ctlr + '1', (drum_zone >> 5 & 7), drum_zone & 037,
 				drum_memory, drum_memory + drum_nwords - 1);
+		if (drum_op & DRUM_READ) {
+			clear_memory (ctlr ? &memory [020] : &memory [010], 8);
+			if (! (drum_op & DRUM_READ_SYSDATA))
+				clear_memory (&memory[drum_memory], 1024);
+		}
 	} else {
 		/* Обмен сектором */
 		drum_nwords = 256;
@@ -260,11 +284,19 @@ void drum (int ctlr, uint32 cmd)
 				ctlr + '1', (drum_zone >> 5 & 7), drum_zone & 037,
 				drum_sector & 3,
 				drum_memory, drum_memory + drum_nwords - 1);
+		if (drum_op & DRUM_READ) {
+			clear_memory (ctlr ? &memory [020 + drum_sector*2] :
+				&memory [010 + drum_sector*2], 2);
+			if (! (drum_op & DRUM_READ_SYSDATA))
+				clear_memory (&memory[drum_memory], 256);
+		}
 	}
 	if ((drum_dev.flags & DEV_DIS) || ! u->fileref) {
 		/* Device not attached. */
-		longjmp (cpu_halt, SCPE_UNATT);
+		drum_fail |= 0100 >> ctlr;
+		return;
 	}
+	drum_fail &= ~(0100 >> ctlr);
 	if (drum_op & DRUM_READ_OVERLAY) {
 		/* Not implemented. */
 		longjmp (cpu_halt, SCPE_NOFNC);
@@ -315,4 +347,12 @@ t_stat drum_event (UNIT *u)
 	else
 		GRP |= GRP_DRUM2_FREE;
 	return SCPE_OK;
+}
+
+/*
+ * Опрос ошибок обмена командой 033 4035.
+ */
+int drum_errors ()
+{
+	return drum_fail;
 }
