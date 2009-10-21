@@ -75,7 +75,7 @@ t_stat printer_reset (DEVICE *dptr)
 	memset(line[0], 0, 128);
 	sim_cancel (&printer_unit[0]);
 	sim_cancel (&printer_unit[1]);
-	READY = PRN1_NOT_READY | PRN2_NOT_READY;
+	READY |= PRN1_NOT_READY | PRN2_NOT_READY;
 	if (printer_unit[0].flags & UNIT_ATT)
 		READY &= ~PRN1_NOT_READY;
 	if (printer_unit[1].flags & UNIT_ATT)
