@@ -16,5 +16,6 @@ besm6_LDADD = -ldl
 endif
 
 if HAVE_LIBSDL
-AM_CPPFLAGS += -DHAVE_LIBSDL -Dmain=SDL_main
+AM_CPPFLAGS += -DHAVE_LIBSDL -Dmain=SDL_main `sdl-config --cflags`
+besm6_LDFLAGS = `sdl-config --libs`
 endif
