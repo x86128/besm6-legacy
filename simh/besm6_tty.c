@@ -206,7 +206,7 @@ static int unicode_to_koi7 (unsigned val)
  * Если нет ввода, возвращает -1.
  * В случае прерывания (^E) возвращает 0400.
  */
-static int vt_kbd_input ()
+static int vt_kbd_input_unicode ()
 {
 	int c1, c2, c3, r;
 again:
@@ -242,6 +242,67 @@ again:
 		(c3 & 0x3f));
 }
 
+#if 0
+/*
+ * Альтернативный вариант ввода, не требующий переключения на русскую клавиатуру.
+ * Символы "точка" и "запятая" - на клавише "гравис/тильда",
+ * "точка с запятой" - "закр. фиг. скобка", "апостроф" - "верт. черта".
+ */
+static int vt_kbd_input_koi7 ()
+{
+	int r;
+	r = sim_poll_kbd();
+	if (r == SCPE_STOP)
+		return 0400;
+	if (! (r & SCPE_KFLAG))
+		return -1;
+	switch (r -= SCPE_KFLAG) {
+	case '\r': return '\003';
+	case 'q': return 'j';
+	case 'w': return 'c';
+	case 'e': return 'u';
+	case 'r': return 'k';
+	case 't': return 'e';
+	case 'y': return 'n';
+	case 'u': return 'g';
+	case 'i': return '{';
+	case 'o': return '}';
+	case 'p': return 'z';
+	case '[': return 'h';
+	case '{': return '[';
+	case 'a': return 'f';
+	case 's': return 'y';
+	case 'd': return 'w';
+	case 'f': return 'a';
+	case 'g': return 'p';
+	case 'h': return 'r';
+	case 'j': return 'o';
+	case 'k': return 'l';
+	case 'l': return 'd';
+	case ';': return 'v';
+	case '}': return ';';
+	case '\'': return '|';
+	case '|': return '\'';
+	case 'z': return 'q';
+	case 'x': return '~';
+	case 'c': return 's';
+	case 'v': return 'm';
+	case 'b': return 'i';
+	case 'n': return 't';
+	case 'm': return 'x';
+	case ',': return 'b';
+	case '~': return ',';
+	case '.': return '~';
+	case '`': return '.';
+	case '\177': return '\b';
+	default: return r;
+	}
+}
+#endif
+
+#define KBD_MODE_UNICODE	0
+#define KBD_MODE_KOI7		1
+
 /* Терминал Ф4 - операторский */
 #define OPER 004000000
 
@@ -249,7 +310,12 @@ void vt_receive()
 {
 	switch (vt_instate) {
 	case 0:
-		vt_typed = vt_kbd_input();
+#if 0
+		vt_typed = ((cpu_unit.flags & KBD_MODE_KOI7) == KBD_MODE_KOI7) ?
+			vt_kbd_input_koi7 () : vt_kbd_input_unicode ();
+#else
+		vt_typed = vt_kbd_input_unicode();
+#endif
 		if (vt_typed < 0) {
 			sim_interval = 0;
 			return;
