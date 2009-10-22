@@ -6,14 +6,13 @@ besm6_SOURCES = scp.c sim_console.c sim_fio.c sim_timer.c sim_sock.c \
 	besm6_punch.c besm6_panel.c
 AM_CFLAGS = -Wall -g -O2
 AM_CPPFLAGS = -DUSE_INT64
-besm6_LDADD = -lrt
 
 clean-local:
 	-rm -rf *~
 
-if HAVE_LIBSDL
+if HAVE_READLINE
 AM_CPPFLAGS += -DHAVE_READLINE
-besm6_LDADD += -lrt
+besm6_LDADD = -ldl
 endif
 
 if HAVE_LIBSDL
