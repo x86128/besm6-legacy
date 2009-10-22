@@ -312,3 +312,15 @@ offset_gost_write (int num, FILE *fout)
 	memset(dev->line, 0, sizeof (dev->line));
 	dev->length = dev->strikes = 0;
 }
+
+/*
+ * Выясняем, остановлены ли АЦПУ. Нужно для входа в "спящий" режим.
+ */
+int printer_is_idle ()
+{
+	if ((printer_unit[0].flags & UNIT_ATT) && acpu[0].rampup == 0)
+		return 0;
+	if ((printer_unit[1].flags & UNIT_ATT) && acpu[1].rampup == 0)
+		return 0;
+	return 1;
+}
