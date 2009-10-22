@@ -15,7 +15,7 @@
 #include "besm6_defs.h"
 
 t_stat printer_event (UNIT *u);
-void offset_gost_write (char *line, int n, FILE *fout);
+void offset_gost_write (int num, FILE *fout);
 
 /*
  * Printer data structures
@@ -29,8 +29,16 @@ UNIT printer_unit [] = {
 	{ UDATA (printer_event, UNIT_FIX+UNIT_ATTABLE, 0) },
 };
 
-int curchar[2], feed[2], rampup[2];
-char line[2][128];
+
+#define MAX_STRIKES 10
+struct acpu_t {
+	int curchar, feed, rampup;
+	int strikes;
+	int length;
+	unsigned char line[128][MAX_STRIKES];
+} acpu[2];
+
+int acpu_isatty[2];
 
 #define PRN1_NOT_READY (1<<19)
 #define PRN2_NOT_READY (1<<18)
@@ -69,10 +77,8 @@ DEVICE printer_dev = {
  */
 t_stat printer_reset (DEVICE *dptr)
 {
-	feed[0] = feed[1] = 0;
-	rampup[0] = rampup[1] = SLOW_START;
-	memset(line[0], 0, 128);
-	memset(line[0], 0, 128);
+	memset(acpu, 0, sizeof (acpu));
+	acpu[0].rampup = acpu[1].rampup = SLOW_START;
 	sim_cancel (&printer_unit[0]);
 	sim_cancel (&printer_unit[1]);
 	READY |= PRN1_NOT_READY | PRN2_NOT_READY;
@@ -90,6 +96,13 @@ t_stat printer_attach (UNIT *u, char *cptr)
 	s = attach_unit (u, cptr);
 	if (s != SCPE_OK)
 		return s;
+
+	acpu_isatty[num] = !strcmp(cptr, "/dev/tty");
+	if (!acpu_isatty[num]) {
+		/* Write UTF-8 tag: zero width no-break space. */
+		fputs ("\xEF\xBB\xBF", u->fileref);
+	}
+
 	READY &= ~(PRN1_NOT_READY >> num);
 	return SCPE_OK;
 }
@@ -107,6 +120,7 @@ t_stat printer_detach (UNIT *u)
 void printer_control (int num, uint32 cmd)
 {
 	UNIT *u = &printer_unit[num];
+	struct acpu_t * dev = acpu + num;
 
 	if (printer_dev.dctrl)
 		besm6_debug(">>> АЦПУ%d команда %o", num, cmd);
@@ -118,23 +132,21 @@ void printer_control (int num, uint32 cmd)
 	switch (cmd) {
 	case 1:		/* linefeed */
 		READY &= ~(PRN1_LINEFEED >> num);
-		feed[num] = LINEFEED_SYNC;
-		offset_gost_write (line[num], 128, stdout);
-		puts("\r\n");
-		memset(line[num], 0, 128);
+		offset_gost_write (num, u->fileref);
+		dev->feed = LINEFEED_SYNC;
 		break;
 	case 4: 	/* start */
 		/* стартуем из состояния прогона для надежности */
-		feed[num] = LINEFEED_SYNC;
+		dev->feed = LINEFEED_SYNC;
 		READY &= ~(PRN1_LINEFEED >> num);
-		if (rampup[num])
-			sim_activate (u, rampup[num]);
-		rampup[num] = 0;
+		if (dev->rampup)
+			sim_activate (u, dev->rampup);
+		dev->rampup = 0;
 		break;
 	case 10:	/* motor and ribbon off */
 	case 8:		/* motor off? (undocumented) */
 	case 2:		/* ribbon off */
-		rampup[num] = cmd == 2 ? FAST_START : SLOW_START;
+		dev->rampup = cmd == 2 ? FAST_START : SLOW_START;
 		sim_cancel (u);
 		break;
 	}
@@ -145,9 +157,20 @@ void printer_control (int num, uint32 cmd)
  */
 void printer_hammer (int num, int pos, uint32 mask)
 {
+	struct acpu_t * dev = acpu + num;
 	while (mask) {
-		if (mask & 1)
-			line[num][pos] = curchar[num];
+		if (mask & 1) {
+			int strike = 0;
+			while (dev->line[pos][strike] && strike < MAX_STRIKES)
+				++strike;
+			if (strike < MAX_STRIKES) {
+				dev->line[pos][strike] = dev->curchar;
+				if (pos + 1 > dev->length)
+					dev->length = pos + 1;
+				if (strike + 1 > dev->strikes)
+					dev->strikes = strike + 1;
+			}
+		}
 		mask >>= 1;
 		pos += 8;
 	}
@@ -160,19 +183,21 @@ void printer_hammer (int num, int pos, uint32 mask)
 t_stat printer_event (UNIT *u)
 {
 	int num = u - printer_unit;
-	switch (curchar[num]) {
+	struct acpu_t * dev = acpu + num;
+
+	switch (dev->curchar) {
 	case 0 ... 0137:
 		GRP |= GRP_PRN1_SYNC >> num;
-		++curchar[num];
+		++dev->curchar;
 		/* For next char */
 		sim_activate (u, 1400*USEC);
-		if (feed[num] && --feed[num] == 0) {
+		if (dev->feed && --dev->feed == 0) {
 			READY |= PRN1_LINEFEED >> num;
 		}
 		break;
 	case 0140:
 		/* For "zero" */
-		curchar[num] = 0;
+		dev->curchar = 0;
 		GRP |= GRP_PRN1_ZERO >> num;
 		if (printer_dev.dctrl)
 			besm6_debug(">>> АЦПУ%d 'ноль'", num);
@@ -228,15 +253,6 @@ static const unsigned short gost_to_unicode_lat [256] = {
 static void
 utf8_putc (unsigned short ch, FILE *fout)
 {
-        static int initialized = 0;
-
-        if (! initialized) {
-                /* Write UTF-8 tag: zero width no-break space. */
-                putc (0xEF, fout);
-                putc (0xBB, fout);
-                putc (0xBF, fout);
-                initialized = 1;
-        }
         if (ch < 0x80) {
                 putc (ch, fout);
                 return;
@@ -274,18 +290,25 @@ gost_putc (unsigned char ch, FILE *fout)
 }
 
 /*
- * Write GOST-10859 string to file in UTF-8.
+ * Write GOST-10859 string with overprint to file in UTF-8.
  */
 void
-offset_gost_write (char *line, int n, FILE *fout)
+offset_gost_write (int num, FILE *fout)
 {
-        unsigned short u;
-
-        while (n-- > 0) {
-		unsigned char ch = *line++;
-                u = ch ? gost_to_unicode (ch-1) : 0;
-                if (! u)
-                        u = ' ';
-                utf8_putc (u, fout);
+	struct acpu_t * dev = acpu + num;
+	int s, p;
+	for (s = 0; s < dev->strikes; ++s) {
+		if (s)
+			fputc ('\r', fout);
+		for (p = 0; p < dev->length; ++p) {
+			gost_putc (dev->line[p][s] - 1, fout);
+		}
         }
+
+	if (acpu_isatty[num])
+		fputc('\r', fout);
+
+	fputc ('\n', fout);
+	memset(dev->line, 0, sizeof (dev->line));
+	dev->length = dev->strikes = 0;
 }

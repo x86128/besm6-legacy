@@ -176,9 +176,9 @@ static unsigned lose_mask[8] = {
 
 void mmu_protection_check (int addr)
 {
-	/* Защита блокируется в режиме супервизора для адресов 1-7 */
+	/* Защита блокируется в режиме супервизора для физических (!) адресов 1-7 (ТО-8) - WTF? */
 	int tmp_prot_disabled = (M[PSW] & PSW_PROT_DISABLE) ||
-		(IS_SUPERVISOR (RUU) && addr < 010);
+		(IS_SUPERVISOR (RUU) && (M[PSW] & PSW_MMAP_DISABLE) && addr < 010);
 
 	/* Защита не заблокирована, а лист закрыт */
 	if (! tmp_prot_disabled && (RZ & (1 << (addr >> 10)))) {
@@ -495,11 +495,6 @@ t_value mmu_fetch (int addr)
 	t_value val;
 
 	if (addr == 0) {
-		/* В режиме супервизора слово 0 - команда,
-		 * в режиме пользователя - число
-		 */
-		if (IS_SUPERVISOR (RUU))
-			return 0;
 		if (mmu_dev.dctrl)
 			besm6_debug ("--- передача управления на 0");
 		longjmp (cpu_halt, STOP_INSN_CHECK);

@@ -249,7 +249,7 @@ const char *sim_stop_messages[] = {
 	"Точка останова по считыванию",			/* Emulator read watchpoint */
 	"Точка останова по записи",			/* Emulator write watchpoint */
 	"Выход за пределы памяти",			/* Run out end of memory */
-	"Неверный код команды",				/* Invalid instruction */
+	"Запрещенная команда",				/* Invalid instruction */
 	"Контроль команды",				/* A data-tagged word fetched */
 	"Команда в чужом листе",			/* Paging error during fetch */
 	"Число в чужом листе",				/* Paging error during load/store */
