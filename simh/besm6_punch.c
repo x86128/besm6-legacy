@@ -75,7 +75,14 @@ enum {
 	FS_IDLE,
 	FS_STARTING,
 	FS_RUNNING,
-	FS_TAIL
+	FS_IMAGE,
+	FS_IMAGE_LAST = FS_IMAGE + 119,
+	FS_TOOLONG,
+	FS_FILLUP,
+	FS_FILLUP_LAST = FS_FILLUP + 119,
+	FS_ENDA3,
+	FS_ENDA3_LAST = FS_ENDA3 + 119,
+	FS_TAIL,
 } fs_state[2];
 
 /*
@@ -159,11 +166,14 @@ static int utf8_getc (FILE *fin);
 t_stat fs_event (UNIT *u)
 {
 	int num = u - fs_unit;
-	if (fs_state[num] == FS_STARTING) {
+again:
+	switch (fs_state[num]) {
+	case FS_STARTING:
 		/* По первому прерыванию после запуска двигателя ничего не читаем */
 		FS[num] = 0;
 		fs_state[num] = FS_RUNNING;
-	} else {
+		break;
+	case FS_RUNNING: {
 		int ch;
 		/* переводы строк игнорируются */
 		while ((ch = utf8_getc (u->fileref)) == '\n');
@@ -171,14 +181,77 @@ t_stat fs_event (UNIT *u)
 			/* хвост ленты без пробивок */
 			FS[num] = 0;
 			fs_state[num] = FS_TAIL;
+		} else if (ch == '\f') {
+			besm6_debug("<<< switching to image");
+			fs_state[num] = FS_IMAGE;
+			goto again;
 		} else {
 			ch = FS[num] = unicode_to_gost (ch);
 			ch = (ch & 0x55) + ((ch >> 1) & 0x55);
 			ch = (ch & 0x33) + ((ch >> 2) & 0x33);
 			ch = (ch & 0x0F) + ((ch >> 4) & 0x0F);
 			if (ch & 1); else FS[num] |= 0x80;
-		}	
-	} while (0);
+		}
+		break;
+	}
+	case FS_IMAGE ... FS_IMAGE_LAST: {
+		int ch = utf8_getc (u->fileref);
+		if (ch < 0) {
+			/* обрыв ленты */
+			FS[num] = 0;
+			fs_state[num] = FS_TAIL;
+		} else if (ch == '\n') {
+			/* идем дополнять образ карты нулевыми байтами */
+			fs_state[num] = FS_FILLUP + (fs_state[num] - FS_IMAGE);
+			goto again;
+		} else if (ch == '\f') {
+			if (fs_state[num] != FS_IMAGE)
+				besm6_debug("<<< ENDA3 requested mid-card?");
+			fs_state[num] = FS_ENDA3;
+			goto again;
+		} else {
+			ch = FS[num] = unicode_to_gost (ch);
+			ch = (ch & 0x55) + ((ch >> 1) & 0x55);
+			ch = (ch & 0x33) + ((ch >> 2) & 0x33);
+			ch = (ch & 0x0F) + ((ch >> 4) & 0x0F);
+			if (ch & 1); else FS[num] |= 0x80;
+			++fs_state[num];
+		}
+		break;
+	}
+	case FS_TOOLONG: {
+		/* дочитываем до конца строки */
+		int ch;
+		besm6_debug("<<< too long???");
+		while ((ch = utf8_getc (u->fileref)) != '\n' && ch >= 0);
+		if (ch < 0) {
+                        /* хвост ленты без пробивок */
+                        FS[num] = 0;
+                        fs_state[num] = FS_TAIL;
+                } else
+			goto again;
+		break;
+	}
+	case FS_FILLUP ... FS_FILLUP_LAST:
+		FS[num] = 0;
+		if (++fs_state[num] == FS_ENDA3) {
+			fs_state[num] = FS_IMAGE;
+		}
+		break;
+	case FS_ENDA3 ... FS_ENDA3_LAST:
+		if ((fs_state[num] - FS_ENDA3) % 5 == 0)
+			FS[num] = 0200;
+		else
+			FS[num] = 0;
+		if (++fs_state[num] == FS_TAIL) {
+			fs_state[num] = FS_RUNNING;
+		}
+		break;
+	case FS_IDLE:
+	case FS_TAIL:
+		FS[num] = 0;
+		break;
+	}
 	GRP |= GRP_FS1_SYNC >> num;
 	return SCPE_OK;
 }
