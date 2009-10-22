@@ -118,6 +118,8 @@ REG cpu_reg[] = {
 };
 
 MTAB cpu_mod[] = {
+	{ 1, 0, "UNICODE console input", "UNICODE" },
+	{ 1, 1, "KOI7 (jcuken) console input", "KOI7" },
 	{ 0 }
 };
 
@@ -1112,15 +1114,15 @@ void cpu_one_inst ()
 		Aex = ADDR (addr + M[reg]);
 		rg = Aex & (IS_SUPERVISOR (RUU) ? 037 : 017);
 		ad = ADDR (ACC);
-		if ((M[PSW] & PSW_MMAP_DISABLE) && (rg == IBP || rg == DWP))
-			M[rg] |= BIT(16);
-		M[0] = 0;
 		if (rg != 017) {
 			M[017] = ADDR (M[017] - 1);
 			corr_stack = 1;
 		}
 		ACC = mmu_load (rg != 017 ? M[017] : ad);
 		M[rg] = ad;
+		if ((M[PSW] & PSW_MMAP_DISABLE) && (rg == IBP || rg == DWP))
+			M[rg] |= BIT(16);
+		M[0] = 0;
 		RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (14, 3);
 		break;

@@ -71,17 +71,18 @@ DEVICE fs_dev = {
 	NULL, DEV_DISABLE | DEV_DEBUG
 };
 
+#define CARD_LEN 120
 enum {
 	FS_IDLE,
 	FS_STARTING,
 	FS_RUNNING,
 	FS_IMAGE,
-	FS_IMAGE_LAST = FS_IMAGE + 119,
+	FS_IMAGE_LAST = FS_IMAGE + CARD_LEN - 1,
 	FS_TOOLONG,
 	FS_FILLUP,
-	FS_FILLUP_LAST = FS_FILLUP + 119,
+	FS_FILLUP_LAST = FS_FILLUP + CARD_LEN - 1,
 	FS_ENDA3,
-	FS_ENDA3_LAST = FS_ENDA3 + 119,
+	FS_ENDA3_LAST = FS_ENDA3 + CARD_LEN - 1,
 	FS_TAIL,
 } fs_state[2];
 
@@ -182,7 +183,6 @@ again:
 			FS[num] = 0;
 			fs_state[num] = FS_TAIL;
 		} else if (ch == '\f') {
-			besm6_debug("<<< switching to image");
 			fs_state[num] = FS_IMAGE;
 			goto again;
 		} else {
