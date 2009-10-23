@@ -94,7 +94,11 @@ REG mmu_reg[] = {
 { 0 }
 };
 
+#define CACHE_ENB 1
+
 MTAB mmu_mod[] = {
+	{ 1, 0, "NOCACHE", "NOCACHE" },
+	{ 1, 1, "CACHE", "CACHE" },
 	{ 0 }
 };
 
@@ -305,6 +309,19 @@ void mmu_store (int addr, t_value val)
 	    sim_brk_test (addr, SWMASK('W')))
 		longjmp(cpu_halt, STOP_WWATCH);
 
+	if (!(mmu_unit.flags & CACHE_ENB)) {
+		static int roundrobin;
+		int faked = (++roundrobin ^ addr ^ val) & 7;
+
+		if (addr > 0100000 && addr < 0100010)
+			return;
+
+		BRZ[faked] = SET_CONVOL (val, RUU ^ CONVOL_INSN);
+		BAZ[faked] = addr;
+		mmu_flush (faked);
+		return;
+	}
+
 	/* Запись в тумблерные регистры - выталкивание БРЗ */
 	if (addr > 0100000 && addr < 0100010) {
 		mmu_flush_by_age();
@@ -322,6 +339,36 @@ void mmu_store (int addr, t_value val)
 		mmu_update_oldest ();
 		mmu_flush (OLDEST);
 	}
+}
+
+t_value mmu_memaccess (int addr) {
+	t_value val;
+
+	/* Вычисляем физический адрес слова */
+	addr = (addr > 0100000) ? (addr - 0100000) :
+		(addr & 01777) | (TLB[addr >> 10] << 10);
+	if (addr >= 010) {
+		/* Из памяти */
+		val = memory[addr];
+	} else {
+		/* С тумблерных регистров */
+		if (mmu_dev.dctrl)
+			besm6_debug("--- (%05o) чтение ТР%o", PC, addr);
+		val = pult[addr];
+	}
+	if (sim_log && (mmu_dev.dctrl || cpu_dev.dctrl)) {
+		fprintf (sim_log, "--- (%05o) чтение ", addr & BITS(15));
+		fprint_sym (sim_log, 0, &val, 0, 0);
+		fprintf (sim_log, "\n");
+	}
+
+	/* На тумблерных регистрах контроля числа не бывает */
+	if (addr >= 010 && ! IS_NUMBER (val)) {
+		iintr_data = addr & 7;
+		besm6_debug ("--- (%05o) контроль числа", addr);
+		longjmp (cpu_halt, STOP_RAM_CHECK);
+	}
+	return val;
 }
 
 /*
@@ -350,33 +397,14 @@ t_value mmu_load (int addr)
 	    sim_brk_test (addr, SWMASK('R')))
 		longjmp(cpu_halt, STOP_RWATCH);
 
+	if (!(mmu_unit.flags & CACHE_ENB)) {
+		return mmu_memaccess (addr) & BITS48;
+	}
+
 	matching = mmu_match(addr, -1);
 
 	if (matching == -1) {
-		/* Вычисляем физический адрес слова */
-		addr = (addr > 0100000) ? (addr - 0100000) :
-			(addr & 01777) | (TLB[addr >> 10] << 10);
-		if (addr >= 010) {
-			/* Из памяти */
-			val = memory[addr];
-		} else {
-			/* С тумблерных регистров */
-			if (mmu_dev.dctrl)
-				besm6_debug("--- (%05o) чтение ТР%o", PC, addr);
-			val = pult[addr];
-		}
-		if (sim_log && (mmu_dev.dctrl || cpu_dev.dctrl)) {
-			fprintf (sim_log, "--- (%05o) чтение ", addr & BITS(15));
-			fprint_sym (sim_log, 0, &val, 0, 0);
-			fprintf (sim_log, "\n");
-		}
-
-		/* На тумблерных регистрах контроля числа не бывает */
-		if (addr >= 010 && ! IS_NUMBER (val)) {
-			iintr_data = addr & 7;
-			besm6_debug ("--- (%05o) контроль числа", addr);
-			longjmp (cpu_halt, STOP_RAM_CHECK);
-		}
+		val = mmu_memaccess (addr);
 	} else {
 		/* старшинство обновляется, только если оно не затрагивает
 		 * старший БРЗ (ТО-2).
@@ -453,16 +481,17 @@ t_value mmu_prefetch (int addr, int actual)
 	t_value val;
 	int i;
 
-	for (i = 0; i < 4; ++i) {
+	if (mmu_unit.flags & CACHE_ENB) {
+	    for (i = 0; i < 4; ++i) {
 		if (BAS[i] == addr) {
 			if (actual) {
 				brs_set_wins (i);
 			}
 			return BRS[i];
 		}
-	}
+	    }
 
-	for (i = 0; i < 4; ++i) {
+	    for (i = 0; i < 4; ++i) {
 		if (brs_loses_to_all (i)) {
 			BAS[i] = addr;
 			if (actual) {
@@ -470,7 +499,14 @@ t_value mmu_prefetch (int addr, int actual)
 			}
 			break;
 		}
+	    }
+	} else if (!actual) {
+		return 0;
+	} else {
+		/* Чтобы лампочки мигали */
+		i = addr & 3;
 	}
+
 	if (addr < 0100000) {
 		int page = TLB[addr >> 10];
 
@@ -479,6 +515,7 @@ t_value mmu_prefetch (int addr, int actual)
 	} else {
 		addr = addr & BITS(15);
 	}
+
 	if (addr < 010)
 		val = pult[addr];
 	else
