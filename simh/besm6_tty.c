@@ -125,6 +125,10 @@ void vt_print()
 				case '\r':
 				case '\033':
 					break;
+				/* На Видеотоне ^Z = забой */
+				case '\032':
+					vt_sym = '\b';
+					break;
 				default:
 					/* Пропускаем нетекстовые символы */
 					vt_sym = ' ';
@@ -242,10 +246,9 @@ again:
 		(c3 & 0x3f));
 }
 
-#if 0
 /*
  * Альтернативный вариант ввода, не требующий переключения на русскую клавиатуру.
- * Символы "точка" и "запятая" - на клавише "гравис/тильда",
+ * Символы "точка" и "запятая" вводятся через shift, "больше-меньше" - "тильда-гравис".
  * "точка с запятой" - "закр. фиг. скобка", "апостроф" - "верт. черта".
  */
 static int vt_kbd_input_koi7 ()
@@ -291,14 +294,14 @@ static int vt_kbd_input_koi7 ()
 	case 'n': return 't';
 	case 'm': return 'x';
 	case ',': return 'b';
-	case '~': return ',';
+	case '<': return ',';
 	case '.': return '~';
-	case '`': return '.';
-	case '\177': return '\b';
+	case '>': return '.';
+	case '~': return '>';
+	case '`': return '<';
 	default: return r;
 	}
 }
-#endif
 
 #define KBD_MODE_UNICODE	0
 #define KBD_MODE_KOI7		1
@@ -310,12 +313,8 @@ void vt_receive()
 {
 	switch (vt_instate) {
 	case 0:
-#if 0
 		vt_typed = ((cpu_unit.flags & KBD_MODE_KOI7) == KBD_MODE_KOI7) ?
 			vt_kbd_input_koi7 () : vt_kbd_input_unicode ();
-#else
-		vt_typed = vt_kbd_input_unicode();
-#endif
 		if (vt_typed < 0) {
 			sim_interval = 0;
 			return;
@@ -323,6 +322,8 @@ void vt_receive()
 		if (vt_typed <= 0177) {
 			if (vt_typed == '\r')
 				vt_typed = 3;	/* ^C - конец строки */
+			if (vt_typed == '\b' || vt_typed == '\177')
+				vt_typed = 26;	/* ^Z - забой */
 			vt_instate = 1;
 			TTY_IN = OPER;		/* start bit */
 			GRP |= GRP_TTY_START;	/* не используется ? */
@@ -391,7 +392,7 @@ DEVICE console_dev = {
 	NULL, DEV_DEBUG
 };
 
-#define CONS_READY 0200
+#define CONS_READY 0100
 #define CONS_ERROR 0100
 
 #define CONS_CAN_PRINT 01000
@@ -403,7 +404,7 @@ t_stat console_reset (DEVICE *dptr)
 {
 	sim_cancel (&console_unit[0]);
 	sim_cancel (&console_unit[1]);
-	READY2 = CONS_READY;
+	READY2 |= CONS_READY;
 	PRP |= CONS_CAN_PRINT;
 	return SCPE_OK;
 }
