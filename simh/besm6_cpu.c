@@ -61,13 +61,13 @@ extern const char *scp_error_messages[];
 #define PRP_WIRED_BITS 0770000
 
 int corr_stack;
+int redraw_panel;
 uint32 delay;
 jmp_buf cpu_halt;
 
 t_stat cpu_examine (t_value *vptr, t_addr addr, UNIT *uptr, int32 sw);
 t_stat cpu_deposit (t_value val, t_addr addr, UNIT *uptr, int32 sw);
 t_stat cpu_reset (DEVICE *dptr);
-t_stat cpu_panel (UNIT *this);
 
 /*
  * CPU data structures
@@ -317,7 +317,7 @@ static void cpu_sigalarm (int signum)
 
 	/* Перерисовка панели каждые 64 миллисекунды. */
 	if ((counter & 15) == 0) {
-		besm6_draw_panel();
+		redraw_panel = 1;
 	}
 }
 
@@ -727,11 +727,16 @@ void cpu_one_inst ()
 
 	/* Если мы в цикле "ЖДУ" диспака, а терминалы ничего не выдают
 	 * и не принимают, засыпаем до очередного прерывания от таймера. */
-	if (RUU == 047 && PC == 04440 && RK == 067704440 &&
-	    vt_is_idle() && printer_is_idle()) {
-		pause ();
+	if (RUU == 047 && PC == 04440 && RK == 067704440) {
+		/* Притормаживаем выполнение каждой команды холостого цикла,
+		 * чтобы быстрее обрабатывались прерывания: ускоряются
+		 * терминалы и АЦПУ. */
 		delay = sim_interval;
-		return;
+
+		/* Один раз в цикле, если нечем больше заняться,
+		 * освобождаем процессор до следующего тика таймера. */
+		if (M[015] == 0 && vt_is_idle() && printer_is_idle())
+			pause ();
 	}
 
 	reg = RK >> 20;
@@ -1608,6 +1613,10 @@ ret:			besm6_draw_panel();
 		}
 		cpu_one_inst ();			/* one instr */
 		iintr = 0;
+		if (redraw_panel) {
+			besm6_draw_panel();
+			redraw_panel = 0;
+		}
 
 		if (delay < 1)
 			delay = 1;
