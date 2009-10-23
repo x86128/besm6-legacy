@@ -336,6 +336,9 @@ t_stat cpu_reset (DEVICE *dptr)
 	for (i=0; i<NREGS; ++i)
 		M[i] = 0;
 
+	/* Устройства ввода с перфокарт не готовы */
+	READY2 |= 042000000;
+
 	/* Регистр 17: БлП, БлЗ, ПОП, ПОК, БлПр */
 	M[PSW] = PSW_MMAP_DISABLE | PSW_PROT_DISABLE | PSW_INTR_HALT |
 		PSW_CHECK_HALT | PSW_INTR_DISABLE;
@@ -735,7 +738,8 @@ void cpu_one_inst ()
 
 		/* Один раз в цикле, если нечем больше заняться,
 		 * освобождаем процессор до следующего тика таймера. */
-		if (M[015] == 0 && vt_is_idle() && printer_is_idle())
+		if (M[015] == 0 && vt_is_idle() &&
+		    printer_is_idle() && fs_is_idle())
 			pause ();
 	}
 
