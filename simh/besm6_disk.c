@@ -70,7 +70,7 @@ REG disk_reg[] = {
 { "УС",     &disk_op,		8, 24, 0, 1 },
 { "ЗОНА",   &disk_zone,		8, 10, 0, 1 },
 { "ДОРОЖКА",&disk_track,	8, 2,  0, 1 },
-{ "МОЗУ",   &disk_memory,	8, 15, 0, 1 },
+{ "МОЗУ",   &disk_memory,	8, 20, 0, 1 },
 { "СЧСЛОВ", &disk_nwords,	8, 11, 0, 1 },
 { 0 }
 };
@@ -250,10 +250,11 @@ void disk_io (int ctlr, uint32 cmd)
 		disk_track = cmd & DISK_HALFZONE;
 		disk_memory = (cmd & (DISK_PAGE | DISK_HALFPAGE)) >> 2 | (cmd & DISK_BLOCK) >> 8;
 	}
+#if 0
 	if (disk_dev.dctrl)
 		besm6_debug ("::: КМД %c: задание на %s", ctlr + '3',
 			(disk_op & DISK_READ) ? "чтение" : "запись");
-
+#endif
 	if (! (disk_op & DISK_READ) && (u->flags & UNIT_RO)) {
 		/* Read only. */
 		longjmp (cpu_halt, SCPE_RO);
@@ -325,15 +326,18 @@ void disk_ctl (int ctlr, uint32 cmd)
 			return;
 		}
 		disk_no += ctlr << 3;
+#if 0
 		if (disk_dev.dctrl)
 			besm6_debug ("::: КМД %c: выбор устройства %d",
 				ctlr + '3', disk_no);
-
+#endif
 	} else if (cmd & BIT(9)) {
 		/* Проверка прерывания от КМД? */
+#if 0
 		if (disk_dev.dctrl)
 			besm6_debug ("::: КМД %c: проверка готовности",
 				ctlr + '3');
+#endif
 		if (ctlr == 0)
 			GRP |= GRP_CHAN3_FREE;
 		else
@@ -348,44 +352,60 @@ void disk_ctl (int ctlr, uint32 cmd)
 					ctlr + '3');
 			break;
 		case 001: /* сброс на 0 цилиндр */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: сброс на 0 цилиндр",
 					ctlr + '3');
+#endif
 			break;
 		case 002: /* подвод */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: подвод", ctlr + '3');
+#endif
 			break;
 		case 003: /* чтение (НСМД-МОЗУ) */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c чтение", ctlr + '3');
+#endif
 			break;
 		case 004: /* запись (МОЗУ-НСМД) */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: запись", ctlr + '3');
+#endif
 			break;
 		case 005: /* разметка */
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: разметка", ctlr + '3');
 			break;
 		case 006: /* сравнение кодов (МОЗУ-НСМД) */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: сравнение кодов", ctlr + '3');
+#endif
 			break;
 		case 007: /* чтение заголовка */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: чтение заголовка", ctlr + '3');
+#endif
 			break;
 		case 010: /* гашение PC */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: гашение регистра состояния",
 					ctlr + '3');
+#endif
 			disk_status = 0;
 			break;
 		case 011: /* опрос 1÷12 разрядов PC */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: опрос младших разрядов состояния",
 					ctlr + '3');
+#endif
 /* Вычислено по текстам ОС Дубна.
  * Диспак доволен. */
 #define STATUS_GOOD	0600001
@@ -395,18 +415,22 @@ void disk_ctl (int ctlr, uint32 cmd)
 				disk_status = 0;
 			break;
 		case 031: /* опрос 13÷24 разрядов РС */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: опрос старших разрядов состояния",
 					ctlr + '3');
+#endif
 			if (disk_unit[disk_no].fileref)
 				disk_status = (STATUS_GOOD >> 8) & BITS(12);
 			else
 				disk_status = 0;
 			break;
 		case 050: /* освобождение НМД */
+#if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: освобождение накопителя",
 					ctlr + '3');
+#endif
 			break;
 		default:
 			besm6_debug ("::: КМД %c: неизвестная команда %02o",
@@ -421,9 +445,11 @@ void disk_ctl (int ctlr, uint32 cmd)
  */
 int disk_state (int ctlr)
 {
+#if 0
 	if (disk_dev.dctrl)
 		besm6_debug ("::: КМД %c: опрос состояния = %04o",
 			ctlr + '3', disk_status);
+#endif
 	return disk_status;
 }
 

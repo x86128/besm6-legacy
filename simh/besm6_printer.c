@@ -25,8 +25,8 @@ void offset_gost_write (int num, FILE *fout);
  * printer_reg	PRINTER register list
  */
 UNIT printer_unit [] = {
-	{ UDATA (printer_event, UNIT_FIX+UNIT_ATTABLE, 0) },
-	{ UDATA (printer_event, UNIT_FIX+UNIT_ATTABLE, 0) },
+	{ UDATA (printer_event, UNIT_ATTABLE+UNIT_SEQ, 0) },
+	{ UDATA (printer_event, UNIT_ATTABLE+UNIT_SEQ, 0) },
 };
 
 
