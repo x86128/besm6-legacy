@@ -18,8 +18,8 @@ t_stat fs_event (UNIT *u);
 t_stat uvvk_event (UNIT *u);
 
 UNIT fs_unit [] = {
-	{ UDATA (fs_event, UNIT_FIX+UNIT_ATTABLE, 0) },
-	{ UDATA (fs_event, UNIT_FIX+UNIT_ATTABLE, 0) },
+	{ UDATA (fs_event, UNIT_SEQ+UNIT_ATTABLE, 0) },
+	{ UDATA (fs_event, UNIT_SEQ+UNIT_ATTABLE, 0) },
 };
 
 int curchar[2], feed[2], rampup[2];

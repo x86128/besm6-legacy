@@ -118,8 +118,6 @@ REG cpu_reg[] = {
 };
 
 MTAB cpu_mod[] = {
-	{ 1, 0, "UNICODE console input", "UNICODE" },
-	{ 1, 1, "KOI7 (jcuken) console input", "KOI7" },
 	{ 0 }
 };
 
@@ -206,7 +204,7 @@ REG reg_reg[] = {
 };
 
 UNIT reg_unit = {
-	UDATA (NULL, UNIT_FIX, 8)
+	UDATA (NULL, 0, 8)
 };
 
 DEVICE reg_dev = {
@@ -239,8 +237,9 @@ DEVICE *sim_devices[] = {
 	&mmu_dev,
 	&clock_dev,
 	&printer_dev,
-	&console_dev,
+	/* &console_dev,	КОНСУЛ - нефункционален в ДИСПАКе ? */
 	&fs_dev,
+	&tty_dev,	/* последовательные устройства - телетайпы и видеотоны */
 	0
 };
 
@@ -1662,9 +1661,9 @@ t_stat vt_clk (UNIT * this)
 
 
 UNIT clocks[] = {
-	{ UDATA(slow_clk, UNIT_FIX, 0) },	/* 10 р, 16 Гц */
-	{ UDATA(fast_clk, UNIT_FIX, 0) },	/* 40 р, 50 Гц */
-	{ UDATA(vt_clk, UNIT_FIX, 0) },		/* 19 р, 300 Гц */
+	{ UDATA(slow_clk, 0, 0) },	/* 10 р, 16 Гц */
+	{ UDATA(fast_clk, 0, 0) },	/* 40 р, 50 Гц */
+	{ UDATA(vt_clk, 0, 0) },		/* 19 р, 300 Гц */
 };
 
 t_stat clk_reset (DEVICE * dev)
