@@ -421,7 +421,7 @@ void besm6_draw_panel ()
 	/* Exit SIMH when window closed.*/
 	SDL_Event event;
 	if (SDL_PollEvent (&event) && event.type == SDL_QUIT)
-		longjmp (cpu_halt, SCPE_EXIT);
+		longjmp (cpu_halt, SCPE_STOP);
 }
 
 #if !defined(__WIN32__) && \
