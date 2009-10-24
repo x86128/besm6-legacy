@@ -531,7 +531,7 @@ static void cmd_033 ()
 		break;
 	case 030:
 		/* Гашение ПРП */
-		besm6_debug(">>> гашение ПРП");
+/*		besm6_debug(">>> гашение ПРП");*/
 		PRP &= ACC | PRP_WIRED_BITS;
 		break;
 	case 031:
@@ -546,7 +546,7 @@ static void cmd_033 ()
 		break;
 	case 034:
 		/* Запись в МПРП */
-		besm6_debug(">>> запись в МПРП");
+/*		besm6_debug(">>> запись в МПРП");*/
 		MPRP = ACC & 077777777;
 		break;
 	case 035:
@@ -585,7 +585,7 @@ static void cmd_033 ()
 		break;
 	case 0153:
 		/* гашение аппаратуры сопряжения с терминалами */
-		besm6_debug(">>> гашение АС: %08o", (uint32) ACC & BITS(24));
+/*		besm6_debug(">>> гашение АС: %08o", (uint32) ACC & BITS(24));*/
 		break;
 	case 0154 ... 0155:
 		/* TODO: управление выводом на перфокарты */
@@ -605,7 +605,7 @@ static void cmd_033 ()
 		break;
 	case 0177:
 		/* управление табло ГПВЦ СО АН СССР */
-		besm6_debug(">>> ТАБЛО: %08o", (uint32) ACC & BITS(24));
+/*		besm6_debug(">>> ТАБЛО: %08o", (uint32) ACC & BITS(24));*/
 		break;
 	case 04001 ... 04002:
 		/* TODO: считывание слога в режиме имитации обмена */

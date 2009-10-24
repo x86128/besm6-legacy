@@ -124,7 +124,7 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 		if (attached & mask) {
 			if (vt_mask & mask) {
 				vt_sym[num] =
-				vt_active[num] = 
+				vt_active[num] =
 				vt_typed[num] =
 				vt_instate[num] = 0;
 				vt_mask &= ~mask;
@@ -176,7 +176,7 @@ void tty_send (uint32 mask)
 }
 
 /* Ввод с телетайпа не реализован,
- * вывод на телетайп должен вызываться по 50 Гц таймеру 
+ * вывод на телетайп должен вызываться по 50 Гц таймеру
  * или после каждого tty_send.
  */
 void tt_print()
@@ -222,7 +222,7 @@ void vt_print()
 {
 	uint32 workset = (TTY_OUT & vt_mask) | vt_sending;
 	int num;
-	
+
 	if (workset == 0) {
 		++vt_idle;
 		return;
@@ -230,7 +230,7 @@ void vt_print()
 
 	for (num = besm6_highest_bit (workset) - 24;
 		workset; num = besm6_highest_bit (workset) - 24) {
-	    uint mask = 1 << (24 - num);
+	    int mask = 1 << (24 - num);
 	    int c = (TTY_OUT & mask) != 0;
 	    switch (vt_active[num]*2+c) {
 	    case 0: /* idle */
@@ -243,26 +243,28 @@ void vt_print()
 	    case 18: /* stop bit */
 		vt_sym[num] = ~vt_sym[num] & 0x7f;
 		if (vt_sym[num] < 0x60) {
-			if (vt_sym[num] < ' ')
-				switch (vt_sym[num]) {
-				case '\a':
-				case '\b':
-				case '\t':
-				case '\n':
-				case '\v':
-				case '\f':
-				case '\r':
-				case '\033':
-					break;
-				/* На Видеотоне ^Z = забой */
-				case '\032':
-					vt_sym[num] = '\b';
-					break;
-				default:
+			switch (vt_sym[num]) {
+			case '\a':
+			case '\b':
+			case '\t':
+			case '\n':
+			case '\v':
+			case '\f':
+			case '\r':
+			case '\033':
+				break;
+			/* На Видеотоне ^Z = забой */
+			case '\032':
+				vt_sym[num] = '\b';
+				break;
+			default:
+				if (vt_sym[num] < ' ') {
 					/* Пропускаем нетекстовые символы */
-					vt_sym[num] = ' ';
+					vt_sym[num] = 0;
 				}
-			fputc (vt_sym[num], stdout);
+			}
+			if (vt_sym[num])
+				fputc (vt_sym[num], stdout);
 		} else
 			fputs (koi7_rus_to_unicode[vt_sym[num] - 0x60], stdout);
 		fflush(stdout);
@@ -442,7 +444,7 @@ int odd_parity(unsigned char c) {
 	return c & 1;
 }
 
-/* Пока все берем из стандартного ввода */ 
+/* Пока все берем из стандартного ввода */
 void vt_receive()
 {
 
