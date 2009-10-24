@@ -662,7 +662,7 @@ static void cmd_033 ()
 		break;
 	case 04102:
 		/* Опрос сигналов готовности перфокарт и перфолент */
-		besm6_debug("Reading punchcard/punchtape READY @%05o", PC);
+/*		besm6_debug("Reading punchcard/punchtape READY @%05o", PC);*/
 		ACC = READY2;
 		break;
 	case 04103 ... 04106:
