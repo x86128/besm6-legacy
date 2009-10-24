@@ -44,6 +44,7 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <time.h>
 
 t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
@@ -709,6 +710,62 @@ static void cmd_033 ()
 	}
 }
 
+void check_initial_setup ()
+{
+	const int MGRP_COPY = 01455;	/* OS version specific? */
+	const int TAKEN = 0442;		/* fixed? */
+	const int YEAR = 0221;		/* fixed */
+
+	/* 47 р. яч. ЗАНЯТА - разр. приказы вообще */
+	const t_value SETUP_REQS_ENABLED = 1LL << 46;
+
+	/* 7 р. яч. ЗАНЯТА - разр любые приказы */
+	const t_value ALL_REQS_ENABLED = 1 << 6;
+
+	if ((memory[TAKEN] & SETUP_REQS_ENABLED) == 0 ||
+	    (memory[TAKEN] & ALL_REQS_ENABLED) != 0 ||
+	    (MGRP & GRP_PANEL_REQ) == 0) {
+		/* Слишком рано, или уже не надо, или невовремя */
+		return;
+	}
+
+	/* Выдаем приказы оператора СМЕ и ВРЕ,
+	 * а дату корректируем непосредственно в памяти.
+	 */
+	/* Номер смены в 22-24 рр. МГРП: если еще не установлен, установить */
+	if (((memory[MGRP_COPY] >> 21) & 3) == 0) {
+	/* приказ СМЕ: ТР6 = 010, ТР4 = 1, 22-24 р ТР5 - #смены */
+		pult[6] = 010;
+		pult[4] = 1;
+		pult[5] = 1 << 21;
+		GRP |= GRP_PANEL_REQ;
+	} else {
+	/* Яч. ГОД обновляем самостоятельно */
+		time_t t;
+		t_value date;
+       	        time(&t);
+		struct tm * d;
+		d = localtime(&t);
+		++d->tm_mon;
+		date = (t_value) (d->tm_mday / 10) << 33 |
+		(t_value) (d->tm_mday % 10) << 29 |
+		(d->tm_mon / 10) << 28 |
+		(d->tm_mon % 10) << 24 |
+		(d->tm_year % 10) << 20 |
+		((d->tm_year / 10) % 10) << 16 |
+		(memory[YEAR] & 7);
+		memory[YEAR] = SET_CONVOL (date, CONVOL_NUMBER);
+	/* приказ ВРЕ: ТР6 = 016, ТР5 = 8-13 р.-часы, 1-7 р.-минуты */
+		pult[6] = 016;
+		pult[4] = 0;
+		pult[5] = (d->tm_hour / 10) << 12 |
+			(d->tm_hour % 10) << 8 |
+			(d->tm_min / 10) << 4 |
+			(d->tm_min % 10);
+		GRP |= GRP_PANEL_REQ;
+	}
+}
+
 /*
  * Execute one instruction, placed on address PC:RUU_RIGHT_INSTR.
  * Increment delay. When stopped, perform a longjmp to cpu_halt,
@@ -738,8 +795,10 @@ void cpu_one_inst ()
 		/* Один раз в цикле, если нечем больше заняться,
 		 * освобождаем процессор до следующего тика таймера. */
 		if (M[015] == 0 && vt_is_idle() &&
-		    printer_is_idle() && fs_is_idle())
+		    printer_is_idle() && fs_is_idle()) {
+			check_initial_setup ();
 			pause ();
+		}
 	}
 
 	reg = RK >> 20;
