@@ -98,7 +98,16 @@ REG tty_reg[] = {
 	{ 0 }
 };
 
-TMLN tty_line [TTY_MAX+1];			/* line descriptors */
+/*
+ * Дескрипторы линий для мультиплексора TMXR.
+ * Поле .conn содержит номер сокета и означает занятую линию.
+ * Для локальных терминалов делаем .conn = 1.
+ * Чтобы нумерация линий совпадала с нумерацией терминалов
+ * (с единицы), нулевую линию держим занятой (.conn = 1).
+ * Поле .rcve устанавливается в 1 для сетевых соединений.
+ * Для локальных терминалов оно равно 0.
+ */
+TMLN tty_line [TTY_MAX+1];
 TMXR tty_desc = { TTY_MAX+1, 0, 0, tty_line };	/* mux descriptor */
 
 t_stat tty_reset (DEVICE *dptr)
@@ -151,6 +160,11 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 	switch (val & TTY_STATE_MASK) {
 	case TTY_OFFLINE_STATE:
 		if (t->conn) {
+			if (t->rcve) {
+				tmxr_reset_ln (t);
+				t->rcve = 0;
+			} else
+				t->conn = 0;
 			if (vt_mask & mask) {
 				vt_sym[num] =
 				vt_active[num] =
@@ -162,17 +176,12 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 				tt_active[num] = 0;
 				tt_mask &= ~mask;
 			}
-			if (t->rcve)
-				tmxr_reset_ln (t);
-			else
-				t->conn = 0;
 		}
 		break;
 	case TTY_TELETYPE_STATE:
 		if (t->conn && ! (tt_mask & mask))
 			return SCPE_ALATT;
 		t->conn = 1;
-		t->xmte = 0;
 		t->rcve = 0;
 		tt_mask |= mask;
 		break;
@@ -180,7 +189,6 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 		if (t->conn && ! (vt_mask & mask))
 			return SCPE_ALATT;
 		t->conn = 1;
-		t->xmte = 0;
 		t->rcve = 0;
 		vt_mask |= mask;
 		break;
@@ -263,9 +271,10 @@ void vt_putc (int num, int c)
 {
 	TMLN *t = &tty_line [num];
 
-	if (t->xmte && t->conn) {
+	if (t->rcve) {
 		/* Передача через telnet. */
-		tmxr_putc_ln (t, c);
+		if (t->conn)
+			tmxr_putc_ln (t, c);
 	} else {
 		/* Вывод на консоль. */
 		fputc (c, stdout);
@@ -304,7 +313,6 @@ void vt_print()
 		/*besm6_debug ("*** tty_event: новое подключение, tty%d", num);*/
 		t = &tty_line [num];
 		t->rcve = 1;
-		t->xmte = 1;
 		tty_unit[num].flags &= ~TTY_STATE_MASK;
 		tty_unit[num].flags |= TTY_VT340_STATE;
 		vt_mask |= 1 << (TTY_MAX - num);
