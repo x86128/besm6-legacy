@@ -343,8 +343,12 @@ void vt_print()
 	/* Есть новые сетевые подключения? */
 	num = tmxr_poll_conn (&tty_desc);
 	if (num > 0 && num <= TTY_MAX) {
-		/*besm6_debug ("*** tty_event: новое подключение, tty%d", num);*/
 		t = &tty_line [num];
+		besm6_debug ("*** tty%d: новое подключение от %d.%d.%d.%d",
+			num, (unsigned char) (t->ipad >> 24),
+			(unsigned char) (t->ipad >> 16),
+			(unsigned char) (t->ipad >> 8),
+			(unsigned char) t->ipad);
 		t->rcve = 1;
 		tty_unit[num].flags &= ~TTY_STATE_MASK;
 		tty_unit[num].flags |= TTY_VT340_STATE;
@@ -487,6 +491,14 @@ int vt_getc (num)
 
 	if (! t->conn) {
 		/* Пользователь отключился. */
+		if (t->ipad) {
+			besm6_debug ("*** tty%d: отключение %d.%d.%d.%d",
+				num, (unsigned char) (t->ipad >> 24),
+				(unsigned char) (t->ipad >> 16),
+				(unsigned char) (t->ipad >> 8),
+				(unsigned char) t->ipad);
+			t->ipad = 0;
+		}
 		tty_setmode (tty_unit+num, TTY_OFFLINE_STATE, 0, 0);
 		tty_unit[num].flags &= ~TTY_STATE_MASK;
 		return -1;
