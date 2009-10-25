@@ -19,7 +19,6 @@
 #include "sim_tmxr.h"
 
 #define TTY_MAX		24		/* Количество терминалов */
-#define TTY_TMXR_PERIOD	200*MSEC	/* Период опроса для tmxr, уточнить */
 
 /*
  * Согласно таблице в http://ru.wikipedia.org/wiki/МТК-2
@@ -62,38 +61,36 @@ int vt_typed [TTY_MAX], vt_instate [TTY_MAX];
 uint32 vt_sending, vt_receiving;
 
 // Attachments survive the reset
-uint32 attached = 0, tt_mask = 0, vt_mask = 0;
+uint32 tt_mask = 0, vt_mask = 0;
 
 uint32 TTY_OUT = 0, TTY_IN = 0, vt_idle = 0;
 
-t_stat tty_event (UNIT *u);
-
 UNIT tty_unit [] = {
-	{ UDATA (tty_event, UNIT_DIS, 0) },	/* fake unit */
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
-	{ UDATA (tty_event, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_DIS, 0) },		/* fake unit */
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
 	{ 0 }
 };
 
@@ -101,8 +98,8 @@ REG tty_reg[] = {
 	{ 0 }
 };
 
-TMLN tty_ldsc [TTY_MAX];			/* line descriptors */
-TMXR tty_desc = { TTY_MAX, 0, 0, tty_ldsc };	/* mux descriptor */
+TMLN tty_line [TTY_MAX+1];			/* line descriptors */
+TMXR tty_desc = { TTY_MAX+1, 0, 0, tty_line };	/* mux descriptor */
 
 t_stat tty_reset (DEVICE *dptr)
 {
@@ -115,10 +112,7 @@ t_stat tty_reset (DEVICE *dptr)
 	vt_sending = vt_receiving = 0;
 	TTY_IN = TTY_OUT = 0;
 	vt_idle = 1;
-	if (tty_desc.master)
-		sim_activate (tty_unit, TTY_TMXR_PERIOD);
-	else
-		sim_cancel (tty_unit);
+	tty_line[0].conn = 1;			/* faked, always busy */
 	return SCPE_OK;
 }
 
@@ -130,25 +124,14 @@ t_stat tty_reset (DEVICE *dptr)
  */
 t_stat tty_attach (UNIT *u, char *cptr)
 {
-	t_stat r;
-
 	/* Неважно, какой номер порта указывать в команде telnet.
 	 * Можно tty, можно tty1, tty7 - без разницы. */
-	u = &tty_unit[0];
-
-	r = tmxr_attach (&tty_desc, u, cptr);
-	if (r != SCPE_OK) {
-		besm6_debug ("*** tmxr_attach($s) вернул ошибку", cptr);
-		return r;
-	}
-	sim_activate (u, TTY_TMXR_PERIOD);
-	return SCPE_OK;
+	return tmxr_attach (&tty_desc, &tty_unit[0], cptr);
 }
 
 t_stat tty_detach (UNIT *u)
 {
-	sim_cancel (u);
-	return tmxr_detach (&tty_desc, u);
+	return tmxr_detach (&tty_desc, &tty_unit[0]);
 }
 
 #define TTY_UNICODE_CHARSET	0
@@ -162,11 +145,12 @@ t_stat tty_detach (UNIT *u)
 t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 {
 	int num = u - tty_unit;
+	TMLN *t = &tty_line [num];
 	uint32 mask = 1 << (TTY_MAX - num);
 
 	switch (val & TTY_STATE_MASK) {
 	case TTY_OFFLINE_STATE:
-		if (attached & mask) {
+		if (t->conn) {
 			if (vt_mask & mask) {
 				vt_sym[num] =
 				vt_active[num] =
@@ -178,46 +162,29 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 				tt_active[num] = 0;
 				tt_mask &= ~mask;
 			}
-			attached &= ~mask;
+			if (t->rcve)
+				tmxr_reset_ln (t);
+			else
+				t->conn = 0;
 		}
 		break;
 	case TTY_TELETYPE_STATE:
-		if ((attached & mask) && !(tt_mask & mask))
+		if (t->conn && ! (tt_mask & mask))
 			return SCPE_ALATT;
-		attached |= mask;
+		t->conn = 1;
+		t->xmte = 0;
+		t->rcve = 0;
 		tt_mask |= mask;
 		break;
 	case TTY_VT340_STATE:
-		if ((attached & mask) && !(vt_mask & mask))
+		if (t->conn && ! (vt_mask & mask))
 			return SCPE_ALATT;
-		attached |= mask;
+		t->conn = 1;
+		t->xmte = 0;
+		t->rcve = 0;
 		vt_mask |= mask;
 		break;
 	}
-	return SCPE_OK;
-}
-
-t_stat tty_event (UNIT *u)
-{
-	int num;
-	TMLN *t;
-
-	num = 1 + tmxr_poll_conn (&tty_desc);	/* anybody knocking at the door? */
-	if (num > 0) {
-		/*besm6_debug ("*** tty_event: новое подключение, tty%d", num);*/
-		if (num > TTY_MAX)
-			return SCPE_IERR;
-		t = &tty_ldsc [num-1];
-		t->rcve = 1;
-		t->xmte = 1;
-		tty_unit[num].flags &= ~TTY_STATE_MASK;
-		tty_unit[num].flags |= TTY_VT340_STATE;
-		attached |= 1 << (TTY_MAX - num);
-		vt_mask |= 1 << (TTY_MAX - num);
-	}
-	tmxr_poll_rx (&tty_desc);		/* poll input */
-	tmxr_poll_tx (&tty_desc);		/* poll output */
-	sim_activate (u, TTY_TMXR_PERIOD);
 	return SCPE_OK;
 }
 
@@ -289,26 +256,26 @@ void tt_print()
 	}
 }
 
+/*
+ * Выдача символа на терминал с указанным номером.
+ */
 void vt_putc (int num, int c)
 {
-	TMLN *t = &tty_ldsc [num-1];
-	int r;
-	extern const char *scp_error_messages[];
-	extern const char *sim_stop_messages[];
+	TMLN *t = &tty_line [num];
 
-	if (t->conn) {
-		r = tmxr_putc_ln (t, c);
-		if (r != SCPE_OK)
-			besm6_debug ("*** tmxr_putc_ln вернул ошибку: %s",
-				(r >= SCPE_BASE) ? scp_error_messages [r - SCPE_BASE] :
-                                sim_stop_messages [r]);
+	if (t->xmte && t->conn) {
+		/* Передача через telnet. */
+		tmxr_putc_ln (t, c);
 	} else {
+		/* Вывод на консоль. */
 		fputc (c, stdout);
 		fflush (stdout);
 	}
-
 }
 
+/*
+ * Выдача строки на терминал с указанным номером.
+ */
 void vt_puts (int num, const char *s)
 {
 	while (*s)
@@ -322,17 +289,31 @@ const char * koi7_rus_to_unicode [32] = {
 	"Ь", "Ы", "З", "Ш", "Э", "Щ", "Ч", "\0x7f",
 };
 
-/* Пока все идет в стандартный вывод */
+/*
+ * Обработка выдачи на все подключенные терминалы.
+ */
 void vt_print()
 {
 	uint32 workset = (TTY_OUT & vt_mask) | vt_sending;
 	int num;
+	TMLN *t;
+
+	/* Есть новые сетевые подключения? */
+	num = tmxr_poll_conn (&tty_desc);
+	if (num > 0 && num <= TTY_MAX) {
+		/*besm6_debug ("*** tty_event: новое подключение, tty%d", num);*/
+		t = &tty_line [num];
+		t->rcve = 1;
+		t->xmte = 1;
+		tty_unit[num].flags &= ~TTY_STATE_MASK;
+		tty_unit[num].flags |= TTY_VT340_STATE;
+		vt_mask |= 1 << (TTY_MAX - num);
+	}
 
 	if (workset == 0) {
 		++vt_idle;
 		return;
  	}
-
 	for (num = besm6_highest_bit (workset) - TTY_MAX;
 		workset; num = besm6_highest_bit (workset) - TTY_MAX) {
 	    int mask = 1 << (TTY_MAX - num);
@@ -403,8 +384,15 @@ void vt_print()
 	    workset &= ~mask;
 	}
 	vt_idle = 0;
+
+	/* Опрашиваем сокеты на передачу. */
+	tmxr_poll_tx (&tty_desc);
 }
 
+/*
+ * Перекодировка из Unicode в КОИ-7.
+ * Если нет соответствия, возвращает -1.
+ */
 static int unicode_to_koi7 (unsigned val)
 {
 	switch (val) {
@@ -446,12 +434,15 @@ static int unicode_to_koi7 (unsigned val)
 	return -1;
 }
 
+/*
+ * Ввод символа с терминала с указанным номером.
+ * Если нет приёма, возвращает -1.
+ * В случае прерывания возвращает 0400 (только для консоли).
+ */
 int vt_getc (num)
 {
-	TMLN *t = &tty_ldsc [num-1];
+	TMLN *t = &tty_line [num];
 	int c;
-	extern const char *scp_error_messages[];
-	extern const char *sim_stop_messages[];
 
 	if (t->rcve) {
 		/* Приём через telnet. */
@@ -577,11 +568,17 @@ int odd_parity(unsigned char c)
 	return c & 1;
 }
 
-/* Пока все берем из стандартного ввода */
+/*
+ * Обработка ввода со всех подключенных терминалов.
+ */
 void vt_receive()
 {
     uint32 workset = vt_mask;
     int num;
+
+    /* Опрашиваем сокеты на приём. */
+    tmxr_poll_rx (&tty_desc);
+
     TTY_IN = 0;
     for (num = besm6_highest_bit (workset) - TTY_MAX;
 		workset; num = besm6_highest_bit (workset) - TTY_MAX) {
@@ -598,7 +595,7 @@ void vt_receive()
 			break;
 		}
 		if (vt_typed[num] <= 0177) {
-			if (vt_typed[num] == '\r')
+			if (vt_typed[num] == '\r' || vt_typed[num] == '\n')
 				vt_typed[num] = 3;	/* ^C - конец строки */
 			if (vt_typed[num] == '\b' || vt_typed[num] == '\177')
 				vt_typed[num] = 26;	/* ^Z - забой */
