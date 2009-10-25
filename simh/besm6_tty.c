@@ -442,7 +442,7 @@ static int vt_kbd_input_koi7 ()
 	case 'm': return 'x';
 	case ',': return 'b';
 	case '<': return ',';
-	case '.': return '~';
+	case '.': return '`';
 	case '>': return '.';
 	case '~': return '>';
 	case '`': return '<';

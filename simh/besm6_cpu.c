@@ -755,7 +755,7 @@ void check_initial_setup ()
 		((d->tm_year / 10) % 10) << 16 |
 		(memory[YEAR] & 7);
 		memory[YEAR] = SET_CONVOL (date, CONVOL_NUMBER);
-	/* приказ ВРЕ: ТР6 = 016, ТР5 = 8-13 р.-часы, 1-7 р.-минуты */
+	/* приказ ВРЕ: ТР6 = 016, ТР5 = 9-14 р.-часы, 1-8 р.-минуты */
 		pult[6] = 016;
 		pult[4] = 0;
 		pult[5] = (d->tm_hour / 10) << 12 |

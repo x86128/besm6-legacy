@@ -49,7 +49,7 @@ int acpu_isatty[2];
 
 #define SLOW_START	100*MSEC
 #define FAST_START	1*MSEC
-#define LINEFEED_SYNC	17	/* 20-25 мс / 1.4 мс */
+#define LINEFEED_SYNC	1	/* Чтобы быстрее печатало; в жизни 20-25 мс/1.4 мс ~= 17 */
 
 REG printer_reg[] = {
 { "Готов",	&READY, 2,  2, 18, 1 },
@@ -93,6 +93,11 @@ t_stat printer_attach (UNIT *u, char *cptr)
 {
 	t_stat s;
 	int num = u - printer_unit;
+
+	if (u->flags & UNIT_ATT) {
+		/* Switching files cleanly */
+		detach_unit (u);
+	}
 	s = attach_unit (u, cptr);
 	if (s != SCPE_OK)
 		return s;
