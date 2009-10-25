@@ -125,24 +125,6 @@ t_stat tty_reset (DEVICE *dptr)
 	return SCPE_OK;
 }
 
-/*
- * Разрешение подключения к терминалам через telnet.
- * Делается командой:
- *	attach tty <порт>
- * Здесь <порт> - номер порта telnet, например 4199.
- */
-t_stat tty_attach (UNIT *u, char *cptr)
-{
-	/* Неважно, какой номер порта указывать в команде telnet.
-	 * Можно tty, можно tty1, tty7 - без разницы. */
-	return tmxr_attach (&tty_desc, &tty_unit[0], cptr);
-}
-
-t_stat tty_detach (UNIT *u)
-{
-	return tmxr_detach (&tty_desc, &tty_unit[0]);
-}
-
 #define TTY_UNICODE_CHARSET	0
 #define TTY_KOI7_CHARSET	(1<<UNIT_V_UF)
 #define TTY_CHARSET_MASK	(1<<UNIT_V_UF)
@@ -194,6 +176,56 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 		break;
 	}
 	return SCPE_OK;
+}
+
+/*
+ * Разрешение подключения к терминалам через telnet.
+ * Делается командой:
+ *	attach tty <порт>
+ * Здесь <порт> - номер порта telnet, например 4199.
+ */
+t_stat tty_attach (UNIT *u, char *cptr)
+{
+	int num = u - tty_unit;
+	int r, m, n;
+
+	if (*cptr >= '0' && *cptr <= '9') {
+		/* Сохраняем и восстанавливаем все .conn,
+		 * так как tmxr_attach() их обнуляет. */
+		for (m=0, n=1; n<=TTY_MAX; ++n)
+			if (tty_line[n].conn)
+				m |= 1 << (TTY_MAX-n);
+		/* Неважно, какой номер порта указывать в команде задания
+		 * порта telnet. Можно tty, можно tty1 - без разницы. */
+		r = tmxr_attach (&tty_desc, &tty_unit[0], cptr);
+		for (n=1; n<=TTY_MAX; ++n)
+			if (m >> (TTY_MAX-n) & 1)
+				tty_line[n].conn = 1;
+		return r;
+	}
+	if (strcmp (cptr, "/dev/tty") == 0) {
+		/* Консоль. */
+		u->flags &= ~TTY_STATE_MASK;
+		u->flags |= TTY_VT340_STATE;
+		tty_line[num].conn = 1;
+		tty_line[num].rcve = 0;
+		vt_mask |= 1 << (TTY_MAX - num);
+		besm6_debug ("*** консоль на T%03o", num);
+		return 0;
+	}
+	if (strcmp (cptr, "/dev/null") == 0) {
+		/* Запрещаем терминал. */
+		tty_line[num].conn = 1;
+		tty_line[num].rcve = 0;
+		besm6_debug ("*** отключение терминала T%03o", num);
+		return 0;
+	}
+	return SCPE_ALATT;
+}
+
+t_stat tty_detach (UNIT *u)
+{
+	return tmxr_detach (&tty_desc, &tty_unit[0]);
 }
 
 MTAB tty_mod[] = {
@@ -271,10 +303,11 @@ void vt_putc (int num, int c)
 {
 	TMLN *t = &tty_line [num];
 
+	if (! t->conn)
+		return;
 	if (t->rcve) {
 		/* Передача через telnet. */
-		if (t->conn)
-			tmxr_putc_ln (t, c);
+		tmxr_putc_ln (t, c);
 	} else {
 		/* Вывод на консоль. */
 		fputc (c, stdout);
@@ -452,14 +485,14 @@ int vt_getc (num)
 	TMLN *t = &tty_line [num];
 	int c;
 
+	if (! t->conn) {
+		/* Пользователь отключился. */
+		tty_setmode (tty_unit+num, TTY_OFFLINE_STATE, 0, 0);
+		tty_unit[num].flags &= ~TTY_STATE_MASK;
+		return -1;
+	}
 	if (t->rcve) {
 		/* Приём через telnet. */
-		if (! t->conn) {
-			/* Пользователь отключился. */
-			tty_setmode (tty_unit+num, TTY_OFFLINE_STATE, 0, 0);
-			tty_unit[num].flags &= ~TTY_STATE_MASK;
-			return -1;
-		}
 		c = tmxr_getc_ln (t);
 		if (! (c & TMXR_VALID))
 			return -1;
