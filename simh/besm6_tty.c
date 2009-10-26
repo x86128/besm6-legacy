@@ -392,6 +392,7 @@ void vt_print()
 			case '\v':
 			case '\r':
 			case '\033':
+			case '\0':
 				/* Выдаём управляющий символ. */
 				break;
 			case '\f':
@@ -414,10 +415,20 @@ void vt_print()
 				}
 				vt_sym[num] = '\b';
 				break;
+				vt_sym[num] = 'm';
+				break;
+			case '\003':
+				/* Неотображаемые символы */
+				vt_sym[num] = 0;
+				break;
 			default:
 				if (vt_sym[num] < ' ') {
-					/* Пропускаем нетекстовые символы */
-					vt_sym[num] = 0;
+					/* Нефункциональные ctrl-символы были видны в половинной яркости */
+					vt_puts (num, "\033[2m");
+					vt_putc (num, vt_sym[num] | 0x40);
+					vt_puts (num, "\033[");
+					/* Завершаем ESC-последовательность */
+					vt_sym[num] = 'm';
 				}
 			}
 			if (vt_sym[num])
