@@ -126,12 +126,16 @@ t_stat tty_reset (DEVICE *dptr)
 }
 
 #define TTY_UNICODE_CHARSET	0
-#define TTY_KOI7_CHARSET	(1<<UNIT_V_UF)
-#define TTY_CHARSET_MASK	(1<<UNIT_V_UF)
+#define TTY_KOI7_JCUKEN_CHARSET	(1<<UNIT_V_UF)
+#define TTY_KOI7_QWERTY_CHARSET	(2<<UNIT_V_UF)
+#define TTY_CHARSET_MASK	(3<<UNIT_V_UF)
 #define TTY_OFFLINE_STATE	0
-#define TTY_TELETYPE_STATE	(1<<(UNIT_V_UF+1))
-#define TTY_VT340_STATE		(2<<(UNIT_V_UF+1))
-#define TTY_STATE_MASK		(3<<(UNIT_V_UF+1))
+#define TTY_TELETYPE_STATE	(1<<(UNIT_V_UF+2))
+#define TTY_VT340_STATE		(2<<(UNIT_V_UF+2))
+#define TTY_STATE_MASK		(3<<(UNIT_V_UF+2))
+#define TTY_DESTRUCTIVE_BSPACE	0
+#define TTY_AUTHENTIC_BSPACE	(1<<(UNIT_V_UF+4))
+#define TTY_BSPACE_MASK		(1<<(UNIT_V_UF+4))
 
 t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 {
@@ -231,14 +235,20 @@ t_stat tty_detach (UNIT *u)
 MTAB tty_mod[] = {
         { TTY_CHARSET_MASK, TTY_UNICODE_CHARSET, "UNICODE input",
 		"UNICODE" },
-        { TTY_CHARSET_MASK, TTY_KOI7_CHARSET, "KOI7 (jcuken) input",
-		"KOI7" },
+        { TTY_CHARSET_MASK, TTY_KOI7_JCUKEN_CHARSET, "KOI7 (jcuken) input",
+		"JCUKEN" },
+        { TTY_CHARSET_MASK, TTY_KOI7_QWERTY_CHARSET, "KOI7 (qwerty) input",
+		"QWERTY" },
 	{ TTY_STATE_MASK, TTY_OFFLINE_STATE, "offline",
 		"OFF", &tty_setmode },
 	{ TTY_STATE_MASK, TTY_TELETYPE_STATE, "Teletype",
 		"TT", &tty_setmode },
 	{ TTY_STATE_MASK, TTY_VT340_STATE, "Videoton-340",
 		"VT", &tty_setmode },
+	{ TTY_BSPACE_MASK, TTY_DESTRUCTIVE_BSPACE, "destructive backspace",
+		"DESTRBS" },
+	{ TTY_BSPACE_MASK, TTY_AUTHENTIC_BSPACE, NULL,
+		"AUTHBS" },
         { MTAB_XTD | MTAB_VDV, 1, NULL,
 		"DISCONNECT", &tmxr_dscln, NULL, (void*) &tty_desc },
         { UNIT_ATT, UNIT_ATT, "connections",
@@ -398,7 +408,10 @@ void vt_print()
 			case '\032':
 				/* На Видеотоне ^Z = забой.
 				 * Стираем предыдущий символ. */
-				vt_puts (num, "\b ");
+				if ((tty_unit[num].flags & TTY_BSPACE_MASK) ==
+					TTY_DESTRUCTIVE_BSPACE) {
+					vt_puts (num, "\b ");
+				}
 				vt_sym[num] = '\b';
 				break;
 			default:
@@ -638,10 +651,20 @@ void vt_receive()
 	uint32 mask = 1 << (TTY_MAX - num);
 	switch (vt_instate[num]) {
 	case 0:
-		if ((tty_unit[num].flags & TTY_CHARSET_MASK) == TTY_KOI7_CHARSET)
+		switch (tty_unit[num].flags & TTY_CHARSET_MASK) {
+		case TTY_KOI7_JCUKEN_CHARSET:
 			vt_typed[num] = vt_kbd_input_koi7 (num);
-		else
+			break;
+		case TTY_KOI7_QWERTY_CHARSET:
+			vt_typed[num] = vt_getc (num);
+			break;
+		case TTY_UNICODE_CHARSET:
 			vt_typed[num] = vt_kbd_input_unicode (num);
+			break;
+		default:
+			vt_typed[num] = '?';
+			break;
+		}
 		if (vt_typed[num] < 0) {
 			/* TODO: обработать исключение от "неоператорского" терминала */
 			sim_interval = 0;
