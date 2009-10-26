@@ -114,10 +114,7 @@ t_stat disk_attach (UNIT *u, char *cptr)
 	s = attach_unit (u, cptr);
 	if (s != SCPE_OK)
 		return s;
-	if (u < &disk_unit[8])
-		GRP |= GRP_CHAN3_FREE;
-	else
-		GRP |= GRP_CHAN4_FREE;
+	GRP |= (u < &disk_unit[8]) ? GRP_CHAN3_FREE : GRP_CHAN4_FREE;
 	return SCPE_OK;
 }
 
@@ -230,24 +227,19 @@ void disk_read_track (UNIT *u)
 }
 
 /*
- * Обращение к диску.
+ * Задание адреса памяти и длины массива для последующего обращения к диску.
+ * Номера дисковода и дорожки будут выданы позже, командой 033 0023(0024).
  */
 void disk_io (int ctlr, uint32 cmd)
 {
-	UNIT *u;
-
 	disk_op = cmd;
-	disk_no = (cmd & DISK_UNIT) >> 7 | ctlr << 3;
-	u = &disk_unit [disk_no];
 	if (disk_op & DISK_PAGE_MODE) {
 		/* Обмен страницей */
 		disk_nwords = 1024;
-		disk_track = 0;
 		disk_memory = (cmd & DISK_PAGE) >> 2 | (cmd & DISK_BLOCK) >> 8;
 	} else {
 		/* Обмен половиной страницы (дорожкой) */
 		disk_nwords = 512;
-		disk_track = cmd & DISK_HALFZONE;
 		disk_memory = (cmd & (DISK_PAGE | DISK_HALFPAGE)) >> 2 | (cmd & DISK_BLOCK) >> 8;
 	}
 #if 0
@@ -255,24 +247,10 @@ void disk_io (int ctlr, uint32 cmd)
 		besm6_debug ("::: КМД %c: задание на %s", ctlr + '3',
 			(disk_op & DISK_READ) ? "чтение" : "запись");
 #endif
-	if (! (disk_op & DISK_READ) && (u->flags & UNIT_RO)) {
-		/* Read only. */
-		longjmp (cpu_halt, SCPE_RO);
-/*		disk_fail |= 020 >> ctlr;*/
-/*		return;*/
-	}
-	if ((disk_dev.flags & DEV_DIS) || ! u->fileref) {
-		/* Device not attached. */
-		disk_fail |= 020 >> ctlr;
-		return;
-	}
 	disk_fail &= ~(020 >> ctlr);
 
 	/* Гасим главный регистр прерываний. */
-	if (u < &disk_unit[8])
-		GRP &= ~GRP_CHAN3_FREE;
-	else
-		GRP &= ~GRP_CHAN4_FREE;
+	GRP &= ctlr ? ~GRP_CHAN4_FREE : ~GRP_CHAN3_FREE;
 }
 
 /*
@@ -280,10 +258,14 @@ void disk_io (int ctlr, uint32 cmd)
  */
 void disk_ctl (int ctlr, uint32 cmd)
 {
-	if (cmd & BIT(12)) {
-		UNIT *u = &disk_unit[disk_no];
+	UNIT *u;
 
-		/* Выдача в КМД адреса дорожки. */
+	if (cmd & BIT(12)) {
+		u = &disk_unit[disk_no];
+
+		/* Выдача в КМД адреса дорожки.
+		 * Здесь же выполняем обмен с диском.
+		 * Номер дисковода к этому моменту уже известен. */
 		if ((disk_dev.flags & DEV_DIS) || ! u->fileref) {
 			/* Device not attached. */
 			disk_fail |= 020 >> ctlr;
@@ -291,6 +273,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 		}
 		disk_fail &= ~(020 >> ctlr);
 		disk_zone = (cmd >> 1) & BITS(10);
+		disk_track = cmd & 1;
 		if (disk_dev.dctrl)
 			besm6_debug ("::: КМД %c: выдача адреса дорожки %04o",
 				ctlr + '3', disk_zone);
@@ -300,6 +283,12 @@ void disk_ctl (int ctlr, uint32 cmd)
 			else
 				disk_read_track (u);
 		} else {
+			if (u->flags & UNIT_RO) {
+				/* Read only. */
+/*				longjmp (cpu_halt, SCPE_RO);*/
+				disk_fail |= 020 >> ctlr;
+				return;
+			}
 			if (disk_op & DISK_PAGE_MODE)
 				disk_write (u);
 			else
@@ -326,11 +315,16 @@ void disk_ctl (int ctlr, uint32 cmd)
 			return;
 		}
 		disk_no += ctlr << 3;
+		u = &disk_unit[disk_no];
 #if 0
 		if (disk_dev.dctrl)
 			besm6_debug ("::: КМД %c: выбор устройства %d",
 				ctlr + '3', disk_no);
 #endif
+		if ((disk_dev.flags & DEV_DIS) || ! u->fileref) {
+			/* Device not attached. */
+			disk_fail |= 020 >> ctlr;
+		}
 	} else if (cmd & BIT(9)) {
 		/* Проверка прерывания от КМД? */
 #if 0
@@ -338,10 +332,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 			besm6_debug ("::: КМД %c: проверка готовности",
 				ctlr + '3');
 #endif
-		if (ctlr == 0)
-			GRP |= GRP_CHAN3_FREE;
-		else
-			GRP |= GRP_CHAN4_FREE;
+		GRP |= ctlr ? GRP_CHAN4_FREE : GRP_CHAN3_FREE;
 
 	} else {
 		/* Команда, выдаваемая в КМД. */
@@ -459,10 +450,7 @@ int disk_state (int ctlr)
  */
 t_stat disk_event (UNIT *u)
 {
-	if (u < &disk_unit[8])
-		GRP |= GRP_CHAN3_FREE; /* _DONE? */
-	else
-		GRP |= GRP_CHAN4_FREE;
+	GRP |= (u < &disk_unit[8]) ? GRP_CHAN3_FREE : GRP_CHAN4_FREE;
 	return SCPE_OK;
 }
 
