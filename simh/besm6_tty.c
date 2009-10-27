@@ -698,7 +698,7 @@ void vt_receive()
 		vt_instate[num]++;
 		break;
 	case 8:
-		TTY_IN = odd_parity(vt_typed[num]) ? 0 : mask;	/* even parity of inverted */
+		TTY_IN |= odd_parity(vt_typed[num]) ? 0 : mask;	/* even parity of inverted */
 		vt_instate[num]++;
 		break;
 	case 9 ... 11:
