@@ -27,12 +27,20 @@
 #define DISK_HALFZONE		000000001	/* выбор половины зоны */
 
 /*
+ * "Хороший" статус чтения/записи.
+ * Вычислено по текстам ОС Дубна.
+ * Диспак доволен.
+ */
+#define STATUS_GOOD	014000400
+
+/*
  * Параметры обмена с внешним устройством.
  */
 typedef struct {
 	int op;				/* Условное слово обмена */
 	int dev;			/* Номер устройства, 0..7 */
 	int zone;			/* Номер зоны на диске */
+	int track;			/* Выбор половины зоны на диске */
 	int memory;			/* Начальный адрес памяти */
 	int status;			/* Регистр состояния */
 	t_value mask_grp;		/* Маска готовности для ГРП */
@@ -75,11 +83,13 @@ REG disk_reg[] = {
 { "КУС_0",	&controller[0].op,	8, 24, 0, 1 },
 { "УСТР_0",	&controller[0].dev,	8, 3, 0, 1 },
 { "ЗОНА_0",	&controller[0].zone,	8, 10,  0, 1 },
+{ "ДОРОЖКА_0",	&controller[0].track,	8, 2,  0, 1 },
 { "МОЗУ_0",	&controller[0].memory,	8, 20, 0, 1 },
 { "РС_0",	&controller[0].status,	8, 24, 0, 1 },
 { "КУС_1",	&controller[1].op,	8, 24, 0, 1 },
 { "УСТР_1",	&controller[1].dev,	8, 3, 0, 1 },
 { "ЗОНА_1",	&controller[1].zone,	8, 10,  0, 1 },
+{ "ДОРОЖКА_1",	&controller[1].track,	8, 2,  0, 1 },
 { "МОЗУ_1",	&controller[1].memory,	8, 20, 0, 1 },
 { "РС_1",	&controller[1].status,	8, 24, 0, 1 },
 { "ОШ",		&disk_fail,		8, 6, 0, 1 },
@@ -166,6 +176,22 @@ void disk_write (UNIT *u)
 		longjmp (cpu_halt, SCPE_IOERR);
 }
 
+void disk_write_track (UNIT *u)
+{
+	KMD *c = unit_to_ctlr (u);
+
+	if (disk_dev.dctrl)
+		besm6_debug ("::: запись МД %o полузона %04o.%d память %05o-%05o",
+			c->dev, c->zone, c->track, c->memory, c->memory + 511);
+	fseek (u->fileref, (ZONE_SIZE*c->zone + 4*c->track) * 8, SEEK_SET);
+	sim_fwrite (c->sysdata + 4*c->track, 8, 4, u->fileref);
+	fseek (u->fileref, (8 + ZONE_SIZE*c->zone + 512*c->track) * 8,
+		SEEK_SET);
+	sim_fwrite (&memory [c->memory], 8, 512, u->fileref);
+	if (ferror (u->fileref))
+		longjmp (cpu_halt, SCPE_IOERR);
+}
+
 /*
  * Чтение с диска.
  */
@@ -192,6 +218,32 @@ void disk_read (UNIT *u)
 		longjmp (cpu_halt, SCPE_IOERR);
 }
 
+void disk_read_track (UNIT *u)
+{
+	KMD *c = unit_to_ctlr (u);
+
+	if (disk_dev.dctrl)
+		besm6_debug ("::: чтение МД %o полузона %04o.%d память %05o-%05o",
+			c->dev, c->zone, c->track, c->memory, c->memory + 511);
+	fseek (u->fileref, (ZONE_SIZE*c->zone + 4*c->track) * 8, SEEK_SET);
+	if (sim_fread (c->sysdata + 4*c->track, 8, 4, u->fileref) != 4) {
+		/* Чтение неинициализированного диска */
+		disk_fail |= c->mask_fail;
+		return;
+	}
+	if (! (c->op & DISK_READ_SYSDATA)) {
+		fseek (u->fileref, (8 + ZONE_SIZE*c->zone + 512*c->track) * 8,
+			SEEK_SET);
+		if (sim_fread (&memory[c->memory], 8, 512, u->fileref) != 512) {
+			/* Чтение неинициализированного диска */
+			disk_fail |= c->mask_fail;
+			return;
+		}
+	}
+	if (ferror (u->fileref))
+		longjmp (cpu_halt, SCPE_IOERR);
+}
+
 /*
  * Задание адреса памяти и длины массива для последующего обращения к диску.
  * Номера дисковода и дорожки будут выданы позже, командой 033 0023(0024).
@@ -201,19 +253,17 @@ void disk_io (int ctlr, uint32 cmd)
 	KMD *c = &controller [ctlr];
 
 	c->op = cmd;
-	if (! (c->op & DISK_PAGE_MODE) &&
-	    ! (c->op & DISK_READ_SYSDATA)) {
-		besm6_debug ("::: КМД %c: обмен полузоной не реализован, КУС=%08o",
-			ctlr + '3', cmd);
-		disk_fail |= c->mask_fail;
-		return;
+	if (c->op & DISK_PAGE_MODE) {
+		/* Обмен страницей */
+		c->memory = (cmd & DISK_PAGE) >> 2 | (cmd & DISK_BLOCK) >> 8;
+	} else {
+		/* Обмен половиной страницы (дорожкой) */
+		c->memory = (cmd & (DISK_PAGE | DISK_HALFPAGE)) >> 2 | (cmd & DISK_BLOCK) >> 8;
 	}
-	/* Обмен страницей */
-	c->memory = (cmd & DISK_PAGE) >> 2 | (cmd & DISK_BLOCK) >> 8;
 #if 0
 	if (disk_dev.dctrl)
-		besm6_debug ("::: КМД %c: задание на %s", ctlr + '3',
-			(c->op & DISK_READ) ? "чтение" : "запись");
+		besm6_debug ("::: КМД %c: задание на %s %08o", ctlr + '3',
+			(c->op & DISK_READ) ? "чтение" : "запись", cmd);
 #endif
 	disk_fail &= ~c->mask_fail;
 
@@ -239,12 +289,16 @@ void disk_ctl (int ctlr, uint32 cmd)
 			return;
 		}
 		c->zone = (cmd >> 1) & BITS(10);
+		c->track = cmd & 1;
 		if (disk_dev.dctrl)
-			besm6_debug ("::: КМД %c: выдача адреса дорожки, зона %04o",
-				ctlr + '3', c->zone);
+			besm6_debug ("::: КМД %c: выдача адреса дорожки %04o.%d",
+				ctlr + '3', c->zone, c->track);
 		disk_fail &= ~c->mask_fail;
 		if (c->op & DISK_READ) {
-			disk_read (u);
+			if (c->op & DISK_PAGE_MODE)
+				disk_read (u);
+			else
+				disk_read_track (u);
 		} else {
 			if (u->flags & UNIT_RO) {
 				/* Read only. */
@@ -252,7 +306,10 @@ void disk_ctl (int ctlr, uint32 cmd)
 				disk_fail |= c->mask_fail;
 				return;
 			}
-			disk_write (u);
+			if (c->op & DISK_PAGE_MODE)
+				disk_write (u);
+			else
+				disk_write_track (u);
 		}
 
 		/* Ждём события от устройства. */
@@ -299,20 +356,20 @@ void disk_ctl (int ctlr, uint32 cmd)
 		switch (cmd & 077) {
 		case 000: /* диспак выдаёт эту команду один раз в начале загрузки */
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: недокументированная команда 00",
+				besm6_debug ("::: КМД %c: ### недокументированная команда 00",
 					ctlr + '3');
 			break;
 		case 001: /* сброс на 0 цилиндр */
 #if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: сброс на 0 цилиндр",
+				besm6_debug ("::: КМД %c: ### сброс на 0 цилиндр",
 					ctlr + '3');
 #endif
 			break;
 		case 002: /* подвод */
 #if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: подвод", ctlr + '3');
+				besm6_debug ("::: КМД %c: ### подвод", ctlr + '3');
 #endif
 			break;
 		case 003: /* чтение (НСМД-МОЗУ) */
@@ -329,19 +386,27 @@ void disk_ctl (int ctlr, uint32 cmd)
 			break;
 		case 005: /* разметка */
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: разметка", ctlr + '3');
+				besm6_debug ("::: КМД %c: ### разметка", ctlr + '3');
 			break;
 		case 006: /* сравнение кодов (МОЗУ-НСМД) */
 #if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: сравнение кодов", ctlr + '3');
+				besm6_debug ("::: КМД %c: ### сравнение кодов", ctlr + '3');
 #endif
 			break;
 		case 007: /* чтение заголовка */
 #if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: чтение заголовка", ctlr + '3');
+				besm6_debug ("::: КМД %c: ### чтение заголовка", ctlr + '3');
 #endif
+			disk_fail &= ~c->mask_fail;
+			if (c->op & DISK_PAGE_MODE)
+				disk_read (u);
+			else
+				disk_read_track (u);
+
+			/* Ждём события от устройства. */
+			sim_activate (u, 20*USEC);	/* Ускорим для отладки. */
 			break;
 		case 010: /* гашение PC */
 #if 0
@@ -357,11 +422,8 @@ void disk_ctl (int ctlr, uint32 cmd)
 				besm6_debug ("::: КМД %c: опрос младших разрядов состояния",
 					ctlr + '3');
 #endif
-/* Вычислено по текстам ОС Дубна.
- * Диспак доволен. */
-#define STATUS_GOOD	0600001
 			if (disk_unit[c->dev].fileref)
-				c->status = (STATUS_GOOD << 8) & BITS(12);
+				c->status = STATUS_GOOD & BITS(12);
 			else
 				c->status = 0;
 			break;
@@ -372,7 +434,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 					ctlr + '3');
 #endif
 			if (disk_unit[c->dev].fileref)
-				c->status = (STATUS_GOOD >> 8) & BITS(12);
+				c->status = (STATUS_GOOD >> 12) & BITS(12);
 			else
 				c->status = 0;
 			break;
@@ -384,7 +446,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 #endif
 			break;
 		default:
-			besm6_debug ("::: КМД %c: неизвестная команда %02o",
+			besm6_debug ("::: КМД %c: ### неизвестная команда %02o",
 				ctlr + '3', cmd & 077);
 			break;
 		}

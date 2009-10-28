@@ -46,7 +46,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-#undef SOFT_CLOCK
+#define SOFT_CLOCK
 
 t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
