@@ -46,6 +46,8 @@
 #include <sys/time.h>
 #include <time.h>
 
+#undef SOFT_CLOCK
+
 t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;
 t_value ACC, RMR, GRP, MGRP;
@@ -307,6 +309,7 @@ static void cpu_sigalarm (int signum)
 
 	++counter;
 
+#ifndef SOFT_CLOCK
 	/* В 9-й части частота таймера 250 Гц (4 мс). */
 	GRP |= GRP_TIMER;
 
@@ -314,6 +317,7 @@ static void cpu_sigalarm (int signum)
 	 * Но от него почему-то зависит вывод на терминалы,
 	 * поэтому ускорим. */
 	GRP |= GRP_SLOW_CLK;
+#endif
 
 	/* Перерисовка панели каждые 64 миллисекунды. */
 	if ((counter & 15) == 0) {
@@ -327,7 +331,6 @@ static void cpu_sigalarm (int signum)
 t_stat cpu_reset (DEVICE *dptr)
 {
 	int i;
-	struct itimerval itv;
 
 	ACC = 0;
 	RMR = 0;
@@ -350,6 +353,8 @@ t_stat cpu_reset (DEVICE *dptr)
 	GRP = MGRP = 0;
 	sim_brk_types = SWMASK ('E') | SWMASK('R') | SWMASK('W');
 	sim_brk_dflt = SWMASK ('E');
+
+	struct itimerval itv;
 
 	/* Чтобы ход часов в ДИСПАКе соответствал реальному времени,
 	 * используем сигналы от системного таймера. */
@@ -798,6 +803,9 @@ void cpu_one_inst ()
 		    printer_is_idle() && fs_is_idle()) {
 			check_initial_setup ();
 			pause ();
+#ifdef SOFT_CLOCK
+			return;
+#endif
 		}
 	}
 
@@ -1708,29 +1716,20 @@ t_stat fast_clk (UNIT * this)
 	return sim_activate (this, 20*MSEC);
 }
 
-extern uint32 TTY;
-
-t_stat vt_clk (UNIT * this)
-{
-	GRP |= MGRP & BIT(19);
-	vt_print();
-	vt_receive();
-	return sim_activate (this, 1000*MSEC/300);
-}
-
-
 UNIT clocks[] = {
 	{ UDATA(slow_clk, 0, 0) },	/* 10 р, 16 Гц */
 	{ UDATA(fast_clk, 0, 0) },	/* 40 р, 50 Гц */
-	{ UDATA(vt_clk, 0, 0) },		/* 19 р, 300 Гц */
 };
 
 t_stat clk_reset (DEVICE * dev)
 {
-	return sim_activate (&clocks[2], 1000*MSEC/300);
 	/* Схема автозапуска включается по нереализованной кнопке "МР" */
-/*	sim_activate (&clocks[0], MSEC*125/2);*/
-/*	return sim_activate (&clocks[1], 20*MSEC);*/
+#ifdef SOFT_CLOCK
+	sim_activate (&clocks[0], MSEC*125/2);
+	return sim_activate (&clocks[1], 20*MSEC);
+#else
+	return SCPE_OK;
+#endif
 }
 
 DEVICE clock_dev = {
