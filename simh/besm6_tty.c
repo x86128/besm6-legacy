@@ -35,7 +35,7 @@ char * dig[] = { 0, "5", "\r", "9", " ", "Щ", ",", ".", "\n", ")", "4", "Ш", "
 
 char ** reg = 0;
 
-void process (int sym)
+char *  process (int sym)
 {
 	/* Требуется инверсия */
 	sym ^= 31;
@@ -50,23 +50,43 @@ void process (int sym)
 		reg = lat;
 		break;
 	default:
-		fputs (reg[sym], stdout);
+		return reg[sym];
 	}
+	return "";
 }
 
-int tt_active [TTY_MAX], vt_active [TTY_MAX];
-int tt_sym [TTY_MAX], vt_sym [TTY_MAX];
-int vt_typed [TTY_MAX], vt_instate [TTY_MAX];
+int tty_active [TTY_MAX+1], tty_sym [TTY_MAX+1];
+int tty_typed [TTY_MAX+1], tty_instate [TTY_MAX+1];
 
 uint32 vt_sending, vt_receiving;
+uint32 tt_sending, tt_receiving;
 
 // Attachments survive the reset
 uint32 tt_mask = 0, vt_mask = 0;
 
 uint32 TTY_OUT = 0, TTY_IN = 0, vt_idle = 0;
 
+void tt_print();
+
+/* 19 р ГРП, 300 Гц */
+t_stat vt_clk (UNIT * this)
+{
+	/* Телетайпы работают на 10 бод */
+	static int clk_divider = 1<<29;
+	GRP |= MGRP & BIT(19);
+	vt_print();
+	vt_receive();
+	
+	if (! (clk_divider >>= 1)) {
+		tt_print();
+		clk_divider = 1<<29;
+	}
+
+	return sim_activate (this, 1000*MSEC/300);
+}
+
 UNIT tty_unit [] = {
-	{ UDATA (NULL, UNIT_DIS, 0) },		/* fake unit */
+	{ UDATA (vt_clk, UNIT_DIS, 0) },		/* fake unit, clock */
 	{ UDATA (NULL, UNIT_SEQ, 0) },
 	{ UDATA (NULL, UNIT_SEQ, 0) },
 	{ UDATA (NULL, UNIT_SEQ, 0) },
@@ -112,17 +132,16 @@ TMXR tty_desc = { TTY_MAX+1, 0, 0, tty_line };	/* mux descriptor */
 
 t_stat tty_reset (DEVICE *dptr)
 {
-	memset(tt_active, 0, sizeof(tt_active));
-	memset(tt_sym, 0, sizeof(tt_sym));
-	memset(vt_active, 0, sizeof(vt_active));
-	memset(vt_sym, 0, sizeof(vt_sym));
-	memset(vt_typed, 0, sizeof(vt_typed));
-	memset(vt_instate, 0, sizeof(vt_instate));
+	memset(tty_active, 0, sizeof(tty_active));
+	memset(tty_sym, 0, sizeof(tty_sym));
+	memset(tty_typed, 0, sizeof(tty_typed));
+	memset(tty_instate, 0, sizeof(tty_instate));
 	vt_sending = vt_receiving = 0;
 	TTY_IN = TTY_OUT = 0;
+	reg = rus;
 	vt_idle = 1;
 	tty_line[0].conn = 1;			/* faked, always busy */
-	return SCPE_OK;
+	return sim_activate (tty_unit, 1000*MSEC/300);
 }
 
 #define TTY_UNICODE_CHARSET	0
@@ -151,32 +170,25 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 				t->rcve = 0;
 			} else
 				t->conn = 0;
-			if (vt_mask & mask) {
-				vt_sym[num] =
-				vt_active[num] =
-				vt_typed[num] =
-				vt_instate[num] = 0;
-				vt_mask &= ~mask;
-			} else {
-				tt_sym[num] =
-				tt_active[num] = 0;
-				tt_mask &= ~mask;
-			}
+			tty_sym[num] =
+			tty_active[num] =
+			tty_typed[num] =
+			tty_instate[num] = 0;
+			vt_mask &= ~mask;
+			tt_mask &= ~mask;
 		}
 		break;
 	case TTY_TELETYPE_STATE:
-		if (t->conn && ! (tt_mask & mask))
-			return SCPE_ALATT;
 		t->conn = 1;
 		t->rcve = 0;
 		tt_mask |= mask;
+		vt_mask &= ~mask;
 		break;
 	case TTY_VT340_STATE:
-		if (t->conn && ! (vt_mask & mask))
-			return SCPE_ALATT;
 		t->conn = 1;
 		t->rcve = 0;
 		vt_mask |= mask;
+		tt_mask &= ~mask;
 		break;
 	}
 	return SCPE_OK;
@@ -272,40 +284,6 @@ void tty_send (uint32 mask)
 	TTY_OUT = mask;
 }
 
-/* Ввод с телетайпа не реализован,
- * вывод на телетайп должен вызываться по 50 Гц таймеру
- * или после каждого tty_send.
- */
-void tt_print()
-{
-	/* Пока работаем только с одним (любым) устройством */
-	int c = TTY_OUT != 0;
-	switch (tt_active[0]*2+c) {
-	case 0:	/* idle */
-		break;
-	case 1: /* start bit */
-		tt_active[0] = 1;
-		break;
-	case 12: /* stop bit */
-		process (tt_sym[0]);
-		fflush (stdout);
-		tt_active[0] = 0;
-		tt_sym[0] = 0;
-		break;
-	case 13: /* framing error */
-		fputc ('#', stdout);
-		fflush (stdout);
-		break;
-	default:
-		/* big endian ordering */
-		if (c) {
-			tt_sym[0] |= 1 << (5-tt_active[0]);
-		}
-		++tt_active[0];
-		break;
-	}
-}
-
 /*
  * Выдача символа на терминал с указанным номером.
  */
@@ -373,18 +351,18 @@ void vt_print()
 		workset; num = besm6_highest_bit (workset) - TTY_MAX) {
 	    int mask = 1 << (TTY_MAX - num);
 	    int c = (TTY_OUT & mask) != 0;
-	    switch (vt_active[num]*2+c) {
+	    switch (tty_active[num]*2+c) {
 	    case 0: /* idle */
 		besm6_debug ("Warning: inactive ttys should have been screened");
 		continue;
 	    case 1: /* start bit */
 		vt_sending |= mask;
-		vt_active[num] = 1;
+		tty_active[num] = 1;
 		break;
 	    case 18: /* stop bit */
-		vt_sym[num] = ~vt_sym[num] & 0x7f;
-		if (vt_sym[num] < 0x60) {
-			switch (vt_sym[num]) {
+		tty_sym[num] = ~tty_sym[num] & 0x7f;
+		if (tty_sym[num] < 0x60) {
+			switch (tty_sym[num]) {
 			case '\a':
 			case '\b':
 			case '\t':
@@ -404,7 +382,7 @@ void vt_print()
 				 * проходит, поэтому просто переходим в начало
 				 * следующей строки. */
 				vt_putc (num, '\n');
-				vt_sym[num] = '\r';
+				tty_sym[num] = '\r';
 				break;
 			case '\032':
 				/* На Видеотоне ^Z = забой.
@@ -413,30 +391,30 @@ void vt_print()
 					TTY_DESTRUCTIVE_BSPACE) {
 					vt_puts (num, "\b ");
 				}
-				vt_sym[num] = '\b';
+				tty_sym[num] = '\b';
 				break;
-				vt_sym[num] = 'm';
+				tty_sym[num] = 'm';
 				break;
 			case '\003':
 				/* Неотображаемые символы */
-				vt_sym[num] = 0;
+				tty_sym[num] = 0;
 				break;
 			default:
-				if (vt_sym[num] < ' ') {
+				if (tty_sym[num] < ' ') {
 					/* Нефункциональные ctrl-символы были видны в половинной яркости */
 					vt_puts (num, "\033[2m");
-					vt_putc (num, vt_sym[num] | 0x40);
+					vt_putc (num, tty_sym[num] | 0x40);
 					vt_puts (num, "\033[");
 					/* Завершаем ESC-последовательность */
-					vt_sym[num] = 'm';
+					tty_sym[num] = 'm';
 				}
 			}
-			if (vt_sym[num])
-				vt_putc (num, vt_sym[num]);
+			if (tty_sym[num])
+				vt_putc (num, tty_sym[num]);
 		} else
-			vt_puts (num, koi7_rus_to_unicode[vt_sym[num] - 0x60]);
-		vt_active[num] = 0;
-		vt_sym[num] = 0;
+			vt_puts (num, koi7_rus_to_unicode[tty_sym[num] - 0x60]);
+		tty_active[num] = 0;
+		tty_sym[num] = 0;
 		vt_sending &= ~mask;
 		break;
 	    case 19: /* framing error */
@@ -445,9 +423,9 @@ void vt_print()
 	    default:
 		/* little endian ordering */
 		if (c) {
-			vt_sym[num] |= 1 << (vt_active[num]-1);
+			tty_sym[num] |= 1 << (tty_active[num]-1);
 		}
-		++vt_active[num];
+		++tty_active[num];
 		break;
 	    }
 	    workset &= ~mask;
@@ -456,6 +434,51 @@ void vt_print()
 
 	/* Опрашиваем сокеты на передачу. */
 	tmxr_poll_tx (&tty_desc);
+}
+
+/* Ввод с телетайпа не реализован; вывод работает только при использовании
+ * модельного времени. 
+ */
+void tt_print()
+{
+	uint32 workset = (TTY_OUT & tt_mask) | tt_sending;
+	int num;
+
+	if (workset == 0) {
+		return;
+	}
+
+	for (num = besm6_highest_bit (workset) - TTY_MAX;
+		workset; num = besm6_highest_bit (workset) - TTY_MAX) {
+		int mask = 1 << (TTY_MAX - num);
+		int c = (TTY_OUT & mask) != 0;
+		switch (tty_active[num]*2+c) {
+		case 0:	/* idle */
+			break;
+		case 1: /* start bit */
+			tt_sending |= mask;
+			tty_active[num] = 1;
+			break;
+		case 12: /* stop bit */
+			vt_puts (num, process (tty_sym[num]));
+			tty_active[num] = 0;
+			tty_sym[num] = 0;
+			tt_sending &= ~mask;
+			break;
+		case 13: /* framing error */
+			vt_putc (num, '#');
+			break;
+		default:
+			/* big endian ordering */
+			if (c) {
+				tty_sym[num] |= 1 << (5-tty_active[num]);
+			}
+			++tty_active[num];
+			break;
+		}
+		workset &= ~mask;
+	}
+	vt_idle = 0;
 }
 
 /*
@@ -660,33 +683,33 @@ void vt_receive()
     for (num = besm6_highest_bit (workset) - TTY_MAX;
 		workset; num = besm6_highest_bit (workset) - TTY_MAX) {
 	uint32 mask = 1 << (TTY_MAX - num);
-	switch (vt_instate[num]) {
+	switch (tty_instate[num]) {
 	case 0:
 		switch (tty_unit[num].flags & TTY_CHARSET_MASK) {
 		case TTY_KOI7_JCUKEN_CHARSET:
-			vt_typed[num] = vt_kbd_input_koi7 (num);
+			tty_typed[num] = vt_kbd_input_koi7 (num);
 			break;
 		case TTY_KOI7_QWERTY_CHARSET:
-			vt_typed[num] = vt_getc (num);
+			tty_typed[num] = vt_getc (num);
 			break;
 		case TTY_UNICODE_CHARSET:
-			vt_typed[num] = vt_kbd_input_unicode (num);
+			tty_typed[num] = vt_kbd_input_unicode (num);
 			break;
 		default:
-			vt_typed[num] = '?';
+			tty_typed[num] = '?';
 			break;
 		}
-		if (vt_typed[num] < 0) {
+		if (tty_typed[num] < 0) {
 			/* TODO: обработать исключение от "неоператорского" терминала */
 			sim_interval = 0;
 			break;
 		}
-		if (vt_typed[num] <= 0177) {
-			if (vt_typed[num] == '\r' || vt_typed[num] == '\n')
-				vt_typed[num] = 3;	/* ^C - конец строки */
-			if (vt_typed[num] == '\b' || vt_typed[num] == '\177')
-				vt_typed[num] = 26;	/* ^Z - забой */
-			vt_instate[num] = 1;
+		if (tty_typed[num] <= 0177) {
+			if (tty_typed[num] == '\r' || tty_typed[num] == '\n')
+				tty_typed[num] = 3;	/* ^C - конец строки */
+			if (tty_typed[num] == '\b' || tty_typed[num] == '\177')
+				tty_typed[num] = 26;	/* ^Z - забой */
+			tty_instate[num] = 1;
 			TTY_IN |= mask;		/* start bit */
 			GRP |= GRP_TTY_START;	/* не используется ? */
 			vt_receiving |= mask;
@@ -694,19 +717,19 @@ void vt_receive()
 		break;
 	case 1 ... 7:
 		/* need inverted byte */
-		TTY_IN |= (vt_typed[num] & (1 << (vt_instate[num]-1))) ? 0 : mask;
-		vt_instate[num]++;
+		TTY_IN |= (tty_typed[num] & (1 << (tty_instate[num]-1))) ? 0 : mask;
+		tty_instate[num]++;
 		break;
 	case 8:
-		TTY_IN |= odd_parity(vt_typed[num]) ? 0 : mask;	/* even parity of inverted */
-		vt_instate[num]++;
+		TTY_IN |= odd_parity(tty_typed[num]) ? 0 : mask;	/* even parity of inverted */
+		tty_instate[num]++;
 		break;
 	case 9 ... 11:
 		/* stop bits are 0 */
-		vt_instate[num]++;
+		tty_instate[num]++;
 		break;
 	case 12:
-		vt_instate[num] = 0;	/* ready for the next char */
+		tty_instate[num] = 0;	/* ready for the next char */
 		vt_receiving &= ~mask;
 		break;
 	}
@@ -721,7 +744,7 @@ void vt_receive()
  */
 int vt_is_idle ()
 {
-	return (vt_idle > 10);
+	return (tt_mask ? vt_idle > 300 : vt_idle > 10);
 }
 
 int tty_query ()
