@@ -160,6 +160,16 @@ t_stat disk_detach (UNIT *u)
 	return detach_unit (u);
 }
 
+t_value spread (t_value val)
+{
+	int i, j;
+	t_value res = 0;
+	for (i = 0; i < 5; i++) for (j = 0; j < 9; j++)
+		if (val & (1LL<<(i+j*5)))
+			res |= 1LL << (i*9+j);
+	return res & BITS48;
+}
+
 /*
  * Отладочная печать массива данных обмена.
  */
@@ -219,13 +229,30 @@ void disk_format (UNIT *u)
 {
 	KMD *c = unit_to_ctlr (u);
 
+	t_value * ptr = &memory[c->memory];
+	t_value fmtbuf[5];
+	int i;
 	if (disk_dev.dctrl) {
 		besm6_debug ("::: формат МД %o полузона %04o.%d память %05o-%05o",
 			c->dev, c->zone, c->track, c->memory, c->memory + 511);
 		log_data (&memory [c->memory], 48);
 	}
+	/* Находим начало записываемого заголовка */
+	while ((*ptr & BITS48) == 0) ptr++;
+
+	/* Декодируем из гребенки в нормальный вид */
+	for (i = 0; i < 5; i++) {
+		fmtbuf[i] = spread(ptr[i]);
+	}
+	/* При первой попытке разметки адресный маркер начинается в старшем 5-разрядном слоге,
+	 * пропускаем первый слог.
+	 */
+	for (i = 0; i < 4; i++) {
+		fmtbuf[i] = ((fmtbuf[i] & BITS48) << 5) | ((fmtbuf[i+1] >> 40) & BITS(5));
+	}
+	/* Сохраняем в нормальном виде - но с контролем числа - для последующего чтения заголовка */
 	fseek (u->fileref, (ZONE_SIZE*c->zone + 4*c->track) * 8, SEEK_SET);
-	sim_fwrite (c->sysdata + 4*c->track, 8, 4, u->fileref);
+	sim_fwrite (fmtbuf, 8, 4, u->fileref);
 	if (ferror (u->fileref))
 		longjmp (cpu_halt, SCPE_IOERR);
 }
@@ -258,7 +285,8 @@ void disk_read (UNIT *u)
 		longjmp (cpu_halt, SCPE_IOERR);
 }
 
-t_value collect (t_value val) {
+t_value collect (t_value val)
+{
 	int i, j;
 	t_value res = 0;
 	for (i = 0; i < 5; i++) for (j = 0; j < 9; j++)
@@ -277,24 +305,22 @@ void disk_read_track (UNIT *u)
 			"::: чтение МД %o полузона %04o.%d память %05o-%05o",
 			c->dev, c->zone, c->track, c->memory, c->memory + 511);
 	fseek (u->fileref, (ZONE_SIZE*c->zone + 4*c->track) * 8, SEEK_SET);
-	if (c->format) {
-		static t_value proper[4] = {
-			0404000003777400LL,
-			0000000000003740LL,
-			0400000377777777LL,
- 			0777777777777777LL
-		};
-		*(c->sysdata + 4*c->track) =   collect(proper[0]) | (2LL<<48);
-		*(c->sysdata + 4*c->track+1) = collect(proper[1]) | (2LL<<48);
-		*(c->sysdata + 4*c->track+2) = collect(proper[2]) | (2LL<<48);
-		*(c->sysdata + 4*c->track+3) = collect(proper[3]) | (2LL<<48);
-		return;
-	} 
 	if (sim_fread (c->sysdata + 4*c->track, 8, 4, u->fileref) != 4) {
 		/* Чтение неинициализированного диска */
 		disk_fail |= c->mask_fail;
 		return;
 	}
+	if (c->format) {
+		/* Чтение заголовка дорожки: отдаем заголовок, записанный предшествующей
+		 * командой разметки, в формате гребенки.
+		 */
+		int i;
+		t_value * sysdata = c->sysdata + 4*c->track;
+		for (i = 0; i < 4; i++) {
+			sysdata[i] = collect(sysdata[i]) | (2LL<<48);
+		}
+		return;
+	} 
 	if (! (c->op & DISK_READ_SYSDATA)) {
 		fseek (u->fileref, (8 + ZONE_SIZE*c->zone + 512*c->track) * 8,
 			SEEK_SET);
