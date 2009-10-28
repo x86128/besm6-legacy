@@ -13,6 +13,8 @@
  * See the accompanying file "COPYING" for more details.
  */
 #include "besm6_defs.h"
+#include <sys/stat.h>
+#include <sys/fcntl.h>
 
 t_stat fs_event (UNIT *u);
 t_stat uvvk_event (UNIT *u);
@@ -22,7 +24,7 @@ UNIT fs_unit [] = {
 	{ UDATA (fs_event, UNIT_SEQ+UNIT_ATTABLE, 0) },
 };
 
-int curchar[2], feed[2], rampup[2];
+int curchar[2], feed[2], isfifo[2];
 char line[2][128];
 
 #define FS1_READY (1<<15)
@@ -109,6 +111,13 @@ t_stat fs_attach (UNIT *u, char *cptr)
 	s = attach_unit (u, cptr);
 	if (s != SCPE_OK)
 		return s;
+	struct stat stbuf;
+	fstat (fileno(u->fileref), &stbuf);
+	isfifo[num] = (stbuf.st_mode & S_IFIFO) != 0;
+	if (isfifo[num]) {
+		int flags = fcntl(fileno(u->fileref), F_GETFL, 0);
+		fcntl(fileno(u->fileref), F_SETFL, flags | O_NONBLOCK);
+	}
 	ENB_RDY(FS1_READY >> num);
 	return SCPE_OK;
 }
@@ -127,6 +136,7 @@ void fs_control (int num, uint32 cmd)
 {
 	UNIT *u = &fs_unit[num];
 
+	static int bytecnt = 0;
 	if (fs_dev.dctrl)
 		besm6_debug("<<< ФС1500-%d команда %o", num, cmd);
 	if (! IS_RDY(FS1_READY >> num)) {
@@ -138,9 +148,14 @@ void fs_control (int num, uint32 cmd)
 	case 0:		/* полное выключение */
 		sim_cancel (u);
 		fs_state[num] = FS_IDLE;
+		if (fs_dev.dctrl)
+			besm6_debug("<<<ФС1500-%d ВЫКЛ..", num);
+		bytecnt = 0;
 		break;
 	case 4:		/* двигатель без протяжки */
 		fs_state[num] = FS_STARTING;
+		if (fs_dev.dctrl)
+			besm6_debug("<<<ФС1500-%d ВКЛ.", num);
 		sim_cancel (u);
 		break;
 	case 5:		/* протяжка */
@@ -148,12 +163,17 @@ void fs_control (int num, uint32 cmd)
 			besm6_debug("<<< ФС1500-%d протяжка без мотора", num);
 		else if (fs_state[num] != FS_TAIL) {
 			sim_activate (u, FS_RATE);
+			bytecnt++;
 		} else {
-			fs_detach(u);
+			if (! isfifo[num])
+				fs_detach(u);
 		}
 		break;
 	default:
 		besm6_debug ("<<< ФС1500-%d неизвестная команда %o", num, cmd);
+	}
+	if (cmd && fs_dev.dctrl) {
+		besm6_debug("<<<ФС1500-%d: %d симв.", num, bytecnt);
 	}
 }
 
