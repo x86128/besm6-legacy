@@ -258,6 +258,15 @@ void disk_read (UNIT *u)
 		longjmp (cpu_halt, SCPE_IOERR);
 }
 
+t_value collect (t_value val) {
+	int i, j;
+	t_value res = 0;
+	for (i = 0; i < 5; i++) for (j = 0; j < 9; j++)
+		if (val & (1LL<<(i*9+j)))
+			res |= 1LL << (i+j*5);
+	return res & BITS48;
+}
+
 void disk_read_track (UNIT *u)
 {
 	KMD *c = unit_to_ctlr (u);
@@ -268,6 +277,19 @@ void disk_read_track (UNIT *u)
 			"::: чтение МД %o полузона %04o.%d память %05o-%05o",
 			c->dev, c->zone, c->track, c->memory, c->memory + 511);
 	fseek (u->fileref, (ZONE_SIZE*c->zone + 4*c->track) * 8, SEEK_SET);
+	if (c->format) {
+		static t_value proper[4] = {
+			0404000003777400LL,
+			0000000000003740LL,
+			0400000377777777LL,
+ 			0777777777777777LL
+		};
+		*(c->sysdata + 4*c->track) =   collect(proper[0]) | (2LL<<48);
+		*(c->sysdata + 4*c->track+1) = collect(proper[1]) | (2LL<<48);
+		*(c->sysdata + 4*c->track+2) = collect(proper[2]) | (2LL<<48);
+		*(c->sysdata + 4*c->track+3) = collect(proper[3]) | (2LL<<48);
+		return;
+	} 
 	if (sim_fread (c->sysdata + 4*c->track, 8, 4, u->fileref) != 4) {
 		/* Чтение неинициализированного диска */
 		disk_fail |= c->mask_fail;
@@ -446,6 +468,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: чтение заголовка", ctlr + '3');
 			disk_fail &= ~c->mask_fail;
+			c->format = 1;
 			if (c->op & DISK_PAGE_MODE)
 				disk_read (u);
 			else
