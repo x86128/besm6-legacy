@@ -42,6 +42,7 @@ typedef struct {
 	int zone;			/* Номер зоны на диске */
 	int track;			/* Выбор половины зоны на диске */
 	int memory;			/* Начальный адрес памяти */
+	int format;			/* Флаг разметки */
 	int status;			/* Регистр состояния */
 	t_value mask_grp;		/* Маска готовности для ГРП */
 	int mask_fail;			/* Маска ошибки обмена */
@@ -160,6 +161,28 @@ t_stat disk_detach (UNIT *u)
 }
 
 /*
+ * Отладочная печать массива данных обмена.
+ */
+static void log_data (t_value *data, int nwords)
+{
+	int i;
+	t_value val;
+
+	for (i=0; i<nwords; ++i) {
+		val = data[i];
+		fprintf (sim_log, " %04o-%04o-%04o-%04o",
+			(int) (val >> 36) & 07777,
+			(int) (val >> 24) & 07777,
+			(int) (val >> 12) & 07777,
+			(int) val & 07777);
+		if ((i & 3) == 3)
+			fprintf (sim_log, "\n");
+	}
+	if ((i & 3) != 0)
+		fprintf (sim_log, "\n");
+}
+
+/*
  * Запись на диск.
  */
 void disk_write (UNIT *u)
@@ -192,6 +215,21 @@ void disk_write_track (UNIT *u)
 		longjmp (cpu_halt, SCPE_IOERR);
 }
 
+void disk_format (UNIT *u)
+{
+	KMD *c = unit_to_ctlr (u);
+
+	if (disk_dev.dctrl) {
+		besm6_debug ("::: формат МД %o полузона %04o.%d память %05o-%05o",
+			c->dev, c->zone, c->track, c->memory, c->memory + 511);
+		log_data (&memory [c->memory], 48);
+	}
+	fseek (u->fileref, (ZONE_SIZE*c->zone + 4*c->track) * 8, SEEK_SET);
+	sim_fwrite (c->sysdata + 4*c->track, 8, 4, u->fileref);
+	if (ferror (u->fileref))
+		longjmp (cpu_halt, SCPE_IOERR);
+}
+
 /*
  * Чтение с диска.
  */
@@ -200,7 +238,9 @@ void disk_read (UNIT *u)
 	KMD *c = unit_to_ctlr (u);
 
 	if (disk_dev.dctrl)
-		besm6_debug ("::: чтение МД %o зона %04o память %05o-%05o",
+		besm6_debug ((c->op & DISK_READ_SYSDATA) ?
+			"::: чтение МД %o зона %04o служебные слова" :
+			"::: чтение МД %o зона %04o память %05o-%05o",
 			c->dev, c->zone, c->memory, c->memory + 1023);
 	fseek (u->fileref, ZONE_SIZE * c->zone * 8, SEEK_SET);
 	if (sim_fread (c->sysdata, 8, 8, u->fileref) != 8) {
@@ -209,7 +249,7 @@ void disk_read (UNIT *u)
 		return;
 	}
 	if (! (c->op & DISK_READ_SYSDATA) &&
-	    sim_fread (&memory[c->memory], 8, 1024, u->fileref) != 1024) {
+	    sim_fread (&memory [c->memory], 8, 1024, u->fileref) != 1024) {
 		/* Чтение неинициализированного диска */
 		disk_fail |= c->mask_fail;
 		return;
@@ -223,7 +263,9 @@ void disk_read_track (UNIT *u)
 	KMD *c = unit_to_ctlr (u);
 
 	if (disk_dev.dctrl)
-		besm6_debug ("::: чтение МД %o полузона %04o.%d память %05o-%05o",
+		besm6_debug ((c->op & DISK_READ_SYSDATA) ?
+			"::: чтение МД %o полузона %04o.%d служебные слова" :
+			"::: чтение МД %o полузона %04o.%d память %05o-%05o",
 			c->dev, c->zone, c->track, c->memory, c->memory + 511);
 	fseek (u->fileref, (ZONE_SIZE*c->zone + 4*c->track) * 8, SEEK_SET);
 	if (sim_fread (c->sysdata + 4*c->track, 8, 4, u->fileref) != 4) {
@@ -234,7 +276,7 @@ void disk_read_track (UNIT *u)
 	if (! (c->op & DISK_READ_SYSDATA)) {
 		fseek (u->fileref, (8 + ZONE_SIZE*c->zone + 512*c->track) * 8,
 			SEEK_SET);
-		if (sim_fread (&memory[c->memory], 8, 512, u->fileref) != 512) {
+		if (sim_fread (&memory [c->memory], 8, 512, u->fileref) != 512) {
 			/* Чтение неинициализированного диска */
 			disk_fail |= c->mask_fail;
 			return;
@@ -253,6 +295,7 @@ void disk_io (int ctlr, uint32 cmd)
 	KMD *c = &controller [ctlr];
 
 	c->op = cmd;
+	c->format = 0;
 	if (c->op & DISK_PAGE_MODE) {
 		/* Обмен страницей */
 		c->memory = (cmd & DISK_PAGE) >> 2 | (cmd & DISK_BLOCK) >> 8;
@@ -278,6 +321,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 {
 	KMD *c = &controller [ctlr];
 	UNIT *u = &disk_unit [c->dev];
+/*static t_value buf [512];*/
 
 	if (cmd & BIT(12)) {
 		/* Выдача в КМД адреса дорожки.
@@ -290,9 +334,11 @@ void disk_ctl (int ctlr, uint32 cmd)
 		}
 		c->zone = (cmd >> 1) & BITS(10);
 		c->track = cmd & 1;
+#if 0
 		if (disk_dev.dctrl)
 			besm6_debug ("::: КМД %c: выдача адреса дорожки %04o.%d",
 				ctlr + '3', c->zone, c->track);
+#endif
 		disk_fail &= ~c->mask_fail;
 		if (c->op & DISK_READ) {
 			if (c->op & DISK_PAGE_MODE)
@@ -302,11 +348,14 @@ void disk_ctl (int ctlr, uint32 cmd)
 		} else {
 			if (u->flags & UNIT_RO) {
 				/* Read only. */
-/*				longjmp (cpu_halt, SCPE_RO);*/
+				/*longjmp (cpu_halt, SCPE_RO);*/
 				disk_fail |= c->mask_fail;
 				return;
 			}
-			if (c->op & DISK_PAGE_MODE)
+			if (c->format) {
+				disk_format (u);
+/*memcpy (buf, &memory [c->memory], 512 * 8);*/
+			} else if (c->op & DISK_PAGE_MODE)
 				disk_write (u);
 			else
 				disk_write_track (u);
@@ -355,27 +404,27 @@ void disk_ctl (int ctlr, uint32 cmd)
 		/* Команда, выдаваемая в КМД. */
 		switch (cmd & 077) {
 		case 000: /* диспак выдаёт эту команду один раз в начале загрузки */
+#if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: ### недокументированная команда 00",
+				besm6_debug ("::: КМД %c: недокументированная команда 00",
 					ctlr + '3');
+#endif
 			break;
 		case 001: /* сброс на 0 цилиндр */
 #if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: ### сброс на 0 цилиндр",
+				besm6_debug ("::: КМД %c: сброс на 0 цилиндр",
 					ctlr + '3');
 #endif
 			break;
 		case 002: /* подвод */
-#if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: ### подвод", ctlr + '3');
-#endif
+				besm6_debug ("::: КМД %c: подвод", ctlr + '3');
 			break;
 		case 003: /* чтение (НСМД-МОЗУ) */
 #if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c чтение", ctlr + '3');
+				besm6_debug ("::: КМД %c: чтение", ctlr + '3');
 #endif
 			break;
 		case 004: /* запись (МОЗУ-НСМД) */
@@ -385,25 +434,23 @@ void disk_ctl (int ctlr, uint32 cmd)
 #endif
 			break;
 		case 005: /* разметка */
-			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: ### разметка", ctlr + '3');
+			c->format = 1;
 			break;
 		case 006: /* сравнение кодов (МОЗУ-НСМД) */
 #if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: ### сравнение кодов", ctlr + '3');
+				besm6_debug ("::: КМД %c: сравнение кодов", ctlr + '3');
 #endif
 			break;
 		case 007: /* чтение заголовка */
-#if 0
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: ### чтение заголовка", ctlr + '3');
-#endif
+				besm6_debug ("::: КМД %c: чтение заголовка", ctlr + '3');
 			disk_fail &= ~c->mask_fail;
 			if (c->op & DISK_PAGE_MODE)
 				disk_read (u);
 			else
 				disk_read_track (u);
+/*memcpy (&memory [c->memory], buf, 512 * 8);*/
 
 			/* Ждём события от устройства. */
 			sim_activate (u, 20*USEC);	/* Ускорим для отладки. */
@@ -446,7 +493,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 #endif
 			break;
 		default:
-			besm6_debug ("::: КМД %c: ### неизвестная команда %02o",
+			besm6_debug ("::: КМД %c: неизвестная команда %02o",
 				ctlr + '3', cmd & 077);
 			break;
 		}
@@ -484,7 +531,9 @@ t_stat disk_event (UNIT *u)
  */
 int disk_errors ()
 {
+#if 0
 	if (disk_dev.dctrl)
 		besm6_debug ("::: КМД: опрос шкалы ошибок = %04o", disk_fail);
+#endif
 	return disk_fail;
 }
