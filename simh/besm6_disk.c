@@ -144,13 +144,11 @@ t_stat disk_reset (DEVICE *dptr)
 
 t_stat disk_attach (UNIT *u, char *cptr)
 {
-	KMD *c = unit_to_ctlr (u);
 	t_stat s;
 
 	s = attach_unit (u, cptr);
 	if (s != SCPE_OK)
 		return s;
-	GRP |= c->mask_grp;
 	return SCPE_OK;
 }
 
@@ -481,7 +479,10 @@ void disk_ctl (int ctlr, uint32 cmd)
 		if ((disk_dev.flags & DEV_DIS) || ! u->fileref) {
 			/* Device not attached. */
 			disk_fail |= c->mask_fail;
+			GRP &= ~c->mask_grp;
 		}
+		GRP |= c->mask_grp;
+
 	} else if (cmd & BIT(9)) {
 		/* Проверка прерывания от КМД? */
 #if 0
