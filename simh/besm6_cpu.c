@@ -22,14 +22,14 @@
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  *  1) All addresses and data values are displayed in octal.
  *  2) Memory size is 128 kwords.
- *  3) Interrupt system is to be implemented.
+ *  3) Interrupt system is to be synchronized with wallclock time.
  *  4) Execution times are in 1/10 of microsecond.
  *  5) Magnetic drums are implemented as a single "DRUM" device.
- *  6) Magnetic disks are planned.
+ *  6) Magnetic disks are implemented.
  *  7) Magnetic tape is not implemented.
- *  8) Punch reader is planned.
+ *  8) Punch tape reader is implemented, punch card reader is planned.
  *  9) Card puncher is not implemented.
- * 10) Displays are planned.
+ * 10) Displays are implemented.
  * 11) Printer АЦПУ-128 is implemented.
  * 12) Instruction mnemonics, register names and stop messages
  *     are in Russian using UTF-8 encoding. It is assumed, that
@@ -46,7 +46,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-#define SOFT_CLOCK
+#undef SOFT_CLOCK
 
 t_value memory [MEMSIZE];
 uint32 PC, RK, Aex, M [NREGS], RAU, RUU;

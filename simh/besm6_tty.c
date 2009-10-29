@@ -363,16 +363,15 @@ void vt_print()
 		tty_sym[num] = ~tty_sym[num] & 0x7f;
 		if (tty_sym[num] < 0x60) {
 			switch (tty_sym[num]) {
-			case '\a':
 			case '\b':
 			case '\t':
-			case '\n':
 			case '\v':
-			case '\r':
 			case '\033':
 			case '\0':
 				/* Выдаём управляющий символ. */
 				break;
+			case '\n':
+				/* На VDT-340 также возвращал курсор в 1-ю позицию */
 			case '\f':
 				/* На VDT-340 это был переход в начало экрана
 				 * (home). Затем обычно выдавались три возврата
@@ -395,6 +394,7 @@ void vt_print()
 				break;
 				tty_sym[num] = 'm';
 				break;
+			case '\r':
 			case '\003':
 				/* Неотображаемые символы */
 				tty_sym[num] = 0;
@@ -707,11 +707,12 @@ void vt_receive()
 		if (tty_typed[num] <= 0177) {
 			if (tty_typed[num] == '\r' || tty_typed[num] == '\n')
 				tty_typed[num] = 3;	/* ^C - конец строки */
-			if (tty_typed[num] == '\b' || tty_typed[num] == '\177')
-				tty_typed[num] = 26;	/* ^Z - забой */
+			if (tty_typed[num] == '\177')
+				tty_typed[num] = '\b';	/* ASCII DEL -> BS */
 			tty_instate[num] = 1;
 			TTY_IN |= mask;		/* start bit */
 			GRP |= GRP_TTY_START;	/* не используется ? */
+			MGRP |= BIT(19);	/* для терминалов по методу МГУ */
 			vt_receiving |= mask;
 		}
 		break;
