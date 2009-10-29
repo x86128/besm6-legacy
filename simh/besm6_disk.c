@@ -164,6 +164,7 @@ t_value spread (t_value val)
 {
 	int i, j;
 	t_value res = 0;
+
 	for (i = 0; i < 5; i++) for (j = 0; j < 9; j++)
 		if (val & (1LL<<(i+j*5)))
 			res |= 1LL << (i*9+j);
@@ -190,6 +191,21 @@ static void log_data (t_value *data, int nwords)
 	}
 	if ((i & 3) != 0)
 		fprintf (sim_log, "\n");
+}
+
+/*
+ * Сложение с переносом вправо.
+ */
+static unsigned sum_with_right_carry (unsigned a, unsigned b)
+{
+	unsigned c;
+
+	while (b) {
+		c = a & b;
+		a ^= b;
+		b = c >> 1;
+	}
+	return a;
 }
 
 /*
@@ -225,36 +241,40 @@ void disk_write_track (UNIT *u)
 		longjmp (cpu_halt, SCPE_IOERR);
 }
 
+/*
+ * Форматирование дорожки.
+ */
 void disk_format (UNIT *u)
 {
 	KMD *c = unit_to_ctlr (u);
-
-	t_value * ptr = &memory[c->memory];
-	t_value fmtbuf[5];
+	t_value fmtbuf[5], *ptr;
 	int i;
-	if (disk_dev.dctrl) {
-		besm6_debug ("::: формат МД %o полузона %04o.%d память %05o-%05o",
-			c->dev, c->zone, c->track, c->memory, c->memory + 511);
-		log_data (&memory [c->memory], 48);
-	}
-	/* Находим начало записываемого заголовка */
-	while ((*ptr & BITS48) == 0) ptr++;
 
-	/* Декодируем из гребенки в нормальный вид */
-	for (i = 0; i < 5; i++) {
-		fmtbuf[i] = spread(ptr[i]);
-	}
+	/* По сути, эмулятору ничего делать не надо. */
+	if (! disk_dev.dctrl)
+		return;
+
+	/* Находим начало записываемого заголовка. */
+	ptr = &memory [c->memory];
+	while ((*ptr & BITS48) == 0)
+		ptr++;
+
+	/* Декодируем из гребенки в нормальный вид. */
+	for (i = 0; i < 5; i++)
+		fmtbuf[i] = spread (ptr[i]);
+
 	/* При первой попытке разметки адресный маркер начинается в старшем 5-разрядном слоге,
-	 * пропускаем первый слог.
-	 */
-	for (i = 0; i < 4; i++) {
-		fmtbuf[i] = ((fmtbuf[i] & BITS48) << 5) | ((fmtbuf[i+1] >> 40) & BITS(5));
-	}
-	/* Сохраняем в нормальном виде - но с контролем числа - для последующего чтения заголовка */
-	fseek (u->fileref, (ZONE_SIZE*c->zone + 4*c->track) * 8, SEEK_SET);
-	sim_fwrite (fmtbuf, 8, 4, u->fileref);
-	if (ferror (u->fileref))
-		longjmp (cpu_halt, SCPE_IOERR);
+	 * пропускаем первый слог. */
+	for (i=0; i<4; i++)
+		fmtbuf[i] = ((fmtbuf[i] & BITS48) << 5) |
+			((fmtbuf[i+1] >> 40) & BITS(5));
+
+	/* Печатаем идентификатор, адрес и контрольную сумму адреса. */
+	besm6_debug ("::: формат МД %o полузона %04o.%d память %05o и-а-кса %010o %010o",
+		c->dev, c->zone, c->track, c->memory,
+		(int) (fmtbuf[0] >> 8 & BITS(30)),
+		(int) (fmtbuf[2] >> 14 & BITS(30)));
+	/* log_data (fmtbuf, 4); */
 }
 
 /*
@@ -289,6 +309,7 @@ t_value collect (t_value val)
 {
 	int i, j;
 	t_value res = 0;
+
 	for (i = 0; i < 5; i++) for (j = 0; j < 9; j++)
 		if (val & (1LL<<(i*9+j)))
 			res |= 1LL << (i+j*5);
@@ -310,17 +331,6 @@ void disk_read_track (UNIT *u)
 		disk_fail |= c->mask_fail;
 		return;
 	}
-	if (c->format) {
-		/* Чтение заголовка дорожки: отдаем заголовок, записанный предшествующей
-		 * командой разметки, в формате гребенки.
-		 */
-		int i;
-		t_value * sysdata = c->sysdata + 4*c->track;
-		for (i = 0; i < 4; i++) {
-			sysdata[i] = collect(sysdata[i]) | (2LL<<48);
-		}
-		return;
-	} 
 	if (! (c->op & DISK_READ_SYSDATA)) {
 		fseek (u->fileref, (8 + ZONE_SIZE*c->zone + 512*c->track) * 8,
 			SEEK_SET);
@@ -332,6 +342,41 @@ void disk_read_track (UNIT *u)
 	}
 	if (ferror (u->fileref))
 		longjmp (cpu_halt, SCPE_IOERR);
+}
+
+/*
+ * Чтение заголовка дорожки.
+ */
+void disk_read_header (UNIT *u)
+{
+	KMD *c = unit_to_ctlr (u);
+	t_value *sysdata = c->sysdata + 4*c->track;
+	int iaksa, i, cyl, head;
+
+	/* Адрес: номер цилиндра и головки. */
+	head = (c->zone << 1) + c->track;
+	cyl = head / 10;
+	head %= 10;
+	iaksa = (cyl << 20) | (head << 16);
+
+	/* Идентификатор дорожки замены. */
+	if (c->zone >= 01750)
+		iaksa |= BIT(30);
+
+	/* Контрольная сумма адреса с переносом вправо. */
+	iaksa |= BITS(12) & ~sum_with_right_carry (iaksa >> 12, iaksa >> 24);
+
+	/* Амиакса, 42 нуля, амиакса, много единиц. */
+	sysdata[0] = 07404000000000000LL | (t_value) iaksa << 8;
+	sysdata[1] = 03740LL;
+	sysdata[2] = 00400000000037777LL | (t_value) iaksa << 14;
+	sysdata[3] = BITS48;
+	if (disk_dev.dctrl)
+		log_data (sysdata, 4);
+
+	/* Кодируем гребенку. */
+	for (i=0; i<4; i++)
+		sysdata[i] = SET_CONVOL (collect (sysdata[i]), CONVOL_NUMBER);
 }
 
 /*
@@ -369,7 +414,6 @@ void disk_ctl (int ctlr, uint32 cmd)
 {
 	KMD *c = &controller [ctlr];
 	UNIT *u = &disk_unit [c->dev];
-/*static t_value buf [512];*/
 
 	if (cmd & BIT(12)) {
 		/* Выдача в КМД адреса дорожки.
@@ -400,10 +444,9 @@ void disk_ctl (int ctlr, uint32 cmd)
 				disk_fail |= c->mask_fail;
 				return;
 			}
-			if (c->format) {
+			if (c->format)
 				disk_format (u);
-/*memcpy (buf, &memory [c->memory], 512 * 8);*/
-			} else if (c->op & DISK_PAGE_MODE)
+			else if (c->op & DISK_PAGE_MODE)
 				disk_write (u);
 			else
 				disk_write_track (u);
@@ -498,12 +541,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 				besm6_debug ("::: КМД %c: чтение %s заголовка", ctlr + '3',
 					cmd & 040 ? "резервного" : "");
 			disk_fail &= ~c->mask_fail;
-			c->format = 1;
-			if (c->op & DISK_PAGE_MODE)
-				disk_read (u);
-			else
-				disk_read_track (u);
-/*memcpy (&memory [c->memory], buf, 512 * 8);*/
+			disk_read_header (u);
 
 			/* Ждём события от устройства. */
 			sim_activate (u, 20*USEC);	/* Ускорим для отладки. */
