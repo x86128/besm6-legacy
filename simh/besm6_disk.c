@@ -470,12 +470,14 @@ void disk_ctl (int ctlr, uint32 cmd)
 				besm6_debug ("::: КМД %c: подвод", ctlr + '3');
 			break;
 		case 003: /* чтение (НСМД-МОЗУ) */
+		case 043: /* резервной дорожки */
 #if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: чтение", ctlr + '3');
 #endif
 			break;
 		case 004: /* запись (МОЗУ-НСМД) */
+		case 044: /* резервной дорожки */
 #if 0
 			if (disk_dev.dctrl)
 				besm6_debug ("::: КМД %c: запись", ctlr + '3');
@@ -491,8 +493,10 @@ void disk_ctl (int ctlr, uint32 cmd)
 #endif
 			break;
 		case 007: /* чтение заголовка */
+		case 047: /* резервной дорожки */
 			if (disk_dev.dctrl)
-				besm6_debug ("::: КМД %c: чтение заголовка", ctlr + '3');
+				besm6_debug ("::: КМД %c: чтение %s заголовка", ctlr + '3',
+					cmd & 040 ? "резервного" : "");
 			disk_fail &= ~c->mask_fail;
 			c->format = 1;
 			if (c->op & DISK_PAGE_MODE)
@@ -544,6 +548,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 		default:
 			besm6_debug ("::: КМД %c: неизвестная команда %02o",
 				ctlr + '3', cmd & 077);
+			GRP |= c->mask_grp;	/* чтобы не зависало */
 			break;
 		}
 	}
