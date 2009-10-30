@@ -78,6 +78,7 @@ char *vt_cptr [LINES_MAX+1];
 void tt_print();
 void consul_receive();
 t_stat vt_clk(UNIT *);
+extern char *get_sim_sw (char *cptr);
 
 UNIT tty_unit [] = {
 	{ UDATA (vt_clk, UNIT_DIS, 0) },		/* fake unit, clock */
@@ -337,7 +338,7 @@ t_stat tty_detach (UNIT *u)
  * show tty statistics	- просмотр счетчиков переданных и принятых байтов
  */
 MTAB tty_mod[] = {
-	{ TTY_CHARSET_MASK, TTY_UNICODE_CHARSET, "UNICODE input",
+	{ TTY_CHARSET_MASK, TTY_UNICODE_CHARSET, "UTF-8 input",
 		"UNICODE" },
 	{ TTY_CHARSET_MASK, TTY_KOI7_JCUKEN_CHARSET, "KOI7 (jcuken) input",
 		"JCUKEN" },
@@ -363,7 +364,7 @@ MTAB tty_mod[] = {
 		NULL, NULL, &tmxr_show_cstat, (void*) &tty_desc },
 	{ MTAB_XTD | MTAB_VDV | MTAB_NMO, 0, "STATISTICS",
 		NULL, NULL, &tmxr_show_cstat, (void*) &tty_desc },
-	{ MTAB_XTD | MTAB_VUN | MTAB_NC, 0, "LOG",
+	{ MTAB_XTD | MTAB_VUN | MTAB_NC, 0, NULL,
 		"LOG", &tmxr_set_log, &tmxr_show_log, (void*) &tty_desc },
 	{ MTAB_XTD | MTAB_VUN | MTAB_NC, 0, NULL,
 		"NOLOG", &tmxr_set_nolog, NULL, (void*) &tty_desc },
@@ -631,6 +632,99 @@ static int unicode_to_koi7 (unsigned val)
 }
 
 /*
+ * Set command
+ */
+static t_stat cmd_set (int32 num, char *cptr)
+{
+	char gbuf [CBUFSIZE];
+	int len;
+
+	cptr = get_sim_sw (cptr);
+	if (! cptr)
+		return SCPE_INVSW;
+	if (! *cptr)
+		return SCPE_NOPARAM;
+	cptr = get_glyph (cptr, gbuf, 0);
+	if (*cptr)
+		return SCPE_2MARG;
+
+	len = strlen (gbuf);
+	if (strncmp ("UNICODE", gbuf, len) == 0) {
+		tty_unit[num].flags &= ~TTY_CHARSET_MASK;
+		tty_unit[num].flags |= TTY_UNICODE_CHARSET;
+	} else if (strncmp ("JCUKEN", gbuf, len) == 0) {
+		tty_unit[num].flags &= ~TTY_CHARSET_MASK;
+		tty_unit[num].flags |= TTY_KOI7_JCUKEN_CHARSET;
+	} else if (strncmp ("QWERTY", gbuf, len) == 0) {
+		tty_unit[num].flags &= ~TTY_CHARSET_MASK;
+		tty_unit[num].flags |= TTY_KOI7_QWERTY_CHARSET;
+	} else if (strncmp ("TT", gbuf, len) == 0) {
+		tty_unit[num].flags &= ~TTY_STATE_MASK;
+		tty_unit[num].flags |= TTY_TELETYPE_STATE;
+	} else if (strncmp ("VT", gbuf, len) == 0) {
+		tty_unit[num].flags &= ~TTY_STATE_MASK;
+		tty_unit[num].flags |= TTY_VT340_STATE;
+	} else if (strncmp ("CONSUL", gbuf, len) == 0) {
+		tty_unit[num].flags &= ~TTY_STATE_MASK;
+		tty_unit[num].flags |= TTY_CONSUL_STATE;
+	} else if (strncmp ("DESTRBS", gbuf, len) == 0) {
+		tty_unit[num].flags &= ~TTY_BSPACE_MASK;
+		tty_unit[num].flags |= TTY_DESTRUCTIVE_BSPACE;
+	} else if (strncmp ("AUTHBS", gbuf, len) == 0) {
+		tty_unit[num].flags &= ~TTY_BSPACE_MASK;
+		tty_unit[num].flags |= TTY_AUTHENTIC_BSPACE;
+	} else {
+		return SCPE_NXPAR;
+	}
+	return SCPE_OK;
+}
+
+/*
+ * Show command
+ */
+static t_stat cmd_show (int32 num, char *cptr)
+{
+	TMLN *t = &tty_line [num];
+	char gbuf [CBUFSIZE];
+	MTAB *m;
+	int len;
+
+	cptr = get_sim_sw (cptr);
+	if (! cptr)
+		return SCPE_INVSW;
+	if (! *cptr) {
+		sprintf (gbuf, "TTY%d", num);
+		tmxr_linemsg (t, gbuf);
+		for (m=tty_mod; m->mask; m++) {
+			if (m->pstring &&
+			    (tty_unit[num].flags & m->mask) == m->match) {
+				tmxr_linemsg (t, ", ");
+				tmxr_linemsg (t, m->pstring);
+			}
+		}
+		if (t->txlog)
+			tmxr_linemsg (t, ", log");
+		tmxr_linemsg (t, "\r\n");
+		return SCPE_OK;
+	}
+	cptr = get_glyph (cptr, gbuf, 0);
+	if (*cptr)
+		return SCPE_2MARG;
+
+	len = strlen (gbuf);
+	if (strncmp ("STATISTICS", gbuf, len) == 0) {
+		sprintf (gbuf, "line %d: input queued/total = %d/%d, "
+			"output queued/total = %d/%d\r\n", num,
+			t->rxbpi - t->rxbpr, t->rxcnt,
+			t->txbpi - t->txbpr, t->txcnt);
+		tmxr_linemsg (t, gbuf);
+	} else {
+		return SCPE_NXPAR;
+	}
+	return SCPE_OK;
+}
+
+/*
  * Exit command
  */
 static t_stat cmd_exit (int32 num, char *cptr)
@@ -641,13 +735,31 @@ static t_stat cmd_exit (int32 num, char *cptr)
 static t_stat cmd_help (int32 num, char *cptr);
 
 static CTAB cmd_table[] = {
+	{ "SET", &cmd_set, 0,
+		"set unicode              select UTF-8 encoding\r\n"
+		"set jcuken               select KOI7 encoding, 'jcuken' keymap\r\n"
+		"set qwerty               select KOI7 encoding, 'qwerty' keymap\r\n"
+		"set tt                   use Teletype mode\r\n"
+		"set vt                   use Videoton-340 mode\r\n"
+		"set consul               use Consul-254 mode\r\n"
+		"set destrbs              destructive backspace\r\n"
+		"set authbs               authentic backspace\r\n"
+	},
+	{ "SHOW", &cmd_show, 0,
+		"sh{ow}                   show modes of the terminal\r\n"
+		"sh{ow} s{tatistics}      show network statistics\r\n"
+	},
 	{ "EXIT", &cmd_exit, 0,
-	  "exi{t}|q{uit}|by{e}      exit from simulation\r\n" },
-	{ "QUIT", &cmd_exit, 0, NULL },
-	{ "BYE", &cmd_exit, 0, NULL },
+		"exi{t} | q{uit} | by{e}  exit from simulation\r\n"
+	},
+	{ "QUIT", &cmd_exit, 0, NULL
+	},
+	{ "BYE", &cmd_exit, 0, NULL
+	},
 	{ "HELP", &cmd_help, 0,
-	  "h{elp}                   type this message\r\n"
-	  "h{elp} <command>         type help for command\r\n" },
+		"h{elp}                   type this message\r\n"
+		"h{elp} <command>         type help for command\r\n"
+	},
 	{ 0 }
 };
 
@@ -675,7 +787,6 @@ static t_stat cmd_help (int32 num, char *cptr)
 	TMLN *t = &tty_line [num];
 	char gbuf [CBUFSIZE];
 	CTAB *c;
-	extern char *get_sim_sw (char *cptr);
 
 	cptr = get_sim_sw (cptr);
 	if (! cptr)
@@ -767,10 +878,26 @@ void vt_cmd_loop (int num, int c)
 		break;
 	case 'U' & 037:
 		/* Стирание всей строки. */
-		while (*cptr > cbuf) {
+erase_line:	while (*cptr > cbuf) {
 			--*cptr;
 			if (! (**cptr & 0x80))
 				tmxr_linemsg (t, "\b \b");
+		}
+		break;
+	case 033:
+		/* Escape [ X. */
+		if (tmxr_getc_ln (t) != '[' + TMXR_VALID)
+			break;
+		switch (tmxr_getc_ln (t) - TMXR_VALID) {
+		case 'A': /* стрелка вверх */
+			if (*cptr <= cbuf) {
+				*cptr = cbuf + strlen (cbuf);
+				if (*cptr > cbuf)
+					tmxr_linemsg (t, cbuf);
+			}
+			break;
+		case 'B': /* стрелка вниз */
+			goto erase_line;
 		}
 		break;
 	default:
@@ -945,7 +1072,6 @@ void vt_receive()
 {
     uint32 workset = vt_mask;
     int num;
-
 
     TTY_IN = 0;
     for (num = besm6_highest_bit (workset) - TTY_MAX;

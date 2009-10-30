@@ -5,7 +5,7 @@ besm6_SOURCES = scp.c sim_console.c sim_fio.c sim_timer.c sim_sock.c \
 	besm6_printer.c besm6_tty.c besm6_drum.c besm6_disk.c \
 	besm6_punch.c besm6_panel.c
 AM_CFLAGS = -Wall -g -O2
-AM_CPPFLAGS = -DUSE_INT64
+AM_CPPFLAGS = -DUSE_INT64 -DTMXR_MAXBUF=1024
 
 clean-local:
 	-rm -rf *~
