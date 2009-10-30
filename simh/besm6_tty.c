@@ -18,8 +18,8 @@
 #include "sim_sock.h"
 #include "sim_tmxr.h"
 
-#define TTY_MAX		24		/* Количество терминалов */
-
+#define TTY_MAX		24		/* Количество последовательных терминалов */
+#define LINES_MAX	TTY_MAX + 2	/* Включая параллельные интерфейсы "Консулов" */
 /*
  * Согласно таблице в http://ru.wikipedia.org/wiki/МТК-2
  */
@@ -55,6 +55,7 @@ char *  process (int sym)
 	return "";
 }
 
+/* Только для последовательных линий */
 int tty_active [TTY_MAX+1], tty_sym [TTY_MAX+1];
 int tty_typed [TTY_MAX+1], tty_instate [TTY_MAX+1];
 
@@ -65,25 +66,14 @@ uint32 tt_sending, tt_receiving;
 uint32 tt_mask = 0, vt_mask = 0;
 
 uint32 TTY_OUT = 0, TTY_IN = 0, vt_idle = 0;
+uint32 CONSUL_IN[2];
+
+uint32 CONS_CAN_PRINT[2] = { 01000, 00400 };
+uint32 CONS_HAS_INPUT[2] = { 04000, 02000 };
 
 void tt_print();
-
-/* 19 р ГРП, 300 Гц */
-t_stat vt_clk (UNIT * this)
-{
-	/* Телетайпы работают на 10 бод */
-	static int clk_divider = 1<<29;
-	GRP |= MGRP & BIT(19);
-	vt_print();
-	vt_receive();
-	
-	if (! (clk_divider >>= 1)) {
-		tt_print();
-		clk_divider = 1<<29;
-	}
-
-	return sim_activate (this, 1000*MSEC/300);
-}
+void consul_receive();
+t_stat vt_clk(UNIT *);
 
 UNIT tty_unit [] = {
 	{ UDATA (vt_clk, UNIT_DIS, 0) },		/* fake unit, clock */
@@ -111,6 +101,9 @@ UNIT tty_unit [] = {
 	{ UDATA (NULL, UNIT_SEQ, 0) },
 	{ UDATA (NULL, UNIT_SEQ, 0) },
 	{ UDATA (NULL, UNIT_SEQ, 0) },
+	/* The next two units are parallel interface */
+	{ UDATA (NULL, UNIT_SEQ, 0) },
+	{ UDATA (NULL, UNIT_SEQ, 0) },
 	{ 0 }
 };
 
@@ -127,8 +120,21 @@ REG tty_reg[] = {
  * Поле .rcve устанавливается в 1 для сетевых соединений.
  * Для локальных терминалов оно равно 0.
  */
-TMLN tty_line [TTY_MAX+1];
-TMXR tty_desc = { TTY_MAX+1, 0, 0, tty_line };	/* mux descriptor */
+TMLN tty_line [LINES_MAX+1];
+TMXR tty_desc = { LINES_MAX+1, 0, 0, tty_line };	/* mux descriptor */
+
+#define TTY_UNICODE_CHARSET	0
+#define TTY_KOI7_JCUKEN_CHARSET	(1<<UNIT_V_UF)
+#define TTY_KOI7_QWERTY_CHARSET	(2<<UNIT_V_UF)
+#define TTY_CHARSET_MASK	(3<<UNIT_V_UF)
+#define TTY_OFFLINE_STATE	0
+#define TTY_TELETYPE_STATE	(1<<(UNIT_V_UF+2))
+#define TTY_VT340_STATE		(2<<(UNIT_V_UF+2))
+#define TTY_CONSUL_STATE	(3<<(UNIT_V_UF+2))
+#define TTY_STATE_MASK		(3<<(UNIT_V_UF+2))
+#define TTY_DESTRUCTIVE_BSPACE	0
+#define TTY_AUTHENTIC_BSPACE	(1<<(UNIT_V_UF+4))
+#define TTY_BSPACE_MASK		(1<<(UNIT_V_UF+4))
 
 t_stat tty_reset (DEVICE *dptr)
 {
@@ -138,23 +144,57 @@ t_stat tty_reset (DEVICE *dptr)
 	memset(tty_instate, 0, sizeof(tty_instate));
 	vt_sending = vt_receiving = 0;
 	TTY_IN = TTY_OUT = 0;
+	CONSUL_IN[0] = CONSUL_IN[1] = 0;
 	reg = rus;
 	vt_idle = 1;
 	tty_line[0].conn = 1;			/* faked, always busy */
+	/* Готовность устройства в READY2 инверсная, а устройство всегда готово */
+	/* Провоцируем передачу */
+	PRP |= CONS_CAN_PRINT[0] | CONS_CAN_PRINT[1];
 	return sim_activate (tty_unit, 1000*MSEC/300);
 }
 
-#define TTY_UNICODE_CHARSET	0
-#define TTY_KOI7_JCUKEN_CHARSET	(1<<UNIT_V_UF)
-#define TTY_KOI7_QWERTY_CHARSET	(2<<UNIT_V_UF)
-#define TTY_CHARSET_MASK	(3<<UNIT_V_UF)
-#define TTY_OFFLINE_STATE	0
-#define TTY_TELETYPE_STATE	(1<<(UNIT_V_UF+2))
-#define TTY_VT340_STATE		(2<<(UNIT_V_UF+2))
-#define TTY_STATE_MASK		(3<<(UNIT_V_UF+2))
-#define TTY_DESTRUCTIVE_BSPACE	0
-#define TTY_AUTHENTIC_BSPACE	(1<<(UNIT_V_UF+4))
-#define TTY_BSPACE_MASK		(1<<(UNIT_V_UF+4))
+/* 19 р ГРП, 300 Гц */
+t_stat vt_clk (UNIT * this)
+{
+	/* Телетайпы работают на 10 бод */
+	static int clk_divider = 1<<29;
+	GRP |= MGRP & BIT(19);
+
+	/* Опрашиваем сокеты на приём. */
+	tmxr_poll_rx (&tty_desc);
+
+	vt_print();
+	vt_receive();
+	consul_receive();
+
+	if (! (clk_divider >>= 1)) {
+		tt_print();
+		/* Прием не реализован */
+		clk_divider = 1<<29;
+	}
+
+	/* Есть новые сетевые подключения? */
+	int num = tmxr_poll_conn (&tty_desc);
+	if (num > 0 && num <= LINES_MAX) {
+		TMLN *t = &tty_line [num];
+		besm6_debug ("*** tty%d: новое подключение от %d.%d.%d.%d",
+			num, (unsigned char) (t->ipad >> 24),
+			(unsigned char) (t->ipad >> 16),
+			(unsigned char) (t->ipad >> 8),
+			(unsigned char) t->ipad);
+		t->rcve = 1;
+		tty_unit[num].flags &= ~TTY_STATE_MASK;
+		tty_unit[num].flags |= TTY_VT340_STATE;
+		if (num <= TTY_MAX)
+			vt_mask |= 1 << (TTY_MAX - num);
+	}
+
+	/* Опрашиваем сокеты на передачу. */
+	tmxr_poll_tx (&tty_desc);
+
+	return sim_activate (this, 1000*MSEC/300);
+}
 
 t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 {
@@ -170,15 +210,19 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 				t->rcve = 0;
 			} else
 				t->conn = 0;
-			tty_sym[num] =
-			tty_active[num] =
-			tty_typed[num] =
-			tty_instate[num] = 0;
-			vt_mask &= ~mask;
-			tt_mask &= ~mask;
+			if (num <= TTY_MAX) {
+				tty_sym[num] =
+				tty_active[num] =
+				tty_typed[num] =
+				tty_instate[num] = 0;
+				vt_mask &= ~mask;
+				tt_mask &= ~mask;
+			}
 		}
 		break;
 	case TTY_TELETYPE_STATE:
+		if (num > TTY_MAX)
+			return SCPE_NXPAR;
 		t->conn = 1;
 		t->rcve = 0;
 		tt_mask |= mask;
@@ -187,8 +231,16 @@ t_stat tty_setmode (UNIT *u, int32 val, char *cptr, void *desc)
 	case TTY_VT340_STATE:
 		t->conn = 1;
 		t->rcve = 0;
-		vt_mask |= mask;
-		tt_mask &= ~mask;
+		if (num <= TTY_MAX) {
+			vt_mask |= mask;
+			tt_mask &= ~mask;
+		}
+		break;
+	case TTY_CONSUL_STATE:
+		if (num <= TTY_MAX)
+			return SCPE_NXPAR;
+		t->conn = 1;
+		t->rcve = 0;
 		break;
 	}
 	return SCPE_OK;
@@ -208,14 +260,14 @@ t_stat tty_attach (UNIT *u, char *cptr)
 	if (*cptr >= '0' && *cptr <= '9') {
 		/* Сохраняем и восстанавливаем все .conn,
 		 * так как tmxr_attach() их обнуляет. */
-		for (m=0, n=1; n<=TTY_MAX; ++n)
+		for (m=0, n=1; n<=LINES_MAX; ++n)
 			if (tty_line[n].conn)
-				m |= 1 << (TTY_MAX-n);
+				m |= 1 << (LINES_MAX-n);
 		/* Неважно, какой номер порта указывать в команде задания
 		 * порта telnet. Можно tty, можно tty1 - без разницы. */
 		r = tmxr_attach (&tty_desc, &tty_unit[0], cptr);
-		for (n=1; n<=TTY_MAX; ++n)
-			if (m >> (TTY_MAX-n) & 1)
+		for (n=1; n<=LINES_MAX; ++n)
+			if (m >> (LINES_MAX-n) & 1)
 				tty_line[n].conn = 1;
 		return r;
 	}
@@ -225,7 +277,8 @@ t_stat tty_attach (UNIT *u, char *cptr)
 		u->flags |= TTY_VT340_STATE;
 		tty_line[num].conn = 1;
 		tty_line[num].rcve = 0;
-		vt_mask |= 1 << (TTY_MAX - num);
+		if (num <= TTY_MAX)
+			vt_mask |= 1 << (TTY_MAX - num);
 		besm6_debug ("*** консоль на T%03o", num);
 		return 0;
 	}
@@ -233,6 +286,10 @@ t_stat tty_attach (UNIT *u, char *cptr)
 		/* Запрещаем терминал. */
 		tty_line[num].conn = 1;
 		tty_line[num].rcve = 0;
+		if (num <= TTY_MAX) {
+			vt_mask &= ~(1 << (TTY_MAX - num));
+			tt_mask &= ~(1 << (TTY_MAX - num));
+		}
 		besm6_debug ("*** отключение терминала T%03o", num);
 		return 0;
 	}
@@ -257,6 +314,8 @@ MTAB tty_mod[] = {
 		"TT", &tty_setmode },
 	{ TTY_STATE_MASK, TTY_VT340_STATE, "Videoton-340",
 		"VT", &tty_setmode },
+	{ TTY_STATE_MASK, TTY_CONSUL_STATE, "Consul-254",
+		"CONSUL", &tty_setmode },
 	{ TTY_BSPACE_MASK, TTY_DESTRUCTIVE_BSPACE, "destructive backspace",
 		"DESTRBS" },
 	{ TTY_BSPACE_MASK, TTY_AUTHENTIC_BSPACE, NULL,
@@ -272,7 +331,7 @@ MTAB tty_mod[] = {
 
 DEVICE tty_dev = {
 	"TTY", tty_unit, tty_reg, tty_mod,
-	25, 2, 1, 1, 2, 1,
+	27, 2, 1, 1, 2, 1,
 	NULL, NULL, &tty_reset, NULL, &tty_attach, &tty_detach,
 	NULL, DEV_NET|DEV_DEBUG
 };
@@ -319,6 +378,62 @@ const char * koi7_rus_to_unicode [32] = {
 	"Ь", "Ы", "З", "Ш", "Э", "Щ", "Ч", "\0x7f",
 };
 
+void vt_send(int num, uint32 sym, int destructive_bs)
+{
+	if (sym < 0x60) {
+		switch (sym) {
+		case '\b':
+			/* Стираем предыдущий символ. */
+			if (destructive_bs) {
+				vt_puts (num, "\b ");
+			}
+			sym = '\b';
+			break;
+		case '\t':
+		case '\v':
+		case '\033':
+		case '\0':
+			/* Выдаём управляющий символ. */
+			break;
+		case '\037':
+			/* Очистка экрана */
+			vt_puts(num, "\033[2");
+			sym = 'J';
+			break;
+		case '\n':
+			/* На VDT-340 также возвращал курсор в 1-ю позицию */
+		case '\f':
+			/* На VDT-340 это был переход в начало экрана
+			 * (home). Затем обычно выдавались три возврата
+			 * каретки (backspace) и ERR, которые
+			 * оказывались в правом нижнем углу экрана.
+			 * На современных терминалах такой трюк не
+			 * проходит, поэтому просто переходим в начало
+			 * следующей строки. */
+			vt_putc (num, '\n');
+			sym = '\r';
+			break;
+		case '\r':
+		case '\003':
+			/* Неотображаемые символы */
+			sym = 0;
+			break;
+		default:
+			if (sym < ' ') {
+				/* Нефункциональные ctrl-символы были видны в половинной яркости */
+				vt_puts (num, "\033[2m");
+				vt_putc (num, sym | 0x40);
+				vt_puts (num, "\033[");
+				/* Завершаем ESC-последовательность */
+				sym = 'm';
+			}
+		}
+		if (sym)
+			vt_putc (num, sym);
+	} else
+		vt_puts (num, koi7_rus_to_unicode[sym - 0x60]);
+}
+
 /*
  * Обработка выдачи на все подключенные терминалы.
  */
@@ -326,22 +441,6 @@ void vt_print()
 {
 	uint32 workset = (TTY_OUT & vt_mask) | vt_sending;
 	int num;
-	TMLN *t;
-
-	/* Есть новые сетевые подключения? */
-	num = tmxr_poll_conn (&tty_desc);
-	if (num > 0 && num <= TTY_MAX) {
-		t = &tty_line [num];
-		besm6_debug ("*** tty%d: новое подключение от %d.%d.%d.%d",
-			num, (unsigned char) (t->ipad >> 24),
-			(unsigned char) (t->ipad >> 16),
-			(unsigned char) (t->ipad >> 8),
-			(unsigned char) t->ipad);
-		t->rcve = 1;
-		tty_unit[num].flags &= ~TTY_STATE_MASK;
-		tty_unit[num].flags |= TTY_VT340_STATE;
-		vt_mask |= 1 << (TTY_MAX - num);
-	}
 
 	if (workset == 0) {
 		++vt_idle;
@@ -361,58 +460,8 @@ void vt_print()
 		break;
 	    case 18: /* stop bit */
 		tty_sym[num] = ~tty_sym[num] & 0x7f;
-		if (tty_sym[num] < 0x60) {
-			switch (tty_sym[num]) {
-			case '\b':
-			case '\t':
-			case '\v':
-			case '\033':
-			case '\0':
-				/* Выдаём управляющий символ. */
-				break;
-			case '\n':
-				/* На VDT-340 также возвращал курсор в 1-ю позицию */
-			case '\f':
-				/* На VDT-340 это был переход в начало экрана
-				 * (home). Затем обычно выдавались три возврата
-				 * каретки (backspace) и ERR, которые
-				 * оказывались в правом нижнем углу экрана.
-				 * На современных терминалах такой трюк не
-				 * проходит, поэтому просто переходим в начало
-				 * следующей строки. */
-				vt_putc (num, '\n');
-				tty_sym[num] = '\r';
-				break;
-			case '\032':
-				/* На Видеотоне ^Z = забой.
-				 * Стираем предыдущий символ. */
-				if ((tty_unit[num].flags & TTY_BSPACE_MASK) ==
-					TTY_DESTRUCTIVE_BSPACE) {
-					vt_puts (num, "\b ");
-				}
-				tty_sym[num] = '\b';
-				break;
-				tty_sym[num] = 'm';
-				break;
-			case '\r':
-			case '\003':
-				/* Неотображаемые символы */
-				tty_sym[num] = 0;
-				break;
-			default:
-				if (tty_sym[num] < ' ') {
-					/* Нефункциональные ctrl-символы были видны в половинной яркости */
-					vt_puts (num, "\033[2m");
-					vt_putc (num, tty_sym[num] | 0x40);
-					vt_puts (num, "\033[");
-					/* Завершаем ESC-последовательность */
-					tty_sym[num] = 'm';
-				}
-			}
-			if (tty_sym[num])
-				vt_putc (num, tty_sym[num]);
-		} else
-			vt_puts (num, koi7_rus_to_unicode[tty_sym[num] - 0x60]);
+		vt_send (num, tty_sym[num],
+			(tty_unit[num].flags & TTY_BSPACE_MASK) == TTY_DESTRUCTIVE_BSPACE);
 		tty_active[num] = 0;
 		tty_sym[num] = 0;
 		vt_sending &= ~mask;
@@ -431,9 +480,6 @@ void vt_print()
 	    workset &= ~mask;
 	}
 	vt_idle = 0;
-
-	/* Опрашиваем сокеты на передачу. */
-	tmxr_poll_tx (&tty_desc);
 }
 
 /* Ввод с телетайпа не реализован; вывод работает только при использовании
@@ -676,8 +722,6 @@ void vt_receive()
     uint32 workset = vt_mask;
     int num;
 
-    /* Опрашиваем сокеты на приём. */
-    tmxr_poll_rx (&tty_desc);
 
     TTY_IN = 0;
     for (num = besm6_highest_bit (workset) - TTY_MAX;
@@ -754,52 +798,59 @@ int tty_query ()
 	return TTY_IN;
 }
 
-t_stat console_event (UNIT *u)
+void consul_print (int dev_num, uint32 cmd)
 {
-	return 0;
+	int line_num = dev_num + TTY_MAX + 1;
+	if (tty_dev.dctrl) 
+		besm6_debug(">>> CONSUL%o: %03o", line_num, cmd & 0377);
+	cmd &= 0177;
+	switch (tty_unit[line_num].flags & TTY_STATE_MASK) {
+	case TTY_VT340_STATE:
+		vt_send (line_num, cmd,
+		(tty_unit[line_num].flags & TTY_BSPACE_MASK) == TTY_DESTRUCTIVE_BSPACE);
+		break;
+	case TTY_CONSUL_STATE:
+		besm6_debug(">>> CONSUL%o: Native charset not implemented", line_num);
+		break;
+	}
+	// PRP |= CONS_CAN_PRINT[dev_num];
+	vt_idle = 0;
 }
 
-UNIT console_unit [] = {
-	{ UDATA (console_event, UNIT_SEQ, 0) },
-	{ UDATA (console_event, UNIT_SEQ, 0) },
-};
-
-REG console_reg[] = {
-{ 0 }
-};
-
-MTAB console_mod[] = {
-	{ 0 }
-};
-
-t_stat console_reset (DEVICE *dptr);
-
-DEVICE console_dev = {
-	"CONSUL", console_unit, console_reg, console_mod,
-	2, 8, 19, 1, 8, 50,
-	NULL, NULL, &console_reset, NULL, NULL, NULL,
-	NULL, DEV_DEBUG
-};
-
-#define CONS_READY 0100
-#define CONS_ERROR 0100
-
-#define CONS_CAN_PRINT 01000
-
-/*
- * Reset routine
- */
-t_stat console_reset (DEVICE *dptr)
+void consul_receive ()
 {
-	sim_cancel (&console_unit[0]);
-	sim_cancel (&console_unit[1]);
-	READY2 |= CONS_READY;
-	PRP |= CONS_CAN_PRINT;
-	return SCPE_OK;
+	int c, line_num, dev_num;
+
+	for (dev_num = 0; dev_num < 2; ++dev_num){
+		line_num = dev_num + TTY_MAX + 1;
+		if (! tty_line[line_num].conn)
+			continue;
+		switch (tty_unit[line_num].flags & TTY_CHARSET_MASK) {
+		case TTY_KOI7_JCUKEN_CHARSET:
+			c = vt_kbd_input_koi7 (line_num);
+			break;
+		case TTY_KOI7_QWERTY_CHARSET:
+			c = vt_getc (line_num);
+			break;
+		case TTY_UNICODE_CHARSET:
+			c = vt_kbd_input_unicode (line_num);
+			break;
+		default:
+			c = '?';
+			break;
+		}
+		if (c >= 0 && c <= 0177) {
+			CONSUL_IN[dev_num] = odd_parity(c) ? c | 0200 : c;
+			if (c == '\r' || c == '\n')
+				CONSUL_IN[dev_num] = 3;
+			PRP |= CONS_HAS_INPUT[dev_num];
+			vt_idle = 0;
+		}
+	}
 }
 
-void console_print (uint32 cmd)
-{
-	besm6_debug(">>> CONSUL: %03o", cmd & 0377);
-	PRP |= CONS_CAN_PRINT;
+uint32 consul_read (int num) {
+	if (tty_dev.dctrl)
+		besm6_debug("<<< CONSUL%o: %03o", num+TTY_MAX+1, CONSUL_IN[num]);
+	return CONSUL_IN[num];
 }
