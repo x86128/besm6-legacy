@@ -72,8 +72,8 @@ uint32 CONS_CAN_PRINT[2] = { 01000, 00400 };
 uint32 CONS_HAS_INPUT[2] = { 04000, 02000 };
 
 /* Буфера командных строк для режима telnet. */
-char vt_cbuf [CBUFSIZE] [TTY_MAX+1];
-char *vt_cptr [TTY_MAX+1];
+char vt_cbuf [CBUFSIZE] [LINES_MAX+1];
+char *vt_cptr [LINES_MAX+1];
 
 void tt_print();
 void consul_receive();
