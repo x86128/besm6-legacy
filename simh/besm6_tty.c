@@ -315,12 +315,28 @@ t_stat tty_detach (UNIT *u)
 	return tmxr_detach (&tty_desc, &tty_unit[0]);
 }
 
+/*
+ * Управление терминалами.
+ * set ttyN unicode	- выбор кодировки UTF-8
+ * set ttyN jcuken	- выбор кодировки КОИ-7, раскладка йцукен
+ * set ttyN qwerty	- выбор кодировки КОИ-7, раскладка яверты
+ * set ttyN off		- отключение
+ * set ttyN tt		- установка типа терминала "Телетайп"
+ * set ttyN vt		- установка типа терминала "Видеотон-340"
+ * set ttyN consul	- установка типа терминала "Consul-254"
+ * set ttyN destrbs	- "стирающий" backspace
+ * set ttyN authbs	- классический backspace
+ * set tty disconnect=N	- принудительное завершение сеанса telnet
+ * show tty		- просмотр режимов терминалов
+ * show tty connections	- просмотр IP-адресов и времени соединений
+ * show tty statistics	- просмотр счетчиков переданных и принятых байтов
+ */
 MTAB tty_mod[] = {
-        { TTY_CHARSET_MASK, TTY_UNICODE_CHARSET, "UNICODE input",
+	{ TTY_CHARSET_MASK, TTY_UNICODE_CHARSET, "UNICODE input",
 		"UNICODE" },
-        { TTY_CHARSET_MASK, TTY_KOI7_JCUKEN_CHARSET, "KOI7 (jcuken) input",
+	{ TTY_CHARSET_MASK, TTY_KOI7_JCUKEN_CHARSET, "KOI7 (jcuken) input",
 		"JCUKEN" },
-        { TTY_CHARSET_MASK, TTY_KOI7_QWERTY_CHARSET, "KOI7 (qwerty) input",
+	{ TTY_CHARSET_MASK, TTY_KOI7_QWERTY_CHARSET, "KOI7 (qwerty) input",
 		"QWERTY" },
 	{ TTY_STATE_MASK, TTY_OFFLINE_STATE, "offline",
 		"OFF", &tty_setmode },
@@ -334,12 +350,18 @@ MTAB tty_mod[] = {
 		"DESTRBS" },
 	{ TTY_BSPACE_MASK, TTY_AUTHENTIC_BSPACE, NULL,
 		"AUTHBS" },
-        { MTAB_XTD | MTAB_VDV, 1, NULL,
+	{ MTAB_XTD | MTAB_VDV, 1, NULL,
 		"DISCONNECT", &tmxr_dscln, NULL, (void*) &tty_desc },
-        { UNIT_ATT, UNIT_ATT, "connections",
+	{ UNIT_ATT, UNIT_ATT, "connections",
 		NULL, NULL, &tmxr_show_summ, (void*) &tty_desc },
-        { MTAB_XTD | MTAB_VDV | MTAB_NMO, 1, "CONNECTIONS",
+	{ MTAB_XTD | MTAB_VDV | MTAB_NMO, 1, "CONNECTIONS",
 		NULL, NULL, &tmxr_show_cstat, (void*) &tty_desc },
+	{ MTAB_XTD | MTAB_VDV | MTAB_NMO, 0, "STATISTICS",
+		NULL, NULL, &tmxr_show_cstat, (void*) &tty_desc },
+	{ MTAB_XTD | MTAB_VUN | MTAB_NC, 0, "LOG",
+		"LOG", &tmxr_set_log, &tmxr_show_log, (void*) &tty_desc },
+	{ MTAB_XTD | MTAB_VUN | MTAB_NC, 0, NULL,
+		"NOLOG", &tmxr_set_nolog, NULL, (void*) &tty_desc },
 	{ 0 }
 };
 
@@ -371,6 +393,11 @@ void vt_putc (int num, int c)
 		tmxr_putc_ln (t, c);
 	} else {
 		/* Вывод на консоль. */
+		if (t->txlog) {			/* log if available */
+			fputc (c, t->txlog);
+			if (c == '\n')
+				fflush (t->txlog);
+		}
 		fputc (c, stdout);
 		fflush (stdout);
 	}
@@ -381,8 +408,20 @@ void vt_putc (int num, int c)
  */
 void vt_puts (int num, const char *s)
 {
-	while (*s)
-		vt_putc (num, *s++);
+	TMLN *t = &tty_line [num];
+
+	if (! t->conn)
+		return;
+	if (t->rcve) {
+		/* Передача через telnet. */
+		tmxr_linemsg (t, (char*) s);
+	} else {
+		/* Вывод на консоль. */
+		if (t->txlog)			/* log if available */
+			fputs (s, t->txlog);
+		fputs (s, stdout);
+		fflush (stdout);
+	}
 }
 
 const char * koi7_rus_to_unicode [32] = {
@@ -551,37 +590,37 @@ static int unicode_to_koi7 (unsigned val)
 	case '\0'... '_':	  return val;
 	case 'a' ... 'z':	  return val + 'Z' - 'z';
 	case 0x007f:		  return 0x7f;
-        case 0x0410: case 0x0430: return 0x61;
-        case 0x0411: case 0x0431: return 0x62;
-        case 0x0412: case 0x0432: return 0x77;
-        case 0x0413: case 0x0433: return 0x67;
-        case 0x0414: case 0x0434: return 0x64;
-        case 0x0415: case 0x0435: return 0x65;
-        case 0x0416: case 0x0436: return 0x76;
-        case 0x0417: case 0x0437: return 0x7a;
-        case 0x0418: case 0x0438: return 0x69;
-        case 0x0419: case 0x0439: return 0x6a;
-        case 0x041a: case 0x043a: return 0x6b;
-        case 0x041b: case 0x043b: return 0x6c;
-        case 0x041c: case 0x043c: return 0x6d;
-        case 0x041d: case 0x043d: return 0x6e;
-        case 0x041e: case 0x043e: return 0x6f;
-        case 0x041f: case 0x043f: return 0x70;
-        case 0x0420: case 0x0440: return 0x72;
-        case 0x0421: case 0x0441: return 0x73;
-        case 0x0422: case 0x0442: return 0x74;
-        case 0x0423: case 0x0443: return 0x75;
-        case 0x0424: case 0x0444: return 0x66;
-        case 0x0425: case 0x0445: return 0x68;
-        case 0x0426: case 0x0446: return 0x63;
-        case 0x0427: case 0x0447: return 0x7e;
-        case 0x0428: case 0x0448: return 0x7b;
-        case 0x0429: case 0x0449: return 0x7d;
-        case 0x042b: case 0x044b: return 0x79;
-        case 0x042c: case 0x044c: return 0x78;
-        case 0x042d: case 0x044d: return 0x7c;
-        case 0x042e: case 0x044e: return 0x60;
-        case 0x042f: case 0x044f: return 0x71;
+	case 0x0410: case 0x0430: return 0x61;
+	case 0x0411: case 0x0431: return 0x62;
+	case 0x0412: case 0x0432: return 0x77;
+	case 0x0413: case 0x0433: return 0x67;
+	case 0x0414: case 0x0434: return 0x64;
+	case 0x0415: case 0x0435: return 0x65;
+	case 0x0416: case 0x0436: return 0x76;
+	case 0x0417: case 0x0437: return 0x7a;
+	case 0x0418: case 0x0438: return 0x69;
+	case 0x0419: case 0x0439: return 0x6a;
+	case 0x041a: case 0x043a: return 0x6b;
+	case 0x041b: case 0x043b: return 0x6c;
+	case 0x041c: case 0x043c: return 0x6d;
+	case 0x041d: case 0x043d: return 0x6e;
+	case 0x041e: case 0x043e: return 0x6f;
+	case 0x041f: case 0x043f: return 0x70;
+	case 0x0420: case 0x0440: return 0x72;
+	case 0x0421: case 0x0441: return 0x73;
+	case 0x0422: case 0x0442: return 0x74;
+	case 0x0423: case 0x0443: return 0x75;
+	case 0x0424: case 0x0444: return 0x66;
+	case 0x0425: case 0x0445: return 0x68;
+	case 0x0426: case 0x0446: return 0x63;
+	case 0x0427: case 0x0447: return 0x7e;
+	case 0x0428: case 0x0448: return 0x7b;
+	case 0x0429: case 0x0449: return 0x7d;
+	case 0x042b: case 0x044b: return 0x79;
+	case 0x042c: case 0x044c: return 0x78;
+	case 0x042d: case 0x044d: return 0x7c;
+	case 0x042e: case 0x044e: return 0x60;
+	case 0x042f: case 0x044f: return 0x71;
 	}
 	return -1;
 }
@@ -863,7 +902,8 @@ void consul_receive ()
 	}
 }
 
-uint32 consul_read (int num) {
+uint32 consul_read (int num)
+{
 	if (tty_dev.dctrl)
 		besm6_debug("<<< CONSUL%o: %03o", num+TTY_MAX+1, CONSUL_IN[num]);
 	return CONSUL_IN[num];
