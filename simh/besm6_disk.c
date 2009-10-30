@@ -2,6 +2,7 @@
  * BESM-6 magnetic disk device
  *
  * Copyright (c) 2009, Serge Vakulenko
+ * Copyright (c) 2009, Leonid Broukhis
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -417,7 +418,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 		/* Выдача в КМД адреса дорожки.
 		 * Здесь же выполняем обмен с диском.
 		 * Номер дисковода к этому моменту уже известен. */
-		if ((disk_dev.flags & DEV_DIS) || ! u->fileref) {
+		if ((disk_dev.flags & DEV_DIS) || ! (u->flags & UNIT_ATT)) {
 			/* Device not attached. */
 			disk_fail |= c->mask_fail;
 			return;
@@ -467,6 +468,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 		else if (cmd & BIT(1)) c->dev = 0;
 		else {
 			/* Неверная маска выбора устройства. */
+			c->dev = -1;
 			return;
 		}
 		c->dev += ctlr << 3;
@@ -476,7 +478,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 			besm6_debug ("::: КМД %c: выбор устройства %d",
 				ctlr + '3', c->dev);
 #endif
-		if ((disk_dev.flags & DEV_DIS) || ! u->fileref) {
+		if ((disk_dev.flags & DEV_DIS) || ! (u->flags & UNIT_ATT)) {
 			/* Device not attached. */
 			disk_fail |= c->mask_fail;
 			GRP &= ~c->mask_grp;
@@ -561,7 +563,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 				besm6_debug ("::: КМД %c: опрос младших разрядов состояния",
 					ctlr + '3');
 #endif
-			if (disk_unit[c->dev].fileref)
+			if (disk_unit[c->dev].flags & UNIT_ATT)
 				c->status = STATUS_GOOD & BITS(12);
 			else
 				c->status = 0;
@@ -572,7 +574,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 				besm6_debug ("::: КМД %c: опрос старших разрядов состояния",
 					ctlr + '3');
 #endif
-			if (disk_unit[c->dev].fileref)
+			if (disk_unit[c->dev].flags & UNIT_ATT)
 				c->status = (STATUS_GOOD >> 12) & BITS(12);
 			else
 				c->status = 0;
