@@ -240,9 +240,8 @@ DEVICE *sim_devices[] = {
 	&mmu_dev,
 	&clock_dev,
 	&printer_dev,
-	/* &console_dev,	КОНСУЛ - нефункционален в ДИСПАКе ? */
 	&fs_dev,
-	&tty_dev,	/* последовательные устройства - телетайпы и видеотоны */
+	&tty_dev,	/* терминалы - телетайпы, видеотоны, "Консулы" */
 	0
 };
 
@@ -606,9 +605,9 @@ static void cmd_033 ()
 		/* TODO: пробивка строки на перфоленте */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
 		break;
-	case 0174:
-		/* TODO: выдача кода в пульт оператора */
-		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
+	case 0174 ... 0175:
+		/* Выдача кода в пульт оператора */
+		consul_print (Aex & 1, (uint32) ACC & BITS(8));
 		break;
 	case 0177:
 		/* управление табло ГПВЦ СО АН СССР */
@@ -699,9 +698,9 @@ static void cmd_033 ()
 		 * строки перфоленты */
 		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
 		break;
-	case 04174:
-		/* TODO: считывание кода с пульта оператора */
-		longjmp (cpu_halt, STOP_UNIMPLEMENTED);
+	case 04174 ... 04175:
+		/* Считывание кода с пульта оператора */
+		ACC = consul_read (Aex & 1);
 		break;
 	case 04177:
 		/* чтение табло ГПВЦ СО АН СССР */
