@@ -188,6 +188,20 @@ t_stat vt_clk (UNIT * this)
 		tty_unit[num].flags |= TTY_VT340_STATE;
 		if (num <= TTY_MAX)
 			vt_mask |= 1 << (TTY_MAX - num);
+
+		switch (tty_unit[num].flags & TTY_CHARSET_MASK) {
+		case TTY_KOI7_JCUKEN_CHARSET:
+			tmxr_linemsg (t, "Encoding is KOI-7 (jcuken)\r\n");
+			break;
+		case TTY_KOI7_QWERTY_CHARSET:
+			tmxr_linemsg (t, "Encoding is KOI-7 (qwerty)\r\n");
+			break;
+		case TTY_UNICODE_CHARSET:
+			tmxr_linemsg (t, "Encoding is UTF-8\r\n");
+			break;
+		}
+		/* Ввод ^C, чтобы получить приглашение. */
+		t->rxb [t->rxbpi++] = '\3';
 	}
 
 	/* Опрашиваем сокеты на передачу. */
@@ -483,7 +497,7 @@ void vt_print()
 }
 
 /* Ввод с телетайпа не реализован; вывод работает только при использовании
- * модельного времени. 
+ * модельного времени.
  */
 void tt_print()
 {
@@ -801,7 +815,7 @@ int tty_query ()
 void consul_print (int dev_num, uint32 cmd)
 {
 	int line_num = dev_num + TTY_MAX + 1;
-	if (tty_dev.dctrl) 
+	if (tty_dev.dctrl)
 		besm6_debug(">>> CONSUL%o: %03o", line_num, cmd & 0377);
 	cmd &= 0177;
 	switch (tty_unit[line_num].flags & TTY_STATE_MASK) {
