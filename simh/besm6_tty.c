@@ -71,6 +71,10 @@ uint32 CONSUL_IN[2];
 uint32 CONS_CAN_PRINT[2] = { 01000, 00400 };
 uint32 CONS_HAS_INPUT[2] = { 04000, 02000 };
 
+/* Буфера командных строк для режима telnet. */
+char vt_cbuf [CBUFSIZE] [TTY_MAX+1];
+char *vt_cptr [TTY_MAX+1];
+
 void tt_print();
 void consul_receive();
 t_stat vt_clk(UNIT *);
@@ -135,6 +139,7 @@ TMXR tty_desc = { LINES_MAX+1, 0, 0, tty_line };	/* mux descriptor */
 #define TTY_DESTRUCTIVE_BSPACE	0
 #define TTY_AUTHENTIC_BSPACE	(1<<(UNIT_V_UF+4))
 #define TTY_BSPACE_MASK		(1<<(UNIT_V_UF+4))
+#define TTY_CMDLINE_MASK	(1<<(UNIT_V_UF+5))
 
 t_stat tty_reset (DEVICE *dptr)
 {
@@ -626,6 +631,158 @@ static int unicode_to_koi7 (unsigned val)
 }
 
 /*
+ * Exit command
+ */
+static t_stat cmd_exit (int32 num, char *cptr)
+{
+	return SCPE_EXIT;
+}
+
+static t_stat cmd_help (int32 num, char *cptr);
+
+static CTAB cmd_table[] = {
+	{ "EXIT", &cmd_exit, 0,
+	  "exi{t}|q{uit}|by{e}      exit from simulation\r\n" },
+	{ "QUIT", &cmd_exit, 0, NULL },
+	{ "BYE", &cmd_exit, 0, NULL },
+	{ "HELP", &cmd_help, 0,
+	  "h{elp}                   type this message\r\n"
+	  "h{elp} <command>         type help for command\r\n" },
+	{ 0 }
+};
+
+/*
+ * Find command routine
+ */
+static CTAB *lookup_cmd (char *command)
+{
+	CTAB *c;
+	int len;
+
+	len = strlen (command);
+	for (c=cmd_table; c->name; c++) {
+		if (strncmp (command, c->name, len) == 0)
+			return c;
+	}
+	return 0;
+}
+
+/*
+ * Help command
+ */
+static t_stat cmd_help (int32 num, char *cptr)
+{
+	TMLN *t = &tty_line [num];
+	char gbuf [CBUFSIZE];
+	CTAB *c;
+	extern char *get_sim_sw (char *cptr);
+
+	cptr = get_sim_sw (cptr);
+	if (! cptr)
+		return SCPE_INVSW;
+	if (! *cptr) {
+		/* Список всех команд. */
+		tmxr_linemsg (t, "Commands may be abbreviated.  Commands are:\r\n\r\n");
+		for (c=cmd_table; c && c->name; c++)
+			if (c->help)
+				tmxr_linemsg (t, c->help);
+		return SCPE_OK;
+	}
+	cptr = get_glyph (cptr, gbuf, 0);
+	if (*cptr)
+		return SCPE_2MARG;
+	c = lookup_cmd (gbuf);
+	if (! c)
+		return SCPE_ARG;
+	/* Описание конкретной команды. */
+	tmxr_linemsg (t, c->help);
+	return SCPE_OK;
+}
+
+/*
+ * Выполнение командной строки.
+ */
+void vt_cmd_exec (int num)
+{
+	TMLN *t = &tty_line [num];
+	char *cptr, gbuf [CBUFSIZE];
+	CTAB *cmdp;
+	t_stat err;
+	extern char *scp_error_messages[];
+
+	cptr = get_glyph (vt_cbuf [num], gbuf, 0);	/* get command glyph */
+	cmdp = lookup_cmd (gbuf);			/* lookup command */
+	if (! cmdp) {
+		tmxr_linemsg (t, scp_error_messages[SCPE_UNK - SCPE_BASE]);
+		tmxr_linemsg (t, "\r\n");
+		return;
+	}
+	err = cmdp->action (num, cptr);			/* if found, exec */
+	if (err >= SCPE_BASE) {				/* error? */
+		tmxr_linemsg (t, scp_error_messages [err - SCPE_BASE]);
+		tmxr_linemsg (t, "\r\n");
+	}
+	if (err == SCPE_EXIT) {				/* close telnet session */
+		tmxr_reset_ln (t);
+	}
+}
+
+/*
+ * Режим управляющей командной строки.
+ */
+void vt_cmd_loop (int num, int c)
+{
+	TMLN *t = &tty_line [num];
+	char *cbuf, **cptr;
+
+	cbuf = vt_cbuf [num];
+	cptr = &vt_cptr [num];
+
+	switch (c) {
+	case '\r':
+	case '\n':
+		tmxr_linemsg (t, "\r\n");
+		if (*cptr <= cbuf) {
+			/* Пустая строка - возврат в обычный режим. */
+			tty_unit[num].flags &= ~TTY_CMDLINE_MASK;
+			break;
+		}
+		/* Выполнение. */
+		**cptr = 0;
+		vt_cmd_exec (num);
+		tmxr_linemsg (t, "sim>");
+		*cptr = vt_cbuf[num];
+		break;
+	case '\b':
+	case 0177:
+		/* Стирание предыдущего символа. */
+		if (*cptr <= cbuf)
+			break;
+		tmxr_linemsg (t, "\b \b");
+		while (*cptr > cbuf) {
+			--*cptr;
+			if (! (**cptr & 0x80))
+				break;
+		}
+		break;
+	case 'U' & 037:
+		/* Стирание всей строки. */
+		while (*cptr > cbuf) {
+			--*cptr;
+			if (! (**cptr & 0x80))
+				tmxr_linemsg (t, "\b \b");
+		}
+		break;
+	default:
+		if (c < ' ' || *cptr > cbuf+CBUFSIZE-5)
+			break;
+		*(*cptr)++ = c;
+		tmxr_putc_ln (t, c);
+		break;
+	}
+}
+
+/*
  * Ввод символа с терминала с указанным номером.
  * Если нет приёма, возвращает -1.
  * В случае прерывания возвращает 0400 (только для консоли).
@@ -633,6 +790,7 @@ static int unicode_to_koi7 (unsigned val)
 int vt_getc (num)
 {
 	TMLN *t = &tty_line [num];
+	extern int32 sim_int_char;
 	int c;
 
 	if (! t->conn) {
@@ -654,6 +812,19 @@ int vt_getc (num)
 		c = tmxr_getc_ln (t);
 		if (! (c & TMXR_VALID))
 			return -1;
+
+		if (tty_unit[num].flags & TTY_CMDLINE_MASK) {
+			/* Продолжение режима управляющей командной строки. */
+			vt_cmd_loop (num, c & 0377);
+			return -1;
+		}
+		if ((c & 0377) == sim_int_char) {
+			/* Вход в режим управляющей командной строки. */
+			tty_unit[num].flags |= TTY_CMDLINE_MASK;
+			tmxr_linemsg (t, "sim>");
+			vt_cptr[num] = vt_cbuf[num];
+			return -1;
+		}
 	} else {
 		/* Ввод с клавиатуры. */
 		c = sim_poll_kbd();
