@@ -165,8 +165,10 @@ void fs_control (int num, uint32 cmd)
 			sim_activate (u, FS_RATE);
 			bytecnt++;
 		} else {
-			if (! isfifo[num])
+			if (! isfifo[num]) {
 				fs_detach(u);
+				fs_state[num] = FS_IDLE;
+			}
 		}
 		break;
 	default:
