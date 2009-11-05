@@ -349,6 +349,9 @@ void besm6_close_panel ()
  */
 static void init_panel ()
 {
+	if (sim_switches & SWMASK('Q'))
+		return;
+
 	/* Initialize SDL subsystems - in this case, only video. */
 	if (SDL_Init (SDL_INIT_VIDEO) < 0) {
 		fprintf (stderr, "SDL: unable to init: %s\n",
@@ -401,16 +404,15 @@ static void init_panel ()
 	SDL_UpdateRect (screen, 0, 0, WIDTH, HEIGHT);
 }
 
+void (*sim_vm_init)() = init_panel;
+
 /*
  * Обновляем графическое окно.
  */
 void besm6_draw_panel ()
 {
-	if (sim_switches & SWMASK('Q'))
-		return;
-
 	if (! screen)
-		init_panel ();
+		return;
 
 	/* Периодическая отрисовка: мигание лампочек. */
 	draw_modifiers_periodic (0, 24, 10);
