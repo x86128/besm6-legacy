@@ -406,6 +406,9 @@ static void init_panel ()
  */
 void besm6_draw_panel ()
 {
+	if (sim_switches & SWMASK('Q'))
+		return;
+
 	if (! screen)
 		init_panel ();
 
