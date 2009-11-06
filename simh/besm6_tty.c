@@ -17,6 +17,7 @@
 #include "besm6_defs.h"
 #include "sim_sock.h"
 #include "sim_tmxr.h"
+#include <time.h>
 
 #define TTY_MAX		24		/* Количество последовательных терминалов */
 #define LINES_MAX	TTY_MAX + 2	/* Включая параллельные интерфейсы "Консулов" */
@@ -58,6 +59,8 @@ char *  process (int sym)
 /* Только для последовательных линий */
 int tty_active [TTY_MAX+1], tty_sym [TTY_MAX+1];
 int tty_typed [TTY_MAX+1], tty_instate [TTY_MAX+1];
+time_t tty_last_time [TTY_MAX+1];
+int tty_idle_count [TTY_MAX+1];
 
 uint32 vt_sending, vt_receiving;
 uint32 tt_sending, tt_receiving;
@@ -183,6 +186,7 @@ t_stat vt_clk (UNIT * this)
 	/* Есть новые сетевые подключения? */
 	int num = tmxr_poll_conn (&tty_desc);
 	if (num > 0 && num <= LINES_MAX) {
+		char buf [80];
 		TMLN *t = &tty_line [num];
 		besm6_debug ("*** tty%d: новое подключение от %d.%d.%d.%d",
 			num, (unsigned char) (t->ipad >> 24),
@@ -206,6 +210,16 @@ t_stat vt_clk (UNIT * this)
 			tmxr_linemsg (t, "Encoding is UTF-8\r\n");
 			break;
 		}
+		tty_idle_count[num] = 0;
+		tty_last_time[num] = time (0);
+		sprintf (buf, "%.24s from %d.%d.%d.%d\r\n",
+			ctime (&tty_last_time[num]),
+			(unsigned char) (t->ipad >> 24),
+			(unsigned char) (t->ipad >> 16),
+			(unsigned char) (t->ipad >> 8),
+			(unsigned char) t->ipad);
+		tmxr_linemsg (t, buf);
+
 		/* Ввод ^C, чтобы получить приглашение. */
 		t->rxb [t->rxbpi++] = '\3';
 	}
@@ -919,6 +933,7 @@ int vt_getc (num)
 	TMLN *t = &tty_line [num];
 	extern int32 sim_int_char;
 	int c;
+	time_t now;
 
 	if (! t->conn) {
 		/* Пользователь отключился. */
@@ -937,8 +952,22 @@ int vt_getc (num)
 	if (t->rcve) {
 		/* Приём через telnet. */
 		c = tmxr_getc_ln (t);
-		if (! (c & TMXR_VALID))
+		if (! (c & TMXR_VALID)) {
+			now = time (0);
+			if (now > tty_last_time[num] + 5*60) {
+				++tty_idle_count[num];
+				if (tty_idle_count[num] > 3) {
+					tmxr_linemsg (t, "\r\nКОНЕЦ СЕАНСА\r\n");
+					tmxr_reset_ln (t);
+					return -1;
+				}
+				tmxr_linemsg (t, "\r\nНЕ СПАТЬ!\r\n");
+				tty_last_time[num] = now;
+			}
 			return -1;
+		}
+		tty_idle_count[num] = 0;
+		tty_last_time[num] = time (0);
 
 		if (tty_unit[num].flags & TTY_CMDLINE_MASK) {
 			/* Продолжение режима управляющей командной строки. */
