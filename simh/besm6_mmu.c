@@ -341,7 +341,8 @@ void mmu_store (int addr, t_value val)
 	}
 }
 
-t_value mmu_memaccess (int addr) {
+t_value mmu_memaccess (int addr)
+{
 	t_value val;
 
 	/* Вычисляем физический адрес слова */
@@ -356,7 +357,7 @@ t_value mmu_memaccess (int addr) {
 			besm6_debug("--- (%05o) чтение ТР%o", PC, addr);
 		val = pult[addr];
 	}
-	if (sim_log && (mmu_dev.dctrl || cpu_dev.dctrl)) {
+	if (sim_log && (mmu_dev.dctrl || (cpu_dev.dctrl && sim_deb))) {
 		fprintf (sim_log, "--- (%05o) чтение ", addr & BITS(15));
 		fprint_sym (sim_log, 0, &val, 0, 0);
 		fprintf (sim_log, "\n");
@@ -412,7 +413,7 @@ t_value mmu_load (int addr)
 		if (matching != OLDEST)
 			set_wins (matching);
 		val = BRZ[matching];
-		if (sim_log && (mmu_dev.dctrl || cpu_dev.dctrl)) {
+		if (sim_log && (mmu_dev.dctrl || (cpu_dev.dctrl && sim_deb))) {
 			fprintf (sim_log, "--- (%05o) чтение ", addr & BITS(15));
 			fprint_sym (sim_log, 0, &val, 0, 0);
 			fprintf (sim_log, " из БРЗ\n");

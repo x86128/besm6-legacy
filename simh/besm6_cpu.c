@@ -1236,6 +1236,21 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 	case 0210:					/* э21 */
 	stop_as_extracode:
 		Aex = ADDR (addr + M[reg]);
+		if (! sim_deb && sim_log && cpu_dev.dctrl) {
+			/* Если включен console log и cpu debug,
+			 * но нет console debug, то печатаем только экстракоды. */
+			t_value word = mmu_load (Aex);
+			fprintf (sim_log, "*** %05o%s: ", PC,
+				(RUU & RUU_RIGHT_INSTR) ? "п" : "л");
+			besm6_fprint_cmd (sim_log, RK);
+			fprintf (sim_log, "\tАисп=%05o (=", Aex);
+			fprint_sym (sim_log, 0, &word, 0, 0);
+			fprintf (sim_log, ")  СМ=");
+			fprint_sym (sim_log, 0, &ACC, 0, 0);
+			if (reg)
+				fprintf (sim_log, "  М[%o]=%05o", reg, M[reg]);
+			fprintf (sim_log, "\n");
+		}
 		/*besm6_okno ("экстракод");*/
 		/* Адрес возврата из экстракода. */
 		M[ERET] = nextpc;
