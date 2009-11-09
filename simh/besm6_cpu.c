@@ -1236,9 +1236,10 @@ transfer_modifier:	M[Aex & 037] = M[reg];
 	case 0210:					/* э21 */
 	stop_as_extracode:
 		Aex = ADDR (addr + M[reg]);
-		if (! sim_deb && sim_log && cpu_dev.dctrl) {
+		if (! sim_deb && sim_log && cpu_dev.dctrl && opcode != 075) {
 			/* Если включен console log и cpu debug,
-			 * но нет console debug, то печатаем только экстракоды. */
+			 * но нет console debug, то печатаем только экстракоды.
+			 * Пропускаем э75, их обычно слишком много. */
 			t_value word = mmu_load (Aex);
 			fprintf (sim_log, "*** %05o%s: ", PC,
 				(RUU & RUU_RIGHT_INSTR) ? "п" : "л");
