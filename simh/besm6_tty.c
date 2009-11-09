@@ -455,14 +455,30 @@ void vt_send(int num, uint32 sym, int destructive_bs)
 {
 	if (sym < 0x60) {
 		switch (sym) {
-		case '\b':
-			/* Стираем предыдущий символ. */
-			if (destructive_bs) {
-				vt_puts (num, "\b ");
-			}
-			sym = '\b';
+		case '\031':
+			/* Up */
+			vt_puts (num, "\033[");
+			sym = 'A';
 			break;
-		case '\t':
+		case '\032':
+			/* Down */
+			vt_puts (num, "\033[");
+			sym = 'B';
+			break;
+		case '\030':
+			/* Right */
+			vt_puts (num, "\033[");
+			sym = 'C';
+			break;
+		case '\b':
+			/* Left */
+			vt_puts (num, "\033[");
+			if (destructive_bs) {
+				/* Стираем предыдущий символ. */
+				vt_puts (num, "D \033[");
+			}
+			sym = 'D';
+			break;
 		case '\v':
 		case '\033':
 		case '\0':
@@ -470,21 +486,20 @@ void vt_send(int num, uint32 sym, int destructive_bs)
 			break;
 		case '\037':
 			/* Очистка экрана */
-			vt_puts(num, "\033[2");
+			vt_puts (num, "\033[H\033[");
 			sym = 'J';
 			break;
 		case '\n':
 			/* На VDT-340 также возвращал курсор в 1-ю позицию */
+			vt_putc (num, '\r');
+			sym = '\n';
+			break;
 		case '\f':
-			/* На VDT-340 это был переход в начало экрана
-			 * (home). Затем обычно выдавались три возврата
-			 * каретки (backspace) и ERR, которые
-			 * оказывались в правом нижнем углу экрана.
-			 * На современных терминалах такой трюк не
-			 * проходит, поэтому просто переходим в начало
-			 * следующей строки. */
-			vt_putc (num, '\n');
-			sym = '\r';
+			/* Сообщение ERR при нажатии некоторых управляющих
+			 * клавиш выдается с использованием reverse wraparound.
+			 */
+                        vt_puts(num, "\033[");
+			sym = 'H';
 			break;
 		case '\r':
 		case '\003':
