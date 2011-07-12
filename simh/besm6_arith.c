@@ -21,27 +21,6 @@ typedef struct {
 	unsigned exponent;		/* offset by 64 */
 } alureg_t;				/* ALU register type */
 
-static alureg_t ieee_to_alu (double d)
-{
-	alureg_t res;
-	t_value word;
-	int exponent;
-	int sign;
-
-	sign = d < 0;
-	if (sign)
-		d = -d;
-	d = frexp (d, &exponent);
-	/* 0.5 <= d < 1.0 */
-	d = ldexp (d, 40);
-	word = d;
-	if (sign)
-		word = BIT42 - word;
-	res.mantissa = word;
-	res.exponent = exponent + 64;
-	return res;
-}
-
 static alureg_t toalu (t_value val)
 {
 	alureg_t ret;
@@ -264,25 +243,28 @@ void besm6_add (t_value val, int negate_acc, int negate_val)
 /*
  * non-restoring division
  */
-static double nrdiv (double n, double d)
+#define ABS(x) ((x) < 0 ? -x : x)
+#define INT64(x) ((x) & BIT41 ? (-1LL << 40) | (x) : x)
+static alureg_t nrdiv (alureg_t n, alureg_t d)
 {
-	int ne, de, re;
-	double nn, dd, res, q, eps;
+	t_int64 nn, dd, q, res;	
+	alureg_t quot;
 
-	nn = frexp (n, &ne);
-	dd = frexp (d, &de);
+	/* to compensate for potential normalization to the right  */
+	nn = INT64(n.mantissa)*2;
+	dd = INT64(d.mantissa)*2;
+	res = 0, q = BIT41;
 
-	res = 0, q = 0.5;
-	eps = ldexp (q, -40);		/* run for 40 bits of precision */
-
-	if (fabs (nn) >= fabs (dd))
-		nn/=2, ne++;
-
-	while (q > eps) {
-		if (nn == 0.0)
+	if (ABS(nn) >= ABS(dd)) {
+		/* normalization to the right */
+		nn/=2;
+		n.exponent++;
+	}
+	while (q > 1) {
+		if (nn == 0)
 			break;
 
-		if (fabs (nn) < 0.25)
+		if (ABS(nn) < BIT40)
 			nn *= 2;	/* magic shortcut */
 		else if ((nn > 0) ^ (dd > 0)) {
 			res -= q;
@@ -293,9 +275,9 @@ static double nrdiv (double n, double d)
 		}
 		q /= 2;
 	}
-	res = frexp (res, &re);
-
-	return ldexp (res, re+ne-de);
+	quot.mantissa = res/2;
+	quot.exponent = n.exponent-d.exponent+64;
+	return quot;
 }
 
 /*
@@ -306,17 +288,16 @@ static double nrdiv (double n, double d)
 void besm6_divide (t_value val)
 {
 	alureg_t acc;
-	double dividend, divisor, quotient;
+	alureg_t dividend, divisor;
 
 	if (((val ^ (val << 1)) & BIT41) == 0) {
 		/* Ненормализованный делитель: деление на ноль. */
 		longjmp (cpu_halt, STOP_DIVZERO);
 	}
-	dividend = besm6_to_ieee(ACC);
-	divisor = besm6_to_ieee(val);
+	dividend = toalu(ACC);
+	divisor = toalu(val);
 
-	quotient = nrdiv(dividend, divisor);
-	acc = ieee_to_alu(quotient);
+	acc = nrdiv(dividend, divisor);
 
 	normalize_and_round (acc, 0, 0);
 }
