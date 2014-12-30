@@ -409,13 +409,13 @@ void besm6_fprint_cmd (FILE *of, uint32 cmd)
 	int reg, opcode, addr;
 
 	reg = (cmd >> 20) & 017;
-	if (cmd & BIT(20)) {
+	if (cmd & BBIT(20)) {
 		opcode = (cmd >> 12) & 0370;
 		addr = cmd & BITS(15);
 	} else {
 		opcode = (cmd >> 12) & 077;
 		addr = cmd & 07777;
-		if (cmd & BIT(19))
+		if (cmd & BBIT(19))
 			addr |= 070000;
 	}
 	fprintf (of, "%s", besm6_opname (opcode));
@@ -438,7 +438,7 @@ void besm6_fprint_cmd (FILE *of, uint32 cmd)
  */
 void besm6_fprint_insn (FILE *of, uint32 insn)
 {
-	if (insn & BIT(20))
+	if (insn & BBIT(20))
 		fprintf (of, "%02o %02o %05o ",
 			insn >> 20, (insn >> 15) & 037, insn & BITS(15));
 	else
