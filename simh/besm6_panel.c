@@ -13,12 +13,9 @@
  * either version 2 of the License, or (at your discretion) any later version.
  * See the accompanying file "COPYING" for more details.
  */
-#ifdef HAVE_LIBSDL
+#include "besm6_defs.h"
 #include <stdlib.h>
 #include <ftw.h>
-#include <SDL/SDL.h>
-#include <SDL/SDL_ttf.h>
-#include "besm6_defs.h"
 
 /*
  * Use a 640x480 window with 32 bit pixels.
@@ -35,7 +32,17 @@
 #define FONTPATH2	"/usr/lib/jvm"
 #define FONTPATH3	"/System/Library/Frameworks/JavaVM.framework/Versions"
 
-static SDL_Surface *screen;
+#ifdef HAVE_LIBSDL2
+/* Prefer SDL2 to SDL if both are installed */
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
+#elif HAVE_LIBSDL
+#include <SDL/SDL.h>
+#include <SDL/SDL_ttf.h>
+#endif
+
+#if defined(HAVE_LIBSDL) || defined(HAVE_LIBSDL2)
+/* Data and functions that don't depend on SDL version */
 static char *font_path;
 static TTF_Font *font_big;
 static TTF_Font *font_small;
@@ -52,6 +59,8 @@ static const int regnum[] = {
 	013, 012, 011, 010, 7, 6, 5, 4,
 	027, 016, 015, 014, 3, 2, 1, 020,
 };
+
+static SDL_Surface *screen;
 
 /*
  * Рисование текста в кодировке UTF-8, с антиалиасингом.
@@ -88,9 +97,11 @@ static SDL_Surface *sprite_from_data (int width, int height,
 
 	sprite = SDL_CreateRGBSurface (SDL_SWSURFACE,
 		width, height, DEPTH, 0, 0, 0, 0);
+	/*
 	optimized = SDL_DisplayFormat (sprite);
 	SDL_FreeSurface (sprite);
 	sprite = optimized;
+	*/
 	SDL_LockSurface (sprite);
 	for (y=0; y<height; ++y) {
 		s = (unsigned*) (sprite->pixels + y * sprite->pitch);
@@ -344,6 +355,127 @@ void besm6_close_panel ()
 	screen = 0;
 }
 
+#endif
+
+#ifdef HAVE_LIBSDL2
+
+static SDL_Window *sdlWindow;
+static SDL_Renderer *sdlRenderer;
+static SDL_Texture *sdlTexture;
+
+
+/*
+ * Начальная инициализация графического окна и шрифтов.
+ */
+static void init_panel ()
+{
+	if (sim_switches & SWMASK('Q'))
+		return;
+
+	/* Initialize SDL subsystems - in this case, only video. */
+	if (SDL_Init (SDL_INIT_VIDEO) < 0) {
+		fprintf (stderr, "SDL: unable to init: %s\n",
+			SDL_GetError ());
+		exit (1);
+	}
+	sdlWindow = SDL_CreateWindow ("BESM-6 panel",
+				      SDL_WINDOWPOS_UNDEFINED,
+				      SDL_WINDOWPOS_UNDEFINED,
+				      WIDTH, HEIGHT, 0 /* regular window */);
+	if (! sdlWindow) {
+		fprintf (stderr, "SDL: unable to set %dx%dx%d mode: %s\n",
+			WIDTH, HEIGHT, DEPTH, SDL_GetError ());
+		exit (1);
+	}
+
+	sdlRenderer = SDL_CreateRenderer(sdlWindow, -1, 0);
+	/* Make black background */
+	SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
+	SDL_RenderClear(sdlRenderer);
+
+	/* Initialize the TTF library */
+	if (TTF_Init() < 0) {
+		fprintf (stderr, "SDL: couldn't initialize TTF: %s\n",
+			SDL_GetError());
+		SDL_Quit();
+		exit (1);
+	}
+
+	/* Find font file */
+	if (ftw (FONTPATH1, probe_font, 255) <= 0 &&
+	    ftw (FONTPATH2, probe_font, 255) <= 0 &&
+	    ftw (FONTPATH3, probe_font, 255) <= 0) {
+		fprintf(stderr, "SDL: couldn't find font %s in directory %s\n",
+			FONTNAME, FONTPATH1);
+		besm6_close_panel();
+		exit (1);
+	}
+
+	/* Open the font file with the requested point size */
+	font_big = TTF_OpenFont (font_path, 16);
+	font_small = TTF_OpenFont (font_path, 9);
+	if (! font_big || ! font_small) {
+		fprintf(stderr, "SDL: couldn't load font %s: %s\n",
+			font_path, SDL_GetError());
+		besm6_close_panel();
+		exit (1);
+	}
+	atexit (besm6_close_panel);
+
+	screen = SDL_CreateRGBSurface(0, WIDTH, HEIGHT, 32,
+				      0x00FF0000,
+				      0x0000FF00,
+				      0x000000FF,
+				      0xFF000000);
+
+	sdlTexture = SDL_CreateTexture(sdlRenderer,
+				       SDL_PIXELFORMAT_ARGB8888,
+				       SDL_TEXTUREACCESS_STATIC,
+				       WIDTH, HEIGHT);
+
+	/* Отрисовка статичной части панели БЭСМ-6. */
+	draw_modifiers_static (0, 24, 10);
+	draw_modifiers_static (1, 400, 10);
+	draw_grp_static (180);
+	draw_brz_static (230);
+
+	/* Tell SDL to update the whole screen */
+	SDL_UpdateTexture(sdlTexture, NULL, screen->pixels, screen->pitch);
+	SDL_RenderClear(sdlRenderer);
+	SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
+	SDL_RenderPresent (sdlRenderer);
+}
+
+void (*sim_vm_init)() = init_panel;
+
+/*
+ * Обновляем графическое окно.
+ */
+void besm6_draw_panel ()
+{
+	if (! screen)
+		return;
+
+	/* Периодическая отрисовка: мигание лампочек. */
+	draw_modifiers_periodic (0, 24, 10);
+	draw_modifiers_periodic (1, 400, 10);
+	draw_grp_periodic (180);
+	draw_brz_periodic (230);
+
+	/* Tell SDL to update the whole screen */
+	SDL_UpdateTexture(sdlTexture, NULL, screen->pixels, screen->pitch);
+	SDL_RenderClear(sdlRenderer);
+	SDL_RenderCopy(sdlRenderer, sdlTexture, NULL, NULL);
+	SDL_RenderPresent (sdlRenderer);
+
+	/* Exit SIMH when window closed.*/
+	SDL_Event event;
+	if (SDL_PollEvent (&event) && event.type == SDL_QUIT)
+		longjmp (cpu_halt, SCPE_STOP);
+}
+
+#elif HAVE_LIBSDL
+
 /*
  * Начальная инициализация графического окна и шрифтов.
  */
@@ -388,7 +520,7 @@ static void init_panel ()
 	font_small = TTF_OpenFont (font_path, 9);
 	if (! font_big || ! font_small) {
 		fprintf(stderr, "SDL: couldn't load font %s: %s\n",
-			FONTNAME, SDL_GetError());
+			FONTNAME, TTF_GetError());
 		besm6_close_panel();
 		exit (1);
 	}

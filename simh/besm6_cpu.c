@@ -54,7 +54,7 @@ t_value ACC, RMR, GRP, MGRP;
 uint32 PRP, MPRP;
 uint32 READY, READY2; /* ready flags of various devices */
 
-extern const char *scp_error_messages[];
+extern const char *scp_errors[];
 
 /* нехранящие биты ГРП должны сбрасываться путем обнуления тех регистров,
  * сборкой которых они являются
@@ -87,8 +87,8 @@ REG cpu_reg[] = {
 { "СчАС",  &PC,		8, 15, 0, 1 },		/* счётчик адреса команды */
 { "РК",    &RK,		8, 24, 0, 1 },		/* регистр выполняемой команды */
 { "Аисп",  &Aex,	8, 15, 0, 1 },		/* исполнительный адрес */
-{ "СМ",    &ACC,	8, 48, 0, 1, REG_VMIO},	/* сумматор */
-{ "РМР",   &RMR,	8, 48, 0, 1, REG_VMIO},	/* регистр младших разрядов */
+{ "СМ",    &ACC,	8, 48, 0, 1, NULL, NULL, REG_VMIO},	/* сумматор */
+{ "РМР",   &RMR,	8, 48, 0, 1, NULL, NULL, REG_VMIO},	/* регистр младших разрядов */
 { "РАУ",   &RAU,	2, 6,  0, 1 },		/* режимы АУ */
 { "М1",    &M[1],	8, 15, 0, 1 },		/* регистры-модификаторы */
 { "М2",    &M[2],	8, 15, 0, 1 },
@@ -113,8 +113,8 @@ REG cpu_reg[] = {
 { "М34",   &M[034],	8, 16, 0, 1 },		/* IBP - адрес прерывания по выполнению */
 { "М35",   &M[035],	8, 16, 0, 1 },		/* DWP - адрес прерывания по чтению/записи */
 { "РУУ",   &RUU,	2, 9,  0, 1 },		/* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
-{ "ГРП",   &GRP,	8, 48, 0, 1, REG_VMIO},	/* главный регистр прерываний */
-{ "МГРП",  &MGRP,	8, 48, 0, 1, REG_VMIO},	/* маска ГРП */
+{ "ГРП",   &GRP,	8, 48, 0, 1, NULL, NULL, REG_VMIO},	/* главный регистр прерываний */
+{ "МГРП",  &MGRP,	8, 48, 0, 1, NULL, NULL, REG_VMIO},	/* маска ГРП */
 { "ПРП",   &PRP,	8, 24, 0, 1 },		/* периферийный регистр прерываний */
 { "МПРП",  &MPRP,	8, 24, 0, 1 },		/* маска ПРП */
 { 0 }
@@ -139,8 +139,8 @@ REG reg_reg[] = {
 { "PC",    &PC,		8, 15, 0, 1 },		/* счётчик адреса команды */
 { "RK",    &RK,		8, 24, 0, 1 },		/* регистр выполняемой команды */
 { "Aex",   &Aex,	8, 15, 0, 1 },		/* исполнительный адрес */
-{ "ACC",   &ACC,	8, 48, 0, 1, REG_VMIO}, /* сумматор */
-{ "RMR",   &RMR,	8, 48, 0, 1, REG_VMIO}, /* регистр младших разрядов */
+{ "ACC",   &ACC,	8, 48, 0, 1, NULL, NULL, REG_VMIO}, /* сумматор */
+{ "RMR",   &RMR,	8, 48, 0, 1, NULL, NULL, REG_VMIO}, /* регистр младших разрядов */
 { "RAU",   &RAU,	2, 6,  0, 1 },		/* режимы АУ */
 { "M1",    &M[1],	8, 15, 0, 1 },		/* регистры-модификаторы */
 { "M2",    &M[2],	8, 15, 0, 1 },
@@ -165,19 +165,19 @@ REG reg_reg[] = {
 { "M34",   &M[034],	8, 16, 0, 1 },		/* IBP - адрес прерывания по выполнению */
 { "M35",   &M[035],	8, 16, 0, 1 },		/* DWP - адрес прерывания по чтению/записи */
 { "RUU",   &RUU,        2, 9,  0, 1 },		/* ПКП, ПКЛ, РежЭ, РежПр, ПрИК, БРО, ПрК */
-{ "GRP",   &GRP,	8, 48, 0, 1, REG_VMIO},	/* главный регистр прерываний */
-{ "MGRP",  &MGRP,	8, 48, 0, 1, REG_VMIO},	/* маска ГРП */
+{ "GRP",   &GRP,	8, 48, 0, 1, NULL, NULL, REG_VMIO},	/* главный регистр прерываний */
+{ "MGRP",  &MGRP,	8, 48, 0, 1, NULL, NULL, REG_VMIO},	/* маска ГРП */
 { "PRP",   &PRP,	8, 24, 0, 1 },		/* периферийный регистр прерываний */
 { "MPRP",  &MPRP,	8, 24, 0, 1 },		/* маска ПРП */
 
-{ "BRZ0",  &BRZ[0],	8, 50, 0, 1, REG_VMIO },
-{ "BRZ1",  &BRZ[1],	8, 50, 0, 1, REG_VMIO },
-{ "BRZ2",  &BRZ[2],	8, 50, 0, 1, REG_VMIO },
-{ "BRZ3",  &BRZ[3],	8, 50, 0, 1, REG_VMIO },
-{ "BRZ4",  &BRZ[4],	8, 50, 0, 1, REG_VMIO },
-{ "BRZ5",  &BRZ[5],	8, 50, 0, 1, REG_VMIO },
-{ "BRZ6",  &BRZ[6],	8, 50, 0, 1, REG_VMIO },
-{ "BRZ7",  &BRZ[7],	8, 50, 0, 1, REG_VMIO },
+{ "BRZ0",  &BRZ[0],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "BRZ1",  &BRZ[1],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "BRZ2",  &BRZ[2],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "BRZ3",  &BRZ[3],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "BRZ4",  &BRZ[4],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "BRZ5",  &BRZ[5],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "BRZ6",  &BRZ[6],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "BRZ7",  &BRZ[7],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
 { "BAZ0",  &BAZ[0],	8, 16, 0, 1 },
 { "BAZ1",  &BAZ[1],	8, 16, 0, 1 },
 { "BAZ2",  &BAZ[2],	8, 16, 0, 1 },
@@ -187,22 +187,22 @@ REG reg_reg[] = {
 { "BAZ6",  &BAZ[6],	8, 16, 0, 1 },
 { "BAZ7",  &BAZ[7],	8, 16, 0, 1 },
 { "TABST", &TABST,	8, 28, 0, 1 },
-{ "RP0",   &RP[0],	8, 48, 0, 1, REG_VMIO },
-{ "RP1",   &RP[1],	8, 48, 0, 1, REG_VMIO },
-{ "RP2",   &RP[2],	8, 48, 0, 1, REG_VMIO },
-{ "RP3",   &RP[3],	8, 48, 0, 1, REG_VMIO },
-{ "RP4",   &RP[4],	8, 48, 0, 1, REG_VMIO },
-{ "RP5",   &RP[5],	8, 48, 0, 1, REG_VMIO },
-{ "RP6",   &RP[6],	8, 48, 0, 1, REG_VMIO },
-{ "RP7",   &RP[7],	8, 48, 0, 1, REG_VMIO },
+{ "RP0",   &RP[0],	8, 48, 0, 1, NULL, NULL, REG_VMIO },
+{ "RP1",   &RP[1],	8, 48, 0, 1, NULL, NULL, REG_VMIO },
+{ "RP2",   &RP[2],	8, 48, 0, 1, NULL, NULL, REG_VMIO },
+{ "RP3",   &RP[3],	8, 48, 0, 1, NULL, NULL, REG_VMIO },
+{ "RP4",   &RP[4],	8, 48, 0, 1, NULL, NULL, REG_VMIO },
+{ "RP5",   &RP[5],	8, 48, 0, 1, NULL, NULL, REG_VMIO },
+{ "RP6",   &RP[6],	8, 48, 0, 1, NULL, NULL, REG_VMIO },
+{ "RP7",   &RP[7],	8, 48, 0, 1, NULL, NULL, REG_VMIO },
 { "RZ",    &RZ,		8, 32, 0, 1 },
-{ "FP1",   &pult[1],	8, 50, 0, 1, REG_VMIO },
-{ "FP2",   &pult[2],	8, 50, 0, 1, REG_VMIO },
-{ "FP3",   &pult[3],	8, 50, 0, 1, REG_VMIO },
-{ "FP4",   &pult[4],	8, 50, 0, 1, REG_VMIO },
-{ "FP5",   &pult[5],	8, 50, 0, 1, REG_VMIO },
-{ "FP6",   &pult[6],	8, 50, 0, 1, REG_VMIO },
-{ "FP7",   &pult[7],	8, 50, 0, 1, REG_VMIO },
+{ "FP1",   &pult[1],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "FP2",   &pult[2],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "FP3",   &pult[3],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "FP4",   &pult[4],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "FP5",   &pult[5],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "FP6",   &pult[6],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
+{ "FP7",   &pult[7],	8, 50, 0, 1, NULL, NULL, REG_VMIO },
 { 0 }
 };
 
@@ -791,12 +791,12 @@ void cpu_one_inst ()
 	RK &= BITS(24);
 
 	reg = RK >> 20;
-	if (RK & BIT(20)) {
+	if (RK & BBIT(20)) {
 		addr = RK & BITS(15);
 		opcode = (RK >> 12) & 0370;
 	} else {
 		addr = RK & BITS(12);
-		if (RK & BIT(19))
+		if (RK & BBIT(19))
 			addr |= 070000;
 		opcode = (RK >> 12) & 077;
 	}
@@ -817,7 +817,7 @@ void cpu_one_inst ()
 		PC += 1;			/* increment PC */
 		RUU &= ~RUU_RIGHT_INSTR;
 	} else {
-		mmu_prefetch(nextpc | (IS_SUPERVISOR(RUU) ? BIT(16) : 0), 0);
+		mmu_prefetch(nextpc | (IS_SUPERVISOR(RUU) ? BBIT(16) : 0), 0);
 		RUU |= RUU_RIGHT_INSTR;
 	}
 
@@ -1157,7 +1157,7 @@ void cpu_one_inst ()
 			 */
 			if ((M[PSW] & PSW_MMAP_DISABLE) &&
 				 (reg == IBP || reg == DWP))
-				M[reg] |= BIT(16);
+				M[reg] |= BBIT(16);
 
 		} else
 			M[Aex & 017] = ADDR (ACC);
@@ -1177,7 +1177,7 @@ void cpu_one_inst ()
 		ACC = mmu_load (rg != 017 ? M[017] : ad);
 		M[rg] = ad;
 		if ((M[PSW] & PSW_MMAP_DISABLE) && (rg == IBP || rg == DWP))
-			M[rg] |= BIT(16);
+			M[rg] |= BBIT(16);
 		M[0] = 0;
 		RAU = SET_LOGICAL (RAU);
 		delay = MEAN_TIME (14, 3);
@@ -1200,7 +1200,7 @@ load_modifier:	Aex = ADDR (addr + M[reg]);
 transfer_modifier:	M[Aex & 037] = M[reg];
 			if ((M[PSW] & PSW_MMAP_DISABLE) &&
 			    ((Aex & 037) == IBP || (Aex & 037) == DWP))
-				M[Aex & 037] |= BIT(16);
+				M[Aex & 037] |= BBIT(16);
 
 		} else
 			M[Aex & 017] = M[reg];
@@ -1516,7 +1516,7 @@ t_stat sim_instr (void)
 		M[017] += corr_stack;
 		if (cpu_dev.dctrl) {
 			const char *message = (r >= SCPE_BASE) ?
-				scp_error_messages [r - SCPE_BASE] :
+				scp_errors [r - SCPE_BASE] :
 				sim_stop_messages [r];
 			besm6_debug ("/// %05o%s: %s", PC,
 				(RUU & RUU_RIGHT_INSTR) ? "п" : "л",

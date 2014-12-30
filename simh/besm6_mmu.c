@@ -47,14 +47,14 @@ unsigned iintr_data;	/* protected page number or parity check location */
 t_value pult[8];
 
 REG mmu_reg[] = {
-{ "БРЗ0",  &BRZ[0],	8, 50, 0, 1, REG_VMIO},	/* Буферные регистры записи */
-{ "БРЗ1",  &BRZ[1],	8, 50, 0, 1, REG_VMIO},
-{ "БРЗ2",  &BRZ[2],	8, 50, 0, 1, REG_VMIO},
-{ "БРЗ3",  &BRZ[3],	8, 50, 0, 1, REG_VMIO},
-{ "БРЗ4",  &BRZ[4],	8, 50, 0, 1, REG_VMIO},
-{ "БРЗ5",  &BRZ[5],	8, 50, 0, 1, REG_VMIO},
-{ "БРЗ6",  &BRZ[6],	8, 50, 0, 1, REG_VMIO},
-{ "БРЗ7",  &BRZ[7],	8, 50, 0, 1, REG_VMIO},
+{ "БРЗ0",  &BRZ[0],	8, 50, 0, 1, NULL, NULL, REG_VMIO},	/* Буферные регистры записи */
+{ "БРЗ1",  &BRZ[1],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРЗ2",  &BRZ[2],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРЗ3",  &BRZ[3],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРЗ4",  &BRZ[4],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРЗ5",  &BRZ[5],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРЗ6",  &BRZ[6],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРЗ7",  &BRZ[7],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
 { "БАЗ0",  &BAZ[0],	8, 16, 0, 1 },		/* Буферные адреса записи */
 { "БАЗ1",  &BAZ[1],	8, 16, 0, 1 },
 { "БАЗ2",  &BAZ[2],	8, 16, 0, 1 },
@@ -63,34 +63,34 @@ REG mmu_reg[] = {
 { "БАЗ5",  &BAZ[5],	8, 16, 0, 1 },
 { "БАЗ6",  &BAZ[6],	8, 16, 0, 1 },
 { "БАЗ7",  &BAZ[7],	8, 16, 0, 1 },
-{ "ТАБСТ", &TABST,	8, 28, 0, 1, REG_HIDDEN },/* Таблица старшинства БРЗ */
-{ "ЗпТР",  &FLUSH,	8,  4, 0, 1, REG_HIDDEN },/* Признак выталкивания БРЗ */
+{ "ТАБСТ", &TABST,	8, 28, 0, 1, NULL, NULL, REG_HIDDEN },/* Таблица старшинства БРЗ */
+{ "ЗпТР",  &FLUSH,	8,  4, 0, 1, NULL, NULL, REG_HIDDEN },/* Признак выталкивания БРЗ */
 { "Старш", &OLDEST,	8,  3, 0, 1 },		/* Номер вытолкнутого БРЗ */
-{ "РП0",   &RP[0],	8, 48, 0, 1, REG_VMIO},	/* Регистры приписки, по 12 бит */
-{ "РП1",   &RP[1],	8, 48, 0, 1, REG_VMIO},
-{ "РП2",   &RP[2],	8, 48, 0, 1, REG_VMIO},
-{ "РП3",   &RP[3],	8, 48, 0, 1, REG_VMIO},
-{ "РП4",   &RP[4],	8, 48, 0, 1, REG_VMIO},
-{ "РП5",   &RP[5],	8, 48, 0, 1, REG_VMIO},
-{ "РП6",   &RP[6],	8, 48, 0, 1, REG_VMIO},
-{ "РП7",   &RP[7],	8, 48, 0, 1, REG_VMIO},
+{ "РП0",   &RP[0],	8, 48, 0, 1, NULL, NULL, REG_VMIO},	/* Регистры приписки, по 12 бит */
+{ "РП1",   &RP[1],	8, 48, 0, 1, NULL, NULL, REG_VMIO},
+{ "РП2",   &RP[2],	8, 48, 0, 1, NULL, NULL, REG_VMIO},
+{ "РП3",   &RP[3],	8, 48, 0, 1, NULL, NULL, REG_VMIO},
+{ "РП4",   &RP[4],	8, 48, 0, 1, NULL, NULL, REG_VMIO},
+{ "РП5",   &RP[5],	8, 48, 0, 1, NULL, NULL, REG_VMIO},
+{ "РП6",   &RP[6],	8, 48, 0, 1, NULL, NULL, REG_VMIO},
+{ "РП7",   &RP[7],	8, 48, 0, 1, NULL, NULL, REG_VMIO},
 { "РЗ",    &RZ,		8, 32, 0, 1 },		/* Регистр защиты */
-{ "ТР1",   &pult[1],	8, 50, 0, 1, REG_VMIO},	/* Тумблерные регистры */
-{ "ТР2",   &pult[2],	8, 50, 0, 1, REG_VMIO},
-{ "ТР3",   &pult[3],	8, 50, 0, 1, REG_VMIO},
-{ "ТР4",   &pult[4],	8, 50, 0, 1, REG_VMIO},
-{ "ТР5",   &pult[5],	8, 50, 0, 1, REG_VMIO},
-{ "ТР6",   &pult[6],	8, 50, 0, 1, REG_VMIO},
-{ "ТР7",   &pult[7],	8, 50, 0, 1, REG_VMIO},
-{ "БРС0",  &BRS[0],	8, 50, 0, 1, REG_VMIO}, /* Буферные регистры слов */
-{ "БРС1",  &BRS[1],	8, 50, 0, 1, REG_VMIO},
-{ "БРС2",  &BRS[2],	8, 50, 0, 1, REG_VMIO},
-{ "БРС3",  &BRS[3],	8, 50, 0, 1, REG_VMIO},
+{ "ТР1",   &pult[1],	8, 50, 0, 1, NULL, NULL, REG_VMIO},	/* Тумблерные регистры */
+{ "ТР2",   &pult[2],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "ТР3",   &pult[3],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "ТР4",   &pult[4],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "ТР5",   &pult[5],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "ТР6",   &pult[6],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "ТР7",   &pult[7],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРС0",  &BRS[0],	8, 50, 0, 1, NULL, NULL, REG_VMIO}, /* Буферные регистры слов */
+{ "БРС1",  &BRS[1],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРС2",  &BRS[2],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
+{ "БРС3",  &BRS[3],	8, 50, 0, 1, NULL, NULL, REG_VMIO},
 { "БАС0",  &BAS[0],	8, 16, 0, 1 },		/* Буферные адреса слов */
 { "БАС1",  &BAS[1],	8, 16, 0, 1 },
 { "БАС2",  &BAS[2],	8, 16, 0, 1 },
 { "БАС3",  &BAS[3],	8, 16, 0, 1 },
-{ "БРСст", &BRSLRU,	8,  6, 0, 1, REG_HIDDEN},
+{ "БРСст", &BRSLRU,	8,  6, 0, 1, NULL, NULL, REG_HIDDEN},
 { 0 }
 };
 

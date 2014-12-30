@@ -168,7 +168,7 @@ t_stat vt_clk (UNIT * this)
 {
 	/* Телетайпы работают на 10 бод */
 	static int clk_divider = 1<<29;
-	GRP |= MGRP & BIT(19);
+	GRP |= MGRP & BBIT(19);
 
 	/* Опрашиваем сокеты на приём. */
 	tmxr_poll_rx (&tty_desc);
@@ -188,11 +188,8 @@ t_stat vt_clk (UNIT * this)
 	if (num > 0 && num <= LINES_MAX) {
 		char buf [80];
 		TMLN *t = &tty_line [num];
-		besm6_debug ("*** tty%d: новое подключение от %d.%d.%d.%d",
-			num, (unsigned char) (t->ipad >> 24),
-			(unsigned char) (t->ipad >> 16),
-			(unsigned char) (t->ipad >> 8),
-			(unsigned char) t->ipad);
+		besm6_debug ("*** tty%d: новое подключение от %s",
+			     num, t->ipad);
 		t->rcve = 1;
 		tty_unit[num].flags &= ~TTY_STATE_MASK;
 		tty_unit[num].flags |= TTY_VT340_STATE;
@@ -212,12 +209,9 @@ t_stat vt_clk (UNIT * this)
 		}
 		tty_idle_count[num] = 0;
 		tty_last_time[num] = time (0);
-		sprintf (buf, "%.24s from %d.%d.%d.%d\r\n",
+		sprintf (buf, "%.24s from %s\r\n",
 			ctime (&tty_last_time[num]),
-			(unsigned char) (t->ipad >> 24),
-			(unsigned char) (t->ipad >> 16),
-			(unsigned char) (t->ipad >> 8),
-			(unsigned char) t->ipad);
+			t->ipad);
 		tmxr_linemsg (t, buf);
 
 		/* Ввод ^C, чтобы получить приглашение. */
@@ -848,18 +842,18 @@ void vt_cmd_exec (int num)
 	char *cptr, gbuf [CBUFSIZE];
 	CTAB *cmdp;
 	t_stat err;
-	extern char *scp_error_messages[];
+	extern char *scp_errors[];
 
 	cptr = get_glyph (vt_cbuf [num], gbuf, 0);	/* get command glyph */
 	cmdp = lookup_cmd (gbuf);			/* lookup command */
 	if (! cmdp) {
-		tmxr_linemsg (t, scp_error_messages[SCPE_UNK - SCPE_BASE]);
+		tmxr_linemsg (t, scp_errors[SCPE_UNK - SCPE_BASE]);
 		tmxr_linemsg (t, "\r\n");
 		return;
 	}
 	err = cmdp->action (num, cptr);			/* if found, exec */
 	if (err >= SCPE_BASE) {				/* error? */
-		tmxr_linemsg (t, scp_error_messages [err - SCPE_BASE]);
+		tmxr_linemsg (t, scp_errors [err - SCPE_BASE]);
 		tmxr_linemsg (t, "\r\n");
 	}
 	if (err == SCPE_EXIT) {				/* close telnet session */
@@ -953,12 +947,10 @@ int vt_getc (num)
 	if (! t->conn) {
 		/* Пользователь отключился. */
 		if (t->ipad) {
-			besm6_debug ("*** tty%d: отключение %d.%d.%d.%d",
-				num, (unsigned char) (t->ipad >> 24),
-				(unsigned char) (t->ipad >> 16),
-				(unsigned char) (t->ipad >> 8),
-				(unsigned char) t->ipad);
-			t->ipad = 0;
+			besm6_debug ("*** tty%d: отключение %s",
+				num, 
+				t->ipad);
+			t->ipad = NULL;
 		}
 		tty_setmode (tty_unit+num, TTY_OFFLINE_STATE, 0, 0);
 		tty_unit[num].flags &= ~TTY_STATE_MASK;
@@ -1150,7 +1142,7 @@ void vt_receive()
 			tty_instate[num] = 1;
 			TTY_IN |= mask;		/* start bit */
 			GRP |= GRP_TTY_START;	/* не используется ? */
-			MGRP |= BIT(19);	/* для терминалов по методу МГУ */
+			MGRP |= BBIT(19);	/* для терминалов по методу МГУ */
 			vt_receiving |= mask;
 		}
 		break;

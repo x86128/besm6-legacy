@@ -360,7 +360,7 @@ void disk_read_header (UNIT *u)
 
 	/* Идентификатор дорожки замены. */
 	if (c->zone >= 01750)
-		iaksa |= BIT(30);
+		iaksa |= BBIT(30);
 
 	/* Контрольная сумма адреса с переносом вправо. */
 	iaksa |= BITS(12) & ~sum_with_right_carry (iaksa >> 12, iaksa >> 24);
@@ -414,7 +414,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 	KMD *c = &controller [ctlr];
 	UNIT *u = &disk_unit [c->dev];
 
-	if (cmd & BIT(12)) {
+	if (cmd & BBIT(12)) {
 		/* Выдача в КМД адреса дорожки.
 		 * Здесь же выполняем обмен с диском.
 		 * Номер дисковода к этому моменту уже известен. */
@@ -454,18 +454,18 @@ void disk_ctl (int ctlr, uint32 cmd)
 		/* Ждём события от устройства. */
 		sim_activate (u, 20*USEC);	/* Ускорим для отладки. */
 
-	} else if (cmd & BIT(11)) {
+	} else if (cmd & BBIT(11)) {
 		/* Выбора номера устройства и занесение в регистр маски КМД.
 		 * Бит 8 - устройство 0, бит 7 - устройство 1, ... бит 1 - устройство 7.
 		 * Также установлен бит 9 - что он означает? */
-		if      (cmd & BIT(8)) c->dev = 7;
-		else if (cmd & BIT(7)) c->dev = 6;
-		else if (cmd & BIT(6)) c->dev = 5;
-		else if (cmd & BIT(5)) c->dev = 4;
-		else if (cmd & BIT(4)) c->dev = 3;
-		else if (cmd & BIT(3)) c->dev = 2;
-		else if (cmd & BIT(2)) c->dev = 1;
-		else if (cmd & BIT(1)) c->dev = 0;
+		if      (cmd & BBIT(8)) c->dev = 7;
+		else if (cmd & BBIT(7)) c->dev = 6;
+		else if (cmd & BBIT(6)) c->dev = 5;
+		else if (cmd & BBIT(5)) c->dev = 4;
+		else if (cmd & BBIT(4)) c->dev = 3;
+		else if (cmd & BBIT(3)) c->dev = 2;
+		else if (cmd & BBIT(2)) c->dev = 1;
+		else if (cmd & BBIT(1)) c->dev = 0;
 		else {
 			/* Неверная маска выбора устройства. */
 			c->dev = -1;
@@ -485,7 +485,7 @@ void disk_ctl (int ctlr, uint32 cmd)
 		}
 		GRP |= c->mask_grp;
 
-	} else if (cmd & BIT(9)) {
+	} else if (cmd & BBIT(9)) {
 		/* Проверка прерывания от КМД? */
 #if 0
 		if (disk_dev.dctrl)
